@@ -22,7 +22,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: metadata
         with:
-          images: ghcr.io/gyaru/bunny.plus
+          images: ghcr.io/bunny-plus/core
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
