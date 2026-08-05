@@ -1,0 +1,14 @@
+/
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/stream
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/admin
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/chloe
+  Cache-Control: no-cache, no-store, must-revalidate

@@ -1,0 +1,8 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@cloudflare/vite-plugin"
+  - "@cloudflare/workers-types"
+  - "@vitejs/plugin-react"
+  - vite
+  - wrangler
+  - miniflare
