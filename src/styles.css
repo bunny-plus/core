@@ -146,33 +146,51 @@ button, a { -webkit-tap-highlight-color: transparent; }
   position: relative;
   z-index: 5;
   display: flex;
-  min-height: 78px;
+  width: min(1540px, calc(100% - 28px));
+  min-height: 68px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 max(4vw, 20px);
-  border-bottom: 4px solid var(--pink-300);
-  background: rgba(255, 255, 255, .58);
-  box-shadow: 0 7px 20px rgba(244, 114, 166, .12);
-  backdrop-filter: blur(12px);
+  margin: 12px auto 0;
+  padding: 7px 14px 7px 18px;
+  overflow: visible;
+  border: 2px solid rgba(249, 168, 198, .8);
+  border-radius: 18px 18px 24px 24px;
+  background:
+    radial-gradient(circle at 8px 8px, rgba(244, 114, 166, .09) 0 1.5px, transparent 1.8px) 0 0 / 17px 17px,
+    linear-gradient(105deg, rgba(255, 255, 255, .94), rgba(255, 247, 250, .91) 58%, rgba(255, 247, 237, .92));
+  box-shadow: 0 4px 0 rgba(249, 168, 198, .32), 0 14px 32px rgba(84, 52, 78, .12);
+}
+.room-header::after {
+  position: absolute;
+  right: 20px;
+  bottom: -7px;
+  left: 20px;
+  height: 1px;
+  border-bottom: 2px dashed rgba(251, 146, 60, .25);
+  content: "";
+  pointer-events: none;
 }
 .wordmark { display: flex; align-items: center; color: var(--pink-300); font-size: 27px; font-weight: 900; letter-spacing: -.04em; text-decoration: none; }
 .wordmark > .asset-icon { width: 40px; height: 40px; margin-right: 9px; }
 .wordmark span { color: var(--orange-300); }
 .account { display: flex; align-items: center; }
 .profile-menu { position: relative; }
-.profile-menu > summary { position: relative; display: block; width: 43px; height: 43px; border: 3px solid white; border-radius: 50%; outline: 3px solid var(--pink-300); outline-offset: 1px; box-shadow: 0 5px 13px rgba(244, 114, 166, .2); cursor: pointer; list-style: none; transition: transform .2s, box-shadow .2s; }
+.profile-menu > summary { position: relative; display: block; width: 48px; height: 48px; padding: 3px; border: 2px solid var(--pink-300); border-radius: 16px 16px 16px 7px; outline: 0; background: linear-gradient(145deg, white, var(--pink-50)); box-shadow: 4px 4px 0 var(--pink-200), 7px 7px 0 rgba(251, 146, 60, .22); cursor: pointer; list-style: none; transition: transform .2s, box-shadow .2s; }
 .profile-menu > summary::-webkit-details-marker { display: none; }
-.profile-menu > summary:hover, .profile-menu[open] > summary { box-shadow: 0 8px 18px rgba(244, 114, 166, .3); transform: rotate(4deg) scale(1.05); }
-.profile-menu > summary > img:not(.profile-carrot), .profile-menu > summary > span { display: grid; width: 100%; height: 100%; place-items: center; border-radius: 50%; background: linear-gradient(135deg, var(--pink-300), var(--orange-300)); color: white; font-weight: 900; object-fit: cover; }
-.profile-menu > summary > .profile-carrot { position: absolute; right: -9px; bottom: -7px; width: 24px; height: 24px; filter: drop-shadow(0 1px 1px white); rotate: -16deg; }
-.profile-popover { position: absolute; z-index: 12; top: calc(100% + 13px); right: -2px; width: 195px; padding: 10px; border: 3px solid var(--pink-300); border-radius: 17px 7px 17px 17px; background: rgba(255, 255, 255, .97); box-shadow: 0 18px 40px rgba(84, 52, 78, .2); backdrop-filter: blur(12px); }
-.profile-popover::before { position: absolute; top: -9px; right: 14px; width: 14px; height: 14px; border-top: 3px solid var(--pink-300); border-left: 3px solid var(--pink-300); background: white; content: ""; rotate: 45deg; }
-.profile-identity { padding: 6px 8px 10px; border-bottom: 2px dashed var(--pink-200); }
+.profile-menu > summary::after { position: absolute; top: -5px; left: -5px; width: 10px; height: 10px; border: 2px solid white; border-radius: 3px; background: var(--orange-300); box-shadow: 0 0 0 1px var(--pink-300); content: ""; rotate: -10deg; }
+.profile-menu > summary:hover, .profile-menu[open] > summary { box-shadow: 3px 3px 0 var(--pink-300), 6px 6px 0 rgba(251, 146, 60, .28), 0 11px 22px rgba(84, 52, 78, .14); transform: translate(-1px, -1px) rotate(2deg); }
+.profile-menu > summary > img:not(.profile-carrot), .profile-menu > summary > span { display: grid; width: 100%; height: 100%; place-items: center; border-radius: 12px 12px 12px 5px; background: linear-gradient(135deg, var(--pink-300), var(--orange-300)); color: white; font-weight: 900; object-fit: cover; }
+.profile-menu > summary > .profile-carrot { position: absolute; right: -8px; bottom: -8px; width: 23px; height: 23px; filter: drop-shadow(0 2px 1px white); rotate: -19deg; }
+.profile-popover { position: absolute; z-index: 12; top: calc(100% + 17px); right: -1px; width: 235px; padding: 13px; border: 2px solid var(--pink-400); border-radius: 21px 8px 21px 21px; background: radial-gradient(circle at 8px 8px, rgba(244, 114, 166, .11) 0 1.5px, transparent 1.8px) 0 0 / 15px 15px, linear-gradient(145deg, #fff, #fff1f7); box-shadow: 5px 6px 0 #29232c, 9px 10px 0 rgba(251, 146, 60, .28), 0 22px 46px rgba(84, 52, 78, .22); }
+.profile-popover::before { position: absolute; top: -9px; right: 17px; width: 14px; height: 14px; border-top: 2px solid var(--pink-400); border-left: 2px solid var(--pink-400); background: #fff8fb; content: ""; rotate: 45deg; }
+.profile-popover::after { position: absolute; top: 11px; right: 11px; padding: 4px 7px; border-radius: 3px; background: #29232c; box-shadow: 2px 2px 0 var(--orange-300); color: white; content: "BUNNY+ VIP"; font-size: 8px; font-weight: 1000; letter-spacing: .1em; rotate: 3deg; }
+.profile-identity { position: relative; margin-bottom: 9px; padding: 9px 78px 12px 9px; border-bottom: 2px dashed var(--pink-300); }
 .profile-identity small, .profile-identity strong { display: block; }
-.profile-identity small { color: var(--orange-400); font-size: 10px; font-weight: 900; letter-spacing: .12em; }
-.profile-identity strong { margin-top: 2px; overflow: hidden; color: var(--gray-700); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-.profile-popover a, .profile-popover button { display: flex; width: 100%; align-items: center; gap: 8px; margin-top: 5px; padding: 9px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--gray-700); cursor: pointer; font-size: 11px; font-weight: 800; text-align: left; text-decoration: none; }
-.profile-popover a:hover, .profile-popover button:hover { background: var(--pink-50); }
+.profile-identity small { color: var(--orange-400); font-size: 9px; font-weight: 1000; letter-spacing: .12em; }
+.profile-identity strong { max-width: 130px; margin-top: 3px; overflow: hidden; color: #29232c; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.profile-popover a, .profile-popover button { display: flex; width: 100%; min-height: 42px; align-items: center; gap: 9px; margin-top: 7px; padding: 9px 10px; border: 1px solid var(--pink-200); border-radius: 11px 5px 11px 11px; background: rgba(255, 255, 255, .82); box-shadow: 2px 2px 0 rgba(249, 168, 198, .3); color: var(--gray-700); cursor: pointer; font-size: 11px; font-weight: 900; text-align: left; text-decoration: none; transition: transform .15s, border-color .15s, box-shadow .15s; }
+.profile-popover a:hover, .profile-popover button:hover { border-color: var(--pink-400); background: white; box-shadow: 3px 3px 0 var(--pink-200); transform: translate(-1px, -1px); }
+.profile-popover button { color: #be185d; }
 .profile-popover button:disabled { cursor: wait; opacity: .6; }
 .profile-popover .logout-error { margin: 6px 4px 2px; color: #b91c1c; font-size: 10px; line-height: 1.35; }
 .profile-popover a .ui-icon, .profile-popover button .asset-icon { width: 18px; height: 18px; }
@@ -192,6 +210,7 @@ body.lights-out .stream-page .floating-decorations { opacity: .08; transition: o
 body.lights-out .stream-page .room-header { border-color: #33202c; background: rgba(9, 7, 11, .9); box-shadow: none; backdrop-filter: none; }
 body.lights-out .stream-page .wordmark, body.lights-out .stream-page .account { opacity: .28; transition: opacity .25s; }
 body.lights-out .stream-page .room-header:hover .wordmark, body.lights-out .stream-page .room-header:hover .account { opacity: .85; }
+body.lights-out .stream-page .room-header:has(.profile-menu[open]) .account { opacity: 1; }
 body.lights-out .stream-page .screen-frame { box-shadow: 0 0 0 2px rgba(249, 168, 198, .28), 0 20px 55px rgba(0, 0, 0, .72), 0 0 35px rgba(236, 72, 144, .08); }
 body.lights-out .stream-page .screen-footer { color: #c4aebc; }
 body.lights-out .stream-page .live-state { color: #d0a0b4; }
@@ -206,6 +225,7 @@ body.lights-out .stream-page .player-actions { border-color: transparent; backgr
 body.lights-out .stream-page .player-actions > button, body.lights-out .stream-page .player-menu > summary { color: #d9a9bd; }
 body.lights-out .stream-page .player-actions > button:hover, body.lights-out .stream-page .player-menu > summary:hover { background: rgba(249, 168, 198, .09); }
 body.lights-out .stream-page .player-actions > button.active { background: rgba(190, 24, 93, .22); box-shadow: inset 0 0 0 1px rgba(244, 114, 166, .28); color: #ffe1ec; }
+body.lights-out .stream-page .player-menu[open] > summary { background: rgba(249, 168, 198, .09); box-shadow: inset 0 0 0 1px rgba(249, 168, 198, .13); color: #f2c3d6; }
 body.lights-out .stream-page .volume-control { border-color: rgba(249, 168, 198, .14); }
 body.lights-out .stream-page .volume-control input::-webkit-slider-runnable-track { background: linear-gradient(to right, #c7668e var(--volume), #382832 var(--volume)); }
 body.lights-out .stream-page .volume-control input::-moz-range-track { background: linear-gradient(to right, #c7668e var(--volume), #382832 var(--volume)); }

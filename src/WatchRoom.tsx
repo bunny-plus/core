@@ -305,7 +305,6 @@ export default function WatchRoom({
           backBufferLength: 10,
           liveSyncDuration: delaySeconds,
           liveMaxLatencyDuration: Math.max(delaySeconds + 15, delaySeconds * 2),
-          maxLiveSyncPlaybackRate: 1.05,
           maxBufferLength: 12,
           maxMaxBufferLength: 20,
         });
