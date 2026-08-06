@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import WatchRoom, { type User } from "./WatchRoom";
 import StreamControl from "./StreamControl";
@@ -13,62 +13,47 @@ type Session = {
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>();
-  const [version, setVersion] = useState<string | null>(null);
-  const loadedVersionRef = useRef<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionRequest, setSessionRequest] = useState(0);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch("/api/session")
-      .then((response) => response.ok ? response.json() as Promise<Session> : null)
-      .then(setSession)
-      .catch(() => setSession(null));
-  }, []);
+    const request = new AbortController();
 
-  useEffect(() => {
-    let stopped = false;
+    apiFetch("/api/session", { signal: request.signal })
+      .then(async (response) => {
+        if (response.status === 401 || response.status === 403) return null;
+        if (!response.ok) throw new Error(`The session service returned ${response.status}.`);
+        return response.json() as Promise<Session>;
+      })
+      .then((result) => {
+        if (!request.signal.aborted) setSession(result);
+      })
+      .catch((error: unknown) => {
+        if (request.signal.aborted) return;
+        setSessionError(error instanceof Error ? error.message : "The session service could not be reached.");
+      });
 
-    async function checkVersion() {
-      try {
-        const response = await apiFetch("/api/version", { cache: "no-store" });
-        const result = await response.json() as { version: string };
-        if (stopped) return;
+    return () => request.abort();
+  }, [sessionRequest]);
 
-        const previous = loadedVersionRef.current ?? localStorage.getItem("bunny-plus-version");
-        if (previous && previous !== result.version) {
-          localStorage.setItem("bunny-plus-version", result.version);
-          const url = new URL(location.href);
-          url.searchParams.set("_version", result.version);
-          location.replace(url);
-          return;
-        }
-
-        loadedVersionRef.current = result.version;
-        localStorage.setItem("bunny-plus-version", result.version);
-        setVersion(result.version);
-      } catch {
-        // A failed update check should not interrupt the current page.
-      }
-    }
-
-    function checkWhenVisible() {
-      if (document.visibilityState === "visible") void checkVersion();
-    }
-
-    void checkVersion();
-    const timer = setInterval(checkVersion, 60_000);
-    document.addEventListener("visibilitychange", checkWhenVisible);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", checkWhenVisible);
-    };
-  }, []);
-
-  if (session === undefined) return <main className="login-shell"><FloatingDecorations /><p className="loading-bunny"><AssetIcon name="bunny-face" /><small>Hopping in...</small></p><VersionBadge version={version} /></main>;
-  if (session === null) return <Login version={version} />;
+  if (sessionError) return <SessionError message={sessionError} onRetry={() => { setSessionError(null); setSession(undefined); setSessionRequest((request) => request + 1); }} />;
+  if (session === undefined) return <main className="login-shell"><FloatingDecorations /><p className="loading-bunny" role="status"><AssetIcon name="bunny-face" /><small>Hopping in...</small></p><VersionBadge /></main>;
+  if (session === null) return <Login />;
 
   async function logout() {
-    await apiFetch("/api/logout", { method: "POST" });
-    setSession(null);
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const response = await apiFetch("/api/logout", { method: "POST" });
+      if (!response.ok) throw new Error(`Logout failed with status ${response.status}.`);
+      setSession(null);
+    } catch (error) {
+      setLogoutError(error instanceof Error ? error.message : "Could not log out. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   const path = location.pathname.replace(/\/$/, "") || "/";
@@ -79,14 +64,14 @@ export default function App() {
     : path === "/admin" && canManageStream
       ? <AdminPage />
       : path === "/chloe" && canChatChloe
-        ? <ChloePage />
-        : <HomePage canChatChloe={canChatChloe} canManageStream={canManageStream} />;
+      ? <ChloePage />
+    : <HomePage canChatChloe={canChatChloe} canManageStream={canManageStream} />;
 
   return (
     <main className={`room-shell${path === "/stream" ? " stream-page" : ""}`}>
       <FloatingDecorations />
       <header className="room-header">
-        <a className="wordmark" href="/"><AssetIcon name="bunny-face" /> bunny<span>+</span></a>
+        <a className="wordmark" href="/"><AssetIcon animate={false} name="bunny-face" /> bunny<span>+</span></a>
         <div className="account">
           <details className="profile-menu">
             <summary aria-label="Open profile menu" title={session.user.name}>
@@ -101,13 +86,29 @@ export default function App() {
                 <strong>{session.user.name}</strong>
               </div>
               {canManageStream && <a href="/admin"><UiIcon name="wrench" /> Admin burrow</a>}
-              <button type="button" onClick={() => void logout()}><AssetIcon name="bunny" /> Hop out</button>
+              <button type="button" disabled={loggingOut} onClick={() => void logout()}><AssetIcon animate={false} name="bunny" /> {loggingOut ? "Hopping out..." : "Hop out"}</button>
+              {logoutError && <p className="logout-error" role="alert">{logoutError}</p>}
             </div>
           </details>
         </div>
       </header>
       {page}
-      <VersionBadge version={version} />
+      <VersionBadge />
+    </main>
+  );
+}
+
+function SessionError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <main className="login-shell">
+      <FloatingDecorations />
+      <section className="session-error-card" role="alert">
+          <AssetIcon animate={false} name="bunny-face" />
+        <h1>Could not check your session</h1>
+        <p>{message} This is not a logout; your session may still be active.</p>
+        <button type="button" onClick={onRetry}>Try again</button>
+      </section>
+      <VersionBadge />
     </main>
   );
 }
@@ -204,7 +205,7 @@ function AdminPage() {
   );
 }
 
-function Login({ version }: { version: string | null }) {
+function Login() {
   const error = new URLSearchParams(location.search).get("error");
   return (
     <main className="login-shell">
@@ -223,18 +224,17 @@ function Login({ version }: { version: string | null }) {
           <p className="admission-note">only bunny+ members can hop in.</p>
         </div>
       </section>
-      <VersionBadge version={version} />
+      <VersionBadge />
     </main>
   );
 }
 
-function VersionBadge({ version }: { version: string | null }) {
-  if (!version) return null;
+function VersionBadge() {
   return (
     <footer
       className="version-id"
-      data-version={`Version ${version}`}
-      aria-label={`Current Version ID: ${version}`}
+      data-version={`Static version ${__STATIC_VERSION__}`}
+      aria-label={`Current static version: ${__STATIC_VERSION__}`}
       role="contentinfo"
       tabIndex={0}
     >
@@ -247,7 +247,7 @@ function FloatingDecorations() {
   const decorations = ["bunny-face", "carrot", "blossom", "leafy", "bunny", "carrot", "blossom", "bunny-face", "carrot", "leafy", "bunny", "blossom"] as const;
   return (
     <div className="floating-decorations" aria-hidden="true">
-      {decorations.map((decoration, index) => <AssetIcon name={decoration} key={index} />)}
+      {decorations.map((decoration, index) => <AssetIcon animate={false} name={decoration} key={index} />)}
     </div>
   );
 }

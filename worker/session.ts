@@ -9,6 +9,7 @@ export type Viewer = {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const sessionLifetimeSeconds = 24 * 60 * 60;
 
 function encode(bytes: Uint8Array) {
   let binary = "";
@@ -26,8 +27,20 @@ async function key(secret: string) {
   return crypto.subtle.importKey("raw", encoder.encode(secret), { hash: "SHA-256", name: "HMAC" }, false, ["sign", "verify"]);
 }
 
+function isViewer(value: unknown): value is Viewer {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const viewer = value as Partial<Viewer>;
+  return typeof viewer.admin === "boolean"
+    && (viewer.avatar === null || typeof viewer.avatar === "string")
+    && typeof viewer.expires === "number" && Number.isFinite(viewer.expires)
+    && typeof viewer.id === "string" && viewer.id.length > 0
+    && typeof viewer.name === "string" && viewer.name.length > 0
+    && Array.isArray(viewer.permissions)
+    && viewer.permissions.every((permission) => typeof permission === "string");
+}
+
 export async function createSession(viewer: Omit<Viewer, "expires">, secret: string) {
-  const body = encode(encoder.encode(JSON.stringify({ ...viewer, expires: Date.now() + 7 * 24 * 60 * 60 * 1_000 })));
+  const body = encode(encoder.encode(JSON.stringify({ ...viewer, expires: Date.now() + sessionLifetimeSeconds * 1_000 })));
   const signature = await crypto.subtle.sign("HMAC", await key(secret), encoder.encode(body));
   return `${body}.${encode(new Uint8Array(signature))}`;
 }
@@ -41,8 +54,8 @@ export async function readSession(request: Request, secret: string): Promise<Vie
   try {
     const valid = await crypto.subtle.verify("HMAC", await key(secret), decode(signature), encoder.encode(body));
     if (!valid) return null;
-    const viewer = JSON.parse(decoder.decode(decode(body))) as Viewer;
-    return viewer.expires > Date.now() ? viewer : null;
+    const viewer: unknown = JSON.parse(decoder.decode(decode(body)));
+    return isViewer(viewer) && viewer.expires > Date.now() ? viewer : null;
   } catch {
     return null;
   }
@@ -57,6 +70,6 @@ export function readCookie(request: Request, name: string) {
   return null;
 }
 
-export function sessionCookie(value: string, maxAge = 7 * 24 * 60 * 60, secure = true) {
+export function sessionCookie(value: string, maxAge = sessionLifetimeSeconds, secure = true) {
   return `bp_session=${value}; Path=/; HttpOnly${secure ? "; Secure" : ""}; SameSite=Lax; Max-Age=${maxAge}`;
 }

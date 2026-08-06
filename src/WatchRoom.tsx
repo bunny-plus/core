@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
+import { playbackCorrection } from "./playback";
 
 export type User = {
   admin: boolean;
@@ -71,6 +72,14 @@ function savedLightsOut() {
   }
 }
 
+function savedShortcuts() {
+  try {
+    return localStorage.getItem("bunny-plus-shortcuts") !== "false";
+  } catch {
+    return true;
+  }
+}
+
 export default function WatchRoom({
   currentUser,
   delaySeconds,
@@ -90,7 +99,7 @@ export default function WatchRoom({
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
   const initialVolumeRef = useRef(volume);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
-  const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">("loading");
   const [isBuffering, setIsBuffering] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
@@ -103,6 +112,7 @@ export default function WatchRoom({
   const [chatComposer, setChatComposer] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(savedShortcuts);
 
   useEffect(() => {
     document.body.classList.toggle("lights-out", lightsOut);
@@ -110,6 +120,8 @@ export default function WatchRoom({
   }, [lightsOut]);
 
   useEffect(() => {
+    if (!shortcutsEnabled) return;
+
     function reactionShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (event.key.toLowerCase() !== "f" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -119,9 +131,11 @@ export default function WatchRoom({
 
     window.addEventListener("keydown", reactionShortcut);
     return () => window.removeEventListener("keydown", reactionShortcut);
-  }, []);
+  }, [shortcutsEnabled]);
 
   useEffect(() => {
+    if (!shortcutsEnabled) return;
+
     function chatShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (event.key.toLowerCase() !== "c" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -131,7 +145,7 @@ export default function WatchRoom({
 
     window.addEventListener("keydown", chatShortcut);
     return () => window.removeEventListener("keydown", chatShortcut);
-  }, []);
+  }, [shortcutsEnabled]);
 
   useEffect(() => {
     if (showChatHistory && chatHistoryRef.current) {
@@ -141,23 +155,27 @@ export default function WatchRoom({
 
   useEffect(() => {
     let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const request = new AbortController();
 
     async function checkRelay() {
       try {
-        const response = await apiFetch("/api/stream-info", { cache: "no-store" });
+        const response = await apiFetch("/api/stream-info", { cache: "no-store", signal: request.signal });
         if (!response.ok) return;
         const status = await response.json() as RelayStatus;
         if (!stopped) setRelayStatus(status);
       } catch {
-        if (!stopped) setRelayStatus(null);
+        if (!stopped && !request.signal.aborted) setRelayStatus(null);
+      } finally {
+        if (!stopped) timer = setTimeout(checkRelay, 10_000);
       }
     }
 
     void checkRelay();
-    const timer = setInterval(checkRelay, 10_000);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      request.abort();
+      clearTimeout(timer);
     };
   }, []);
 
@@ -165,12 +183,14 @@ export default function WatchRoom({
     let socket: WebSocket | undefined;
     let clockPing: ReturnType<typeof setInterval> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let retryDelay = 2_000;
     let stopped = false;
 
     function connect() {
       socket = new WebSocket(apiWebSocketUrl("/api/room"));
       socketRef.current = socket;
       socket.addEventListener("open", () => {
+        retryDelay = 2_000;
         socket?.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
         clockPing = setInterval(() => {
           socket?.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
@@ -210,10 +230,16 @@ export default function WatchRoom({
           // Ignore malformed server messages and keep the current room state.
         }
       });
-      socket.addEventListener("close", () => {
+      socket.addEventListener("close", (event) => {
         clearInterval(clockPing);
         if (socketRef.current === socket) socketRef.current = null;
-        if (!stopped) retry = setTimeout(connect, 2_000);
+        if (stopped) return;
+        if (event.code === 4001) {
+          location.reload();
+          return;
+        }
+        retry = setTimeout(connect, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 30_000);
       });
       socket.addEventListener("error", () => socket?.close());
     }
@@ -230,10 +256,12 @@ export default function WatchRoom({
 
   useEffect(() => {
     let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const request = new AbortController();
 
     async function checkStream() {
       try {
-        const response = await apiFetch("/api/stream-status", { cache: "no-store" });
+        const response = await apiFetch("/api/stream-status", { cache: "no-store", signal: request.signal });
         const status = response.ok ? await response.json() as { online: boolean } : { online: false };
         if (stopped) return;
         setStreamOnline(status.online);
@@ -245,15 +273,17 @@ export default function WatchRoom({
           setPlayerStatus((current) => current === "error" ? "loading" : current);
         }
       } catch {
-        if (!stopped) setStreamOnline(false);
+        if (!stopped && !request.signal.aborted) setStreamOnline(false);
+      } finally {
+        if (!stopped) timer = setTimeout(checkStream, 10_000);
       }
     }
 
     void checkStream();
-    const timer = setInterval(checkStream, 10_000);
     return () => {
       stopped = true;
-      clearInterval(timer);
+      request.abort();
+      clearTimeout(timer);
     };
   }, []);
 
@@ -265,6 +295,7 @@ export default function WatchRoom({
     video.muted = initialVolumeRef.current === 0;
     video.defaultMuted = initialVolumeRef.current === 0;
     let disposed = false;
+    let attachedHls: Hls | null = null;
 
     async function attachStream(media: HTMLVideoElement) {
       const { default: HlsPlayer } = await import("hls.js");
@@ -274,40 +305,52 @@ export default function WatchRoom({
           backBufferLength: 10,
           liveSyncDuration: delaySeconds,
           liveMaxLatencyDuration: Math.max(delaySeconds + 15, delaySeconds * 2),
+          maxLiveSyncPlaybackRate: 1.05,
           maxBufferLength: 12,
           maxMaxBufferLength: 20,
         });
         hls.loadSource(streamUrl);
         hls.attachMedia(media);
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
+          if (disposed) return;
           void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
         });
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
+          if (disposed) return;
           if (data.fatal) {
             setPlayerStatus("error");
             setStreamOnline(false);
           }
         });
+        attachedHls = hls;
         hlsRef.current = hls;
         void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
       } else if (media.canPlayType("application/vnd.apple.mpegurl")) {
         media.src = streamUrl;
         void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
+      } else {
+        setPlayerStatus("unsupported");
+        setIsBuffering(false);
+        setSyncLabel("HLS playback is unsupported");
       }
     }
 
     void attachStream(video);
     return () => {
       disposed = true;
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+      attachedHls?.destroy();
+      if (hlsRef.current === attachedHls) hlsRef.current = null;
+      video.pause();
+      video.playbackRate = 1;
+      video.removeAttribute("src");
+      video.load();
     };
   }, [delaySeconds, streamOnline, streamUrl]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       const video = videoRef.current;
-      if (!video) return;
+      if (!video || playerStatus !== "ready") return;
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         setIsBuffering(true);
         setSyncLabel("Buffering the live stream...");
@@ -321,11 +364,20 @@ export default function WatchRoom({
       } else if (video.seekable.length > 0) {
         drift = video.seekable.end(video.seekable.length - 1) - delaySeconds - video.currentTime;
       }
-      if (drift !== null) setSyncLabel(Math.abs(drift) < 1 ? "Everyone is together" : "Following the live room");
+      if (drift !== null) {
+        const correction = playbackCorrection(drift);
+        if (correction.seek && video.seekable.length > 0) {
+          const minimum = video.seekable.start(0) + 0.1;
+          const maximum = video.seekable.end(video.seekable.length - 1) - 0.1;
+          if (maximum > minimum) video.currentTime = Math.min(maximum, Math.max(minimum, video.currentTime + drift));
+        }
+        video.playbackRate = correction.rate;
+        setSyncLabel(correction.label);
+      }
       if (video.paused) void video.play().catch(() => undefined);
     }, 1_000);
     return () => clearInterval(timer);
-  }, [delaySeconds]);
+  }, [delaySeconds, playerStatus]);
 
   useEffect(() => {
     if (!showStats) return;
@@ -396,6 +448,16 @@ export default function WatchRoom({
     }
   }
 
+  function toggleShortcuts() {
+    const next = !shortcutsEnabled;
+    setShortcutsEnabled(next);
+    try {
+      localStorage.setItem("bunny-plus-shortcuts", String(next));
+    } catch {
+      // The shortcut preference still applies for this visit.
+    }
+  }
+
   function react() {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "reaction" }));
@@ -455,12 +517,15 @@ export default function WatchRoom({
               <small>Catching everybun back up</small>
             </div>
           )}
-          {(!streamUrl || streamOnline === false || playerStatus === "error") && (
+          {playerStatus === "unsupported" && (
+            <div className="stream-error" role="status">This browser does not support HLS playback. Open the stream in an HLS-capable browser or player.</div>
+          )}
+          {playerStatus !== "unsupported" && (!streamUrl || streamOnline === false || playerStatus === "error") && (
             <div className="stream-error">
               {streamUrl ? "The stream is offline right now. This screen will reconnect when broadcasting resumes." : "Set STREAM_URL to connect the screen."}
             </div>
           )}
-          <div className="reaction-layer" aria-live="polite">
+          <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
             {reactions.map((reaction) => (
               <span className="room-reaction" style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties} key={reaction.id}>
                 <AssetIcon name={reaction.variant} />
@@ -468,16 +533,16 @@ export default function WatchRoom({
             ))}
             {chats.map((chat) => (
               <span className="room-chat" style={{ "--chat-x": `${chat.x}%` } as CSSProperties} key={chat.id}>
-                <span className="room-chat-avatar">
+                <span className="room-chat-avatar" aria-hidden="true">
                   {chat.member.avatar
                     ? <img src={chat.member.avatar} alt="" />
                     : <span>{chat.member.name[0]?.toUpperCase()}</span>}
                 </span>
-                <span className="room-chat-bubble"><strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>{chat.message}</span>
+                <span className="room-chat-bubble"><strong aria-hidden="true">{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong><span className="sr-only">{chat.member.id === currentUser.id ? "You say: " : `${chat.member.name} says: `}</span><span>{chat.message}</span></span>
               </span>
             ))}
           </div>
-          <span className="reaction-shortcut-hint" aria-hidden="true">Press <kbd>F</kbd> to react</span>
+          {shortcutsEnabled && <span className="reaction-shortcut-hint" aria-hidden="true">Press <kbd>F</kbd> to react</span>}
           {chatComposer && (
             <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); chat(chatMessage); }}>
               <label htmlFor="chat-message">Say something cute</label>
@@ -502,10 +567,10 @@ export default function WatchRoom({
                 {chatHistory.length === 0 && <p className="chat-history-empty">Quiet in here...</p>}
                 {chatHistory.map((chat) => (
                   <div className="chat-history-entry" key={chat.id}>
-                    <span className="chat-history-avatar">
+                    <span className="chat-history-avatar" aria-hidden="true">
                       {chat.member.avatar ? <img src={chat.member.avatar} alt="" /> : <span>{chat.member.name[0]?.toUpperCase()}</span>}
                     </span>
-                    <p><strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>{chat.message}</p>
+                    <p><strong aria-hidden="true">{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong><span className="sr-only">{chat.member.id === currentUser.id ? "You said: " : `${chat.member.name} said: `}</span><span>{chat.message}</span></p>
                   </div>
                 ))}
               </div>
@@ -514,7 +579,7 @@ export default function WatchRoom({
         </div>
         <div className="screen-footer">
           <div className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}>
-            <i />
+            <i aria-hidden="true" />
             <span>{streamOnline === null || relayStatus === null ? "CHECKING" : !streamOnline ? "OFFLINE" : relayStatus.running ? "LIVE" : "IDLE"}</span>
             {relayStatus?.running && (
               <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}><AssetIcon name="carrot" /><span>{relayStatus.title ?? "TorBox stream"}</span></span>
@@ -537,10 +602,10 @@ export default function WatchRoom({
                 <AssetIcon name="carrot" />
               </span>
             </label>
-            <button type="button" onClick={react}><UiIcon name="sparkle" /><span>React</span></button>
-            <button type="button" aria-expanded={chatComposer} title="Chat (C)" onClick={() => setChatComposer((open) => !open)}><UiIcon name="chat" /><span>Chat</span></button>
-            <button className={lightsOut ? "active" : ""} type="button" aria-pressed={lightsOut} onClick={toggleLightsOut}><UiIcon name="moon" /><span>Lights</span></button>
-            <button type="button" onClick={() => screenRef.current?.requestFullscreen()}><UiIcon name="fullscreen" /><span>Expand</span></button>
+            <button type="button" aria-label="React" data-tooltip={shortcutsEnabled ? "Press F to react" : undefined} onClick={react}><UiIcon name="sparkle" /><span>React</span></button>
+            <button type="button" aria-label="Chat" aria-expanded={chatComposer} data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined} onClick={() => setChatComposer((open) => !open)}><UiIcon name="chat" /><span>Chat</span></button>
+            <button className={lightsOut ? "active" : ""} type="button" aria-label="Toggle lights" aria-pressed={lightsOut} onClick={toggleLightsOut}><UiIcon name="moon" /><span>Lights</span></button>
+            <button type="button" aria-label="Enter fullscreen" onClick={() => screenRef.current?.requestFullscreen()}><UiIcon name="fullscreen" /><span>Expand</span></button>
             <details className="player-menu">
               <summary aria-label="More player options" title="More player options"><UiIcon name="gear" /></summary>
               <div className="player-menu-popover">
@@ -564,6 +629,9 @@ export default function WatchRoom({
                 >
                   {showChatHistory ? "Hide chat history" : "Chat history"}
                 </button>
+                <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
+                  Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
+                </button>
                 {streamUrl && (
                   <a href={streamUrl} target="_blank" rel="noreferrer">
                     Open in own player ↗
@@ -575,7 +643,7 @@ export default function WatchRoom({
           </div>
         </div>
         {showStats && stats && (
-          <div className="player-stats">
+          <div className="player-stats" role="group" aria-label="Playback statistics">
             <div><span>Delay</span><strong>{stats.delay === null ? "--" : `${stats.delay.toFixed(1)}s`}</strong></div>
             <div><span>Target</span><strong>{delaySeconds}s</strong></div>
             <div><span>Buffered ahead</span><strong>{stats.bufferAhead.toFixed(1)}s</strong></div>

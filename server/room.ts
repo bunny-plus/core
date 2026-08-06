@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import type WebSocket from "ws";
+import WebSocket from "ws";
 
 export type RoomMember = {
   admin: boolean;
@@ -10,10 +10,16 @@ export type RoomMember = {
 };
 
 type RoomSession = {
+  expiry: NodeJS.Timeout;
+  lastSeen: number;
+  messageCount: number;
+  messageWindowStarted: number;
+  member: RoomMember;
+};
+
+type MemberActivity = {
   lastChat?: number;
   lastReaction?: number;
-  lastSeen: number;
-  member: RoomMember;
 };
 
 type RoomChat = {
@@ -26,9 +32,15 @@ type RoomChat = {
 
 const presenceTimeout = 2 * 60 * 1_000;
 const presenceSweepInterval = 30 * 1_000;
+const messageWindow = 10_000;
+const maxMessagesPerWindow = 20;
+const maxConnections = 200;
+const maxConnectionsPerMember = 5;
+const maxBufferedAmount = 64 * 1_024;
 
 export class WatchRoom {
   private readonly chats: RoomChat[] = [];
+  private readonly memberActivity = new Map<string, MemberActivity>();
   private readonly sessions = new Map<WebSocket, RoomSession>();
   private readonly sweep: NodeJS.Timeout;
 
@@ -37,28 +49,59 @@ export class WatchRoom {
     this.sweep.unref();
   }
 
-  connect(socket: WebSocket, member: RoomMember) {
-    this.sessions.set(socket, { lastSeen: Date.now(), member });
-    socket.on("message", (value) => this.message(socket, value.toString()));
+  connect(socket: WebSocket, member: RoomMember, authorizationExpires: number) {
+    const memberConnections = [...this.sessions.values()].filter((session) => session.member.id === member.id).length;
+    if (this.sessions.size >= maxConnections || memberConnections >= maxConnectionsPerMember) {
+      socket.close(4008, "Too many room connections");
+      return;
+    }
+
+    const now = Date.now();
+    if (authorizationExpires <= now) {
+      socket.close(4001, "Session expired");
+      return;
+    }
+    const expiry = setTimeout(() => socket.close(4001, "Session expired"), authorizationExpires - now);
+    expiry.unref();
+    this.sessions.set(socket, { expiry, lastSeen: now, member, messageCount: 0, messageWindowStarted: now });
+    socket.on("message", (value, isBinary) => {
+      if (isBinary) {
+        socket.close(1003, "Text messages only");
+        return;
+      }
+      this.message(socket, value.toString());
+    });
     socket.on("close", () => this.disconnect(socket));
     socket.on("error", () => this.disconnect(socket));
-    socket.send(JSON.stringify({ chats: this.chats, members: this.members(), serverTime: Date.now(), type: "welcome" }));
+    this.send(socket, JSON.stringify({ chats: this.chats, members: this.members(), serverTime: Date.now(), type: "welcome" }));
     this.broadcastPresence();
   }
 
   private message(socket: WebSocket, value: string) {
     try {
+      const session = this.sessions.get(socket);
+      if (!session) return;
+      const now = Date.now();
+      if (now - session.messageWindowStarted >= messageWindow) {
+        session.messageCount = 0;
+        session.messageWindowStarted = now;
+      }
+      session.messageCount += 1;
+      if (session.messageCount > maxMessagesPerWindow) {
+        socket.close(4008, "Room message limit exceeded");
+        return;
+      }
+
       const message = JSON.parse(value) as { clientTime?: number; message?: unknown; type?: string };
       if (message.type === "ping" && typeof message.clientTime === "number") {
-        const session = this.sessions.get(socket);
-        if (session) session.lastSeen = Date.now();
-        socket.send(JSON.stringify({ clientTime: message.clientTime, serverTime: Date.now(), type: "pong" }));
+        session.lastSeen = now;
+        this.send(socket, JSON.stringify({ clientTime: message.clientTime, serverTime: now, type: "pong" }));
       }
       if (message.type === "reaction") {
-        const session = this.sessions.get(socket);
-        const now = Date.now();
-        if (!session || now - (session.lastReaction ?? 0) < 1_500) return;
-        session.lastReaction = now;
+        const activity = this.memberActivity.get(session.member.id) ?? {};
+        if (now - (activity.lastReaction ?? 0) < 1_500) return;
+        activity.lastReaction = now;
+        this.memberActivity.set(session.member.id, activity);
         session.lastSeen = now;
         this.broadcast(JSON.stringify({
           id: randomUUID(),
@@ -68,14 +111,14 @@ export class WatchRoom {
         }));
       }
       if (message.type === "chat") {
-        const session = this.sessions.get(socket);
-        const now = Date.now();
-        if (!session || now - (session.lastChat ?? 0) < 1_500) return;
+        const activity = this.memberActivity.get(session.member.id) ?? {};
+        if (now - (activity.lastChat ?? 0) < 1_500) return;
         const text = typeof message.message === "string"
           ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
           : "";
         if (!text) return;
-        session.lastChat = now;
+        activity.lastChat = now;
+        this.memberActivity.set(session.member.id, activity);
         session.lastSeen = now;
         const chat: RoomChat = {
           id: randomUUID(),
@@ -94,7 +137,10 @@ export class WatchRoom {
   }
 
   private disconnect(socket: WebSocket) {
-    if (!this.sessions.delete(socket)) return;
+    const session = this.sessions.get(socket);
+    if (!session) return;
+    clearTimeout(session.expiry);
+    this.sessions.delete(socket);
     this.broadcastPresence();
   }
 
@@ -104,8 +150,14 @@ export class WatchRoom {
     for (const [socket, session] of this.sessions) {
       if (session.lastSeen >= cutoff) continue;
       socket.close(4000, "Activity timeout");
+      clearTimeout(session.expiry);
       this.sessions.delete(socket);
       changed = true;
+    }
+    const activeMembers = new Set([...this.sessions.values()].map(({ member }) => member.id));
+    for (const [memberId, activity] of this.memberActivity) {
+      const lastActivity = Math.max(activity.lastChat ?? 0, activity.lastReaction ?? 0);
+      if (!activeMembers.has(memberId) && lastActivity < cutoff) this.memberActivity.delete(memberId);
     }
     if (changed) this.broadcastPresence();
   }
@@ -120,11 +172,17 @@ export class WatchRoom {
 
   private broadcast(message: string) {
     for (const socket of this.sessions.keys()) {
-      try {
-        socket.send(message);
-      } catch {
-        this.sessions.delete(socket);
-      }
+      this.send(socket, message);
     }
+  }
+
+  private send(socket: WebSocket, message: string) {
+    if (socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > maxBufferedAmount) {
+      socket.terminate();
+      return;
+    }
+    socket.send(message, (error) => {
+      if (error) socket.terminate();
+    });
   }
 }

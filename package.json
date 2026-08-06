@@ -7,13 +7,16 @@
     "build": "pnpm typecheck && pnpm build:client && pnpm build:server",
     "build:client": "vite build",
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs",
-    "deploy": "pnpm build:client && wrangler deploy --config wrangler.jsonc",
+    "deploy": "pnpm lint && pnpm test && pnpm typecheck && VITE_API_URL=https://api.bunny.plus pnpm build:client && wrangler deploy --config wrangler.jsonc",
     "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.dev.vars --import tsx server/index.ts\" \"vite\"",
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node dist/server.cjs",
-    "test": "node --import tsx --test server/cache.test.ts worker/session.test.ts",
+    "test": "node --import tsx --test server/*.test.ts worker/*.test.ts",
     "typecheck": "tsc -b"
+  },
+  "engines": {
+    "node": "22.x"
   },
   "dependencies": {
     "hls.js": "^1.6.16",

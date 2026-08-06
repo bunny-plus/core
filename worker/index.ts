@@ -1,5 +1,6 @@
 import { createSession, readCookie, readSession, sessionCookie, type Viewer } from "./session";
 import { TtlCache } from "../server/cache";
+import { fetchJson } from "../server/upstream";
 
 export interface Env {
   ADMIN_DISCORD_IDS: string;
@@ -11,6 +12,8 @@ export interface Env {
   DISCORD_GUILD_ID: string;
   DISCORD_ROLE_PERMISSIONS: string;
   DEV_USER_JSON?: string;
+  ENABLE_DEV_AUTH?: string;
+  NODE_ENV?: string;
   SESSION_SECRET: string;
   STREAM_DELAY_SECONDS: string;
   RELAY_CONTROLLER_SECRET?: string;
@@ -31,6 +34,10 @@ type DiscordUser = {
 };
 
 export type RoomMember = Pick<Viewer, "admin" | "avatar" | "id" | "name">;
+
+export type RequestMetadata = {
+  peerAddress?: string;
+};
 
 type TorBoxFile = {
   id: number;
@@ -79,6 +86,14 @@ type TorBoxResponse<T> = {
 };
 
 const cache = new TtlCache(500);
+const rateLimits = new Map<string, { count: number; started: number }>();
+let controllerQueue: Promise<void> = Promise.resolve();
+
+class ClientError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 
 function redirectUri(request: Request, env: Env) {
   return `${(env.API_URL || new URL(request.url).origin).replace(/\/$/, "")}/auth/callback`;
@@ -98,25 +113,42 @@ function redirect(location: string, cookie?: string) {
   return new Response(null, { headers, status: 302 });
 }
 
-async function requirePermission(request: Request, env: Env, permission: string) {
-  const viewer = await viewerForRequest(request, env);
+async function requirePermission(request: Request, env: Env, permission: string, metadata?: RequestMetadata) {
+  const viewer = await viewerForRequest(request, env, metadata);
   return viewer && (viewer.admin || (viewer.permissions ?? []).includes(permission)) ? viewer : null;
 }
 
-async function viewerForRequest(request: Request, env: Env) {
+function isLoopback(address: string | undefined) {
+  if (!address) return false;
+  const normalized = address.toLowerCase().split("%")[0];
+  return normalized === "127.0.0.1" || normalized === "::1" || normalized === "::ffff:127.0.0.1";
+}
+
+async function viewerForRequest(request: Request, env: Env, metadata?: RequestMetadata) {
   const session = await readSession(request, env.SESSION_SECRET);
   if (session) return session;
 
+  if (env.ENABLE_DEV_AUTH !== "true" || env.NODE_ENV === "production" || !isLoopback(metadata?.peerAddress)) return null;
   const hostname = new URL(request.url).hostname;
   const appHostname = new URL(env.APP_URL).hostname;
-  const localHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+  const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
   if (!localHosts.has(hostname) || !localHosts.has(appHostname)) return null;
   try {
-    const configured = env.DEV_USER_JSON ? JSON.parse(env.DEV_USER_JSON) as Partial<Viewer> : {};
+    const parsed: unknown = env.DEV_USER_JSON ? JSON.parse(env.DEV_USER_JSON) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+    const configured = parsed as Partial<Viewer>;
+    if ((configured.admin !== undefined && typeof configured.admin !== "boolean")
+      || (configured.avatar !== undefined && configured.avatar !== null && typeof configured.avatar !== "string")
+      || (configured.id !== undefined && typeof configured.id !== "string")
+      || (configured.name !== undefined && typeof configured.name !== "string")
+      || (configured.permissions !== undefined && (!Array.isArray(configured.permissions)
+        || !configured.permissions.every((permission) => typeof permission === "string")))) {
+      throw new Error();
+    }
     return {
       admin: configured.admin ?? true,
       avatar: configured.avatar ?? null,
-      expires: Date.now() + 24 * 60 * 60 * 1_000,
+      expires: Date.now() + 8 * 60 * 60 * 1_000,
       id: configured.id ?? "local-dev",
       name: configured.name ?? "Local Bunny",
       permissions: configured.permissions ?? ["admin", "stream.manage", "chloe.chat"],
@@ -128,7 +160,13 @@ async function viewerForRequest(request: Request, env: Env) {
 
 function permissionsForRoles(roleIds: string[], env: Env) {
   try {
-    const configured = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}") as Record<string, string[]>;
+    const parsed: unknown = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)
+      || !Object.values(parsed).every((permissions) => Array.isArray(permissions)
+        && permissions.every((permission) => typeof permission === "string"))) {
+      throw new Error();
+    }
+    const configured = parsed as Record<string, string[]>;
     return [...new Set(roleIds.flatMap((roleId) => configured[roleId] ?? []))];
   } catch {
     throw new Error("DISCORD_ROLE_PERMISSIONS must map Discord role IDs to permission arrays");
@@ -136,11 +174,15 @@ function permissionsForRoles(roleIds: string[], env: Env) {
 }
 
 async function torBox<T>(path: string, env: Env) {
-  const response = await fetch(`https://api.torbox.app${path}`, {
+  const { data: result } = await fetchJson<TorBoxResponse<T>>(`https://api.torbox.app${path}`, {
     headers: { Authorization: `Bearer ${env.TORBOX_API_KEY}` },
+    maxBytes: 4_000_000,
+    name: "TorBox",
+    timeoutMs: 10_000,
   });
-  const result = await response.json() as TorBoxResponse<T>;
-  if (!response.ok || !result.success) throw new Error(result.detail || "TorBox request failed");
+  if (!result || typeof result !== "object" || result.success !== true || !("data" in result)) {
+    throw new Error("TorBox request failed");
+  }
   return result.data;
 }
 
@@ -148,32 +190,14 @@ async function cachedData<T>(key: string, maxAge: number, load: () => Promise<T>
   return cache.getOrLoad(key, maxAge, load);
 }
 
-async function responsePreview(response: Response, limit = 512) {
-  if (!response.body) return "";
-  const reader = response.body.getReader();
-  const bytes = new Uint8Array(limit);
-  let length = 0;
-  try {
-    while (length < limit) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = value.subarray(0, limit - length);
-      bytes.set(chunk, length);
-      length += chunk.length;
-    }
-  } finally {
-    await reader.cancel();
-  }
-  return new TextDecoder().decode(bytes.subarray(0, length)).replace(/\s+/g, " ").trim();
-}
-
 async function tmdb<T>(path: string, env: Env) {
   if (!env.TMDB_API_TOKEN) throw new Error("TMDB_API_TOKEN is not configured");
-  const response = await fetch(`https://api.themoviedb.org/3${path}`, {
+  const { data } = await fetchJson<T>(`https://api.themoviedb.org/3${path}`, {
     headers: { Authorization: `Bearer ${env.TMDB_API_TOKEN}` },
+    name: "TMDB",
+    timeoutMs: 10_000,
   });
-  if (!response.ok) throw new Error(`TMDB request failed (${response.status})`);
-  return response.json() as Promise<T>;
+  return data;
 }
 
 function cleanMovie(movie: TmdbMovie) {
@@ -186,6 +210,15 @@ function cleanMovie(movie: TmdbMovie) {
     title: movie.title,
     voteAverage: movie.vote_average,
   };
+}
+
+function isTmdbMovie(movie: unknown): movie is TmdbMovie {
+  if (!movie || typeof movie !== "object") return false;
+  const value = movie as Partial<TmdbMovie>;
+  return Number.isInteger(value.id) && typeof value.title === "string" && typeof value.overview === "string"
+    && typeof value.release_date === "string" && typeof value.vote_average === "number"
+    && (value.backdrop_path === null || typeof value.backdrop_path === "string")
+    && (value.poster_path === null || typeof value.poster_path === "string");
 }
 
 function addonBase(env: Env) {
@@ -220,25 +253,102 @@ async function controller(env: Env, method: "GET" | "POST", body?: object) {
   const secret = env.RELAY_CONTROLLER_SECRET || env.STREAM_CONTROLLER_SECRET;
   if (!url || !secret) throw new Error("Relay controller is not configured");
   const action = body && "action" in body ? body.action : null;
-  const response = await fetch(url, {
+  const { data: result } = await fetchJson<Record<string, unknown> & { detail?: string; error?: string; running?: boolean; title?: string | null }>(url, {
     body: body ? JSON.stringify(body) : undefined,
     headers: {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",
     },
     method,
-    signal: AbortSignal.timeout(action === "probe" ? 30_000 : 10_000),
+    maxBytes: 256_000,
+    name: "Stream controller",
+    timeoutMs: action === "probe" ? 30_000 : 10_000,
   });
-  const result = await response.json() as Record<string, unknown> & { detail?: string; error?: string; running?: boolean; title?: string | null };
-  if (!response.ok) throw new Error(result.detail || result.error || "Stream controller request failed");
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("Stream controller returned invalid data");
   return result;
 }
 
 function apiError(error: unknown) {
   return Response.json(
     { error: error instanceof Error ? error.message : "Unexpected request failure" },
-    { status: 502 },
+    { status: error instanceof ClientError ? error.status : 502 },
   );
+}
+
+function rateLimit(viewer: Viewer, bucket: string, limit: number, windowMs = 60_000) {
+  const key = `${viewer.id}:${bucket}`;
+  const now = Date.now();
+  const current = rateLimits.get(key);
+  if (!current || now - current.started >= windowMs) {
+    if (rateLimits.size > 5_000) {
+      for (const [entryKey, entry] of rateLimits) {
+        if (now - entry.started >= windowMs) rateLimits.delete(entryKey);
+      }
+    }
+    rateLimits.set(key, { count: 1, started: now });
+    return null;
+  }
+  current.count += 1;
+  if (current.count <= limit) return null;
+  const retryAfter = Math.max(1, Math.ceil((current.started + windowMs - now) / 1_000));
+  return Response.json(
+    { error: "Too many requests" },
+    { headers: { "Retry-After": String(retryAfter) }, status: 429 },
+  );
+}
+
+async function authorizeCostly(
+  request: Request,
+  env: Env,
+  metadata: RequestMetadata | undefined,
+  bucket: string,
+  limit: number,
+  permission?: string,
+) {
+  const viewer = permission
+    ? await requirePermission(request, env, permission, metadata)
+    : await viewerForRequest(request, env, metadata);
+  if (!viewer) return Response.json({ error: permission ? "Forbidden" : "Unauthorized" }, { status: permission ? 403 : 401 });
+  return rateLimit(viewer, bucket, limit) ?? viewer;
+}
+
+async function serializedController<T>(operation: () => Promise<T>) {
+  const previous = controllerQueue;
+  let release!: () => void;
+  controllerQueue = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
+
+async function jsonObject(request: Request) {
+  try {
+    const value: unknown = await request.json();
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new ClientError("A JSON object is required", 400);
+    return value as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof ClientError) throw error;
+    throw new ClientError("Malformed JSON", 400);
+  }
+}
+
+function mutationGuard(request: Request, env: Env, pathname: string) {
+  if (!pathname.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(request.method)) return null;
+  if (request.headers.get("Origin") !== new URL(env.APP_URL).origin) {
+    return Response.json({ error: "Forbidden origin" }, { status: 403 });
+  }
+  const jsonRoutes = new Set([
+    "/api/admin/movies/add",
+    "/api/admin/torbox/options",
+    "/api/admin/torbox/start",
+  ]);
+  if (jsonRoutes.has(pathname) && request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
+    return Response.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+  return null;
 }
 
 async function temporaryDownload(env: Env, torrentId: number, fileId: number) {
@@ -248,9 +358,11 @@ async function temporaryDownload(env: Env, torrentId: number, fileId: number) {
     torrent_id: String(torrentId),
     zip_link: "false",
   });
-  const response = await fetch(`https://api.torbox.app/v1/api/torrents/requestdl?${query}`);
-  const result = await response.json() as TorBoxResponse<string>;
-  if (!response.ok || !result.success) throw new Error(result.detail || "Could not create TorBox download URL");
+  const { data: result } = await fetchJson<TorBoxResponse<string>>(`https://api.torbox.app/v1/api/torrents/requestdl?${query}`, {
+    name: "TorBox download",
+    timeoutMs: 10_000,
+  });
+  if (!result || typeof result !== "object" || result.success !== true) throw new Error("Could not create TorBox download URL");
   if (!result.data?.startsWith("https://")) throw new Error("TorBox returned an invalid download URL");
   return result.data;
 }
@@ -277,7 +389,7 @@ async function finishLogin(request: Request, env: Env) {
   }
 
   try {
-    const tokenResponse = await fetch("https://discord.com/api/oauth2/token", {
+    const { data: token, response: tokenResponse } = await fetchJson<{ access_token?: unknown }>("https://discord.com/api/oauth2/token", {
       body: new URLSearchParams({
         client_id: env.DISCORD_CLIENT_ID,
         client_secret: env.DISCORD_CLIENT_SECRET,
@@ -287,26 +399,39 @@ async function finishLogin(request: Request, env: Env) {
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      name: "Discord OAuth",
+      requireOk: false,
+      timeoutMs: 10_000,
     });
     if (!tokenResponse.ok) throw new Error("Discord token exchange failed");
-    const token = (await tokenResponse.json()) as { access_token: string };
+    if (typeof token.access_token !== "string" || !token.access_token) throw new Error("Discord token exchange failed");
     const headers = { Authorization: `Bearer ${token.access_token}` };
-    const [userResponse, memberResponse] = await Promise.all([
-      fetch("https://discord.com/api/users/@me", { headers }),
-      fetch(`https://discord.com/api/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`, { headers }),
+    const [userResult, memberResult] = await Promise.all([
+      fetchJson<unknown>("https://discord.com/api/users/@me", {
+        headers, name: "Discord API", requireOk: false, timeoutMs: 10_000,
+      }),
+      fetchJson<unknown>(`https://discord.com/api/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`, {
+        headers, name: "Discord API", requireOk: false, timeoutMs: 10_000,
+      }),
     ]);
-    if (!userResponse.ok || !memberResponse.ok) {
+    if (!userResult.response.ok || !memberResult.response.ok) {
       return redirect(`${env.APP_URL.replace(/\/$/, "")}/?error=not-a-member`, oauthCookie("", request, 0));
     }
 
-    const user = (await userResponse.json()) as DiscordUser;
-    const member = (await memberResponse.json()) as { roles: string[] };
+    const user = userResult.data as Partial<DiscordUser> | null;
+    const member = memberResult.data as { roles?: unknown } | null;
+    if (!user || typeof user.id !== "string" || typeof user.username !== "string"
+      || (user.avatar !== null && typeof user.avatar !== "string")
+      || (user.global_name !== null && typeof user.global_name !== "string")
+      || !member || !Array.isArray(member.roles) || !member.roles.every((role) => typeof role === "string")) {
+      throw new Error("Discord API returned invalid data");
+    }
 
     const avatar = user.avatar
       ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=128`
       : null;
     const admins = new Set(env.ADMIN_DISCORD_IDS.split(",").map((id) => id.trim()).filter(Boolean));
-    const permissions = permissionsForRoles(member.roles ?? [], env);
+    const permissions = permissionsForRoles(member.roles, env);
     const admin = admins.has(user.id) || permissions.includes("admin");
     if (admin) {
       if (!permissions.includes("stream.manage")) permissions.push("stream.manage");
@@ -325,24 +450,29 @@ async function finishLogin(request: Request, env: Env) {
   }
 }
 
-export async function authenticateRoomMember(request: Request, env: Env): Promise<RoomMember | null> {
-  const viewer = await viewerForRequest(request, env);
+export async function authenticateRoomMember(request: Request, env: Env, metadata?: RequestMetadata) {
+  const viewer = await viewerForRequest(request, env, metadata);
   if (!viewer) return null;
   return {
-    admin: viewer.admin,
-    avatar: viewer.avatar,
-    id: viewer.id,
-    name: viewer.name,
+    expires: viewer.expires,
+    member: {
+      admin: viewer.admin,
+      avatar: viewer.avatar,
+      id: viewer.id,
+      name: viewer.name,
+    } satisfies RoomMember,
   };
 }
 
-export async function handleRequest(request: Request, env: Env) {
+async function routeRequest(request: Request, env: Env, metadata?: RequestMetadata) {
     const url = new URL(request.url);
+    const rejectedMutation = mutationGuard(request, env, url.pathname);
+    if (rejectedMutation) return rejectedMutation;
     if (url.pathname === "/auth/discord" && request.method === "GET") return beginLogin(request, env);
     if (url.pathname === "/auth/callback" && request.method === "GET") return finishLogin(request, env);
 
     if (url.pathname === "/api/session" && request.method === "GET") {
-      const viewer = await viewerForRequest(request, env);
+      const viewer = await viewerForRequest(request, env, metadata);
       if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
       return Response.json({
         delaySeconds: Number(env.STREAM_DELAY_SECONDS || 6),
@@ -359,14 +489,9 @@ export async function handleRequest(request: Request, env: Env) {
     if (url.pathname === "/api/logout" && request.method === "POST") {
       return new Response(null, { headers: { "Set-Cookie": sessionCookie("", 0, isSecure(request)) }, status: 204 });
     }
-    if (url.pathname === "/api/version" && request.method === "GET") {
-      return Response.json(
-        { version: env.APP_VERSION || "development" },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    }
     if (url.pathname === "/api/admin/movies" && request.method === "GET") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "discovery", 30, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
         const query = url.searchParams.get("q")?.trim().slice(0, 100) ?? "";
         const cacheKey = query ? `tmdb/search/${encodeURIComponent(query.toLowerCase())}` : "tmdb/trending/week";
@@ -377,14 +502,16 @@ export async function handleRequest(request: Request, env: Env) {
             : "/trending/movie/week?language=en-US",
           env,
         ));
-        return Response.json({ movies: result.results.filter((movie) => movie.adult !== true).map(cleanMovie) });
+        if (!result || !Array.isArray(result.results)) throw new Error("TMDB returned invalid data");
+        return Response.json({ movies: result.results.filter(isTmdbMovie).filter((movie) => movie.adult !== true).map(cleanMovie) });
       } catch (error) {
         return apiError(error);
       }
     }
     const movieReleaseMatch = url.pathname.match(/^\/api\/admin\/movies\/(\d+)\/releases$/);
     if (movieReleaseMatch && request.method === "GET") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "discovery", 30, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
         const movieId = Number(movieReleaseMatch[1]);
         const external = await cachedData(`tmdb/movie/${movieId}/external-ids`, 7 * 24 * 60 * 60, () => (
@@ -393,26 +520,20 @@ export async function handleRequest(request: Request, env: Env) {
         if (!external.imdb_id || !/^tt\d+$/.test(external.imdb_id)) throw new Error("This movie has no IMDb ID");
 
         const addon = await cachedData(`stremio/movie/${external.imdb_id}`, 30 * 60, async () => {
-          const response = await fetch(`${addonBase(env)}/stream/movie/${external.imdb_id}.json`, {
+          const { data } = await fetchJson<{ streams?: StremioStream[] }>(`${addonBase(env)}/stream/movie/${external.imdb_id}.json`, {
             headers: { Accept: "application/json" },
+            maxBytes: 2_000_000,
+            name: "Movie addon",
+            timeoutMs: 15_000,
           });
-          if (!response.ok) {
-            console.error(JSON.stringify({
-              cfRay: response.headers.get("cf-ray"),
-              contentType: response.headers.get("content-type"),
-              detail: await responsePreview(response),
-              imdbId: external.imdb_id,
-              message: "Movie addon request failed",
-              server: response.headers.get("server"),
-              status: response.status,
-              upstream: "torrentio",
-            }));
-            throw new Error(`Movie addon request failed (${response.status})`);
+          if (!data || typeof data !== "object" || (data.streams !== undefined && !Array.isArray(data.streams))) {
+            throw new Error("Movie addon returned invalid data");
           }
-          return response.json() as Promise<{ streams?: StremioStream[] }>;
+          return data;
         });
         const seen = new Set<string>();
         const candidates = (addon.streams ?? [])
+          .filter((stream): stream is StremioStream => Boolean(stream) && typeof stream === "object")
           .flatMap((stream) => {
             const hash = stream.infoHash?.toLowerCase();
             const fileIndex = Number.isInteger(stream.fileIdx) ? stream.fileIdx! : null;
@@ -426,7 +547,8 @@ export async function handleRequest(request: Request, env: Env) {
               hash,
               label: label || hash,
               score: releaseScore(label),
-              trackers: (stream.sources ?? [])
+              trackers: (Array.isArray(stream.sources) ? stream.sources : [])
+                .filter((source): source is string => typeof source === "string")
                 .filter((source) => source.startsWith("tracker:"))
                 .map((source) => source.slice(8))
                 .filter((tracker) => tracker.startsWith("https://") || tracker.startsWith("udp://"))
@@ -451,38 +573,44 @@ export async function handleRequest(request: Request, env: Env) {
       }
     }
     if (url.pathname === "/api/admin/movies/add" && request.method === "POST") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "mutation", 10, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
-        const input = await request.json() as { hash?: string; title?: string; trackers?: string[] };
-        const hash = input.hash?.toLowerCase() ?? "";
+        const input = await jsonObject(request);
+        const hash = typeof input.hash === "string" ? input.hash.toLowerCase() : "";
         if (!/^[a-f0-9]{40}$/.test(hash)) return Response.json({ error: "A valid torrent hash is required" }, { status: 400 });
         const magnet = new URL("magnet:?");
         magnet.searchParams.set("xt", `urn:btih:${hash}`);
-        if (input.title) magnet.searchParams.set("dn", input.title.slice(0, 200));
-        for (const tracker of (input.trackers ?? []).slice(0, 20)) {
+        if (typeof input.title === "string") magnet.searchParams.set("dn", input.title.slice(0, 200));
+        const trackers = Array.isArray(input.trackers) ? input.trackers.filter((tracker): tracker is string => typeof tracker === "string") : [];
+        for (const tracker of trackers.slice(0, 20)) {
           if (tracker.startsWith("https://") || tracker.startsWith("udp://")) magnet.searchParams.append("tr", tracker);
         }
         const body = new FormData();
         body.set("magnet", magnet.toString());
-        const response = await fetch("https://api.torbox.app/v1/api/torrents/createtorrent", {
+        const { data: result } = await fetchJson<TorBoxResponse<unknown>>("https://api.torbox.app/v1/api/torrents/createtorrent", {
           body,
           headers: { Authorization: `Bearer ${env.TORBOX_API_KEY}` },
           method: "POST",
+          name: "TorBox create",
+          timeoutMs: 15_000,
         });
-        const result = await response.json() as TorBoxResponse<unknown>;
-        if (!response.ok || !result.success) throw new Error(result.detail || "Could not add movie to TorBox");
-        return Response.json({ detail: result.detail || "Movie added to TorBox" });
+        if (!result || typeof result !== "object" || !result.success) throw new Error("Could not add movie to TorBox");
+        cache.invalidatePrefix("torbox/movie/");
+        return Response.json({ detail: typeof result.detail === "string" && result.detail ? result.detail : "Movie added to TorBox" });
       } catch (error) {
         return apiError(error);
       }
     }
     if (url.pathname === "/api/admin/torbox/torrents" && request.method === "GET") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "torbox-list", 30, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
         const torrents = await torBox<TorBoxTorrent[]>(
           `/v1/api/torrents/mylist?bypass_cache=${url.searchParams.get("refresh") === "1" ? "true" : "false"}&offset=0&limit=100`,
           env,
         );
+        if (!Array.isArray(torrents)) throw new Error("TorBox returned invalid data");
         return Response.json({
           torrents: torrents.map((torrent) => ({
             download_finished: torrent.download_finished,
@@ -507,56 +635,53 @@ export async function handleRequest(request: Request, env: Env) {
       }
     }
     if (url.pathname === "/api/admin/torbox/options" && request.method === "POST") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "controller-mutation", 10, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
-        const input = await request.json() as { fileId?: number; torrentId?: number };
+        const input = await jsonObject(request);
         if (!Number.isInteger(input.torrentId) || !Number.isInteger(input.fileId)) {
           return Response.json({ error: "A valid torrent and file are required" }, { status: 400 });
         }
-        const source = await temporaryDownload(env, input.torrentId!, input.fileId!);
+        const source = await temporaryDownload(env, input.torrentId as number, input.fileId as number);
         return Response.json(await controller(env, "POST", { action: "probe", source }));
       } catch (error) {
         return apiError(error);
       }
     }
     if (url.pathname === "/api/admin/torbox/start" && request.method === "POST") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "controller-mutation", 10, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
-        const input = await request.json() as {
-          audioIndex?: number;
-          fileId?: number;
-          resolutionIndex?: number | null;
-          subtitleIndex?: number | null;
-          title?: string;
-          torrentId?: number;
-        };
+        const input = await jsonObject(request);
         if (!Number.isInteger(input.torrentId) || !Number.isInteger(input.fileId)) {
           return Response.json({ error: "A valid torrent and file are required" }, { status: 400 });
         }
-        const source = await temporaryDownload(env, input.torrentId!, input.fileId!);
-        await controller(env, "POST", {
+        const source = await temporaryDownload(env, input.torrentId as number, input.fileId as number);
+        await serializedController(() => controller(env, "POST", {
           action: "start",
           audioIndex: Number.isInteger(input.audioIndex) ? input.audioIndex : 0,
           resolutionIndex: Number.isInteger(input.resolutionIndex) ? input.resolutionIndex : null,
           source,
           subtitleIndex: Number.isInteger(input.subtitleIndex) ? input.subtitleIndex : null,
-          title: input.title?.slice(0, 200) || "TorBox stream",
-        });
+          title: typeof input.title === "string" ? input.title.slice(0, 200) || "TorBox stream" : "TorBox stream",
+        }));
         return Response.json({ detail: "Stream is starting" });
       } catch (error) {
         return apiError(error);
       }
     }
     if (url.pathname === "/api/admin/torbox/stop" && request.method === "POST") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "controller-mutation", 10, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
-        return Response.json(await controller(env, "POST", { action: "stop" }));
+        return Response.json(await serializedController(() => controller(env, "POST", { action: "stop" })));
       } catch (error) {
         return apiError(error);
       }
     }
     if (url.pathname === "/api/admin/torbox/status" && request.method === "GET") {
-      if (!await requirePermission(request, env, "stream.manage")) return Response.json({ error: "Forbidden" }, { status: 403 });
+      const authorization = await authorizeCostly(request, env, metadata, "controller-read", 60, "stream.manage");
+      if (authorization instanceof Response) return authorization;
       try {
         return Response.json(await controller(env, "GET"));
       } catch (error) {
@@ -564,8 +689,8 @@ export async function handleRequest(request: Request, env: Env) {
       }
     }
     if (url.pathname === "/api/stream-status" && request.method === "GET") {
-      const viewer = await viewerForRequest(request, env);
-      if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const authorization = await authorizeCostly(request, env, metadata, "stream-status", 60);
+      if (authorization instanceof Response) return authorization;
       try {
         const response = await fetch(env.STREAM_URL, {
           headers: { Accept: "application/vnd.apple.mpegurl" },
@@ -584,8 +709,8 @@ export async function handleRequest(request: Request, env: Env) {
       }
     }
     if (url.pathname === "/api/stream-info" && request.method === "GET") {
-      const viewer = await viewerForRequest(request, env);
-      if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      const authorization = await authorizeCostly(request, env, metadata, "controller-read", 60);
+      if (authorization instanceof Response) return authorization;
       try {
         const status = await controller(env, "GET");
         return Response.json(
@@ -604,4 +729,13 @@ export async function handleRequest(request: Request, env: Env) {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
+}
+
+export async function handleRequest(request: Request, env: Env, metadata?: RequestMetadata) {
+  const response = await routeRequest(request, env, metadata);
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith("/api/") || pathname.startsWith("/auth/")) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+  return response;
 }

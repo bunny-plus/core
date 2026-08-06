@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch } from "./api";
@@ -29,6 +29,8 @@ async function api<T>(url: string, init?: RequestInit) {
 }
 
 export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) => Promise<void> }) {
+  const movieRequestRef = useRef<AbortController>(null);
+  const releaseRequestRef = useRef<AbortController>(null);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [selected, setSelected] = useState<Movie | null>(null);
   const [releases, setReleases] = useState<Release[] | null>(null);
@@ -38,33 +40,61 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
   const [error, setError] = useState<string | null>(null);
 
   async function loadMovies(search = "") {
+    movieRequestRef.current?.abort();
+    const request = new AbortController();
+    movieRequestRef.current = request;
     setLoading(true);
     setError(null);
     try {
-      const result = await api<{ movies: Movie[] }>(`/api/admin/movies${search ? `?q=${encodeURIComponent(search)}` : ""}`);
+      const result = await api<{ movies: Movie[] }>(
+        `/api/admin/movies${search ? `?q=${encodeURIComponent(search)}` : ""}`,
+        { signal: request.signal },
+      );
+      if (movieRequestRef.current !== request) return;
       setMovies(result.movies);
     } catch (loadError) {
+      if (request.signal.aborted) return;
       setError(loadError instanceof Error ? loadError.message : "Could not load movies");
     } finally {
-      setLoading(false);
+      if (movieRequestRef.current === request) setLoading(false);
     }
   }
 
   useEffect(() => {
-    api<{ movies: Movie[] }>("/api/admin/movies")
-      .then((result) => setMovies(result.movies))
-      .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : "Could not load movies"))
-      .finally(() => setLoading(false));
+    const request = new AbortController();
+    movieRequestRef.current = request;
+    api<{ movies: Movie[] }>("/api/admin/movies", { signal: request.signal })
+      .then((result) => {
+        if (movieRequestRef.current === request) setMovies(result.movies);
+      })
+      .catch((loadError: unknown) => {
+        if (!request.signal.aborted) setError(loadError instanceof Error ? loadError.message : "Could not load movies");
+      })
+      .finally(() => {
+        if (movieRequestRef.current === request) setLoading(false);
+      });
+    return () => {
+      request.abort();
+      releaseRequestRef.current?.abort();
+    };
   }, []);
 
   async function openMovie(movie: Movie) {
+    releaseRequestRef.current?.abort();
+    const request = new AbortController();
+    releaseRequestRef.current = request;
     setSelected(movie);
     setReleases(null);
     setError(null);
     try {
-      const result = await api<{ releases: Release[] }>(`/api/admin/movies/${movie.id}/releases`);
+      const result = await api<{ releases: Release[] }>(
+        `/api/admin/movies/${movie.id}/releases`,
+        { signal: request.signal },
+      );
+      if (releaseRequestRef.current !== request) return;
       setReleases(result.releases);
     } catch (loadError) {
+      if (request.signal.aborted) return;
       setError(loadError instanceof Error ? loadError.message : "Could not find releases");
       setReleases([]);
     }
@@ -91,7 +121,7 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
   if (selected) {
     return (
       <div className="movie-detail">
-        <button className="movie-back" type="button" onClick={() => { setSelected(null); setReleases(null); setError(null); }}>← Back to movies</button>
+        <button className="movie-back" type="button" onClick={() => { releaseRequestRef.current?.abort(); setSelected(null); setReleases(null); setError(null); }}>← Back to movies</button>
         <div className="movie-detail-hero" style={selected.backdrop ? { backgroundImage: `linear-gradient(90deg, rgba(41,35,44,.96), rgba(41,35,44,.45)), url(${selected.backdrop})` } : undefined}>
           <div>
             <small>{selected.releaseDate?.slice(0, 4) || "MOVIE"} · {selected.voteAverage ? `${selected.voteAverage.toFixed(1)}/10` : "UNRATED"}</small>
@@ -123,9 +153,12 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
   return (
     <div className="movie-discover">
       <form className="movie-search" onSubmit={(event) => { event.preventDefault(); void loadMovies(query.trim()); }}>
-        <input value={query} placeholder="Search movies..." onChange={(event) => setQuery(event.target.value)} />
-        <button type="submit">Search</button>
-        {query && <button type="button" onClick={() => { setQuery(""); void loadMovies(); }}>Trending</button>}
+        <label htmlFor="movie-search">Search movies</label>
+        <div>
+          <input id="movie-search" type="search" value={query} placeholder="Title..." onChange={(event) => setQuery(event.target.value)} />
+          <button type="submit">Search</button>
+          {query && <button type="button" onClick={() => { setQuery(""); void loadMovies(); }}>Trending</button>}
+        </div>
       </form>
       {error && <p className="stream-message">{error}</p>}
       {loading && <p className="torrent-empty"><AssetIcon name="bunny-face" /> Fetching the marquee...</p>}

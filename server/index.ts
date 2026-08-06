@@ -4,13 +4,16 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 
 import { authenticateRoomMember, handleRequest, type Env } from "../worker/index";
+import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
 
-const env = process.env as unknown as Env;
+const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
 const room = new WatchRoom();
-const webSockets = new WebSocketServer({ noServer: true });
+const webSockets = new WebSocketServer({ maxPayload: 16 * 1_024, noServer: true, perMessageDeflate: false });
+
+class RequestBodyError extends Error {}
 
 function requestUrl(request: IncomingMessage) {
   const forwardedProtocol = request.headers["x-forwarded-proto"]?.toString().split(",")[0]?.trim();
@@ -33,13 +36,19 @@ function webRequest(request: IncomingMessage, body?: ArrayBuffer) {
   });
 }
 
+function requestMetadata(request: IncomingMessage) {
+  return { peerAddress: request.socket.remoteAddress };
+}
+
 async function readBody(request: IncomingMessage) {
+  const declaredLength = Number(request.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > 1_000_000) throw new RequestBodyError();
   const chunks: Buffer[] = [];
   let length = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     length += buffer.length;
-    if (length > 1_000_000) throw new Error("Request body is too large");
+    if (length > 1_000_000) throw new RequestBodyError();
     chunks.push(buffer);
   }
   const body = Buffer.concat(chunks);
@@ -82,11 +91,13 @@ const server = createServer(async (request, response) => {
       return;
     }
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await readBody(request);
-    await send(response, await handleRequest(webRequest(request, body), env), request);
+    await send(response, await handleRequest(webRequest(request, body), env, requestMetadata(request)), request);
   } catch (error) {
     console.error(error);
     if (!response.headersSent) {
-      await send(response, Response.json({ error: "Unexpected request failure" }, { status: 500 }), request);
+      const status = error instanceof RequestBodyError ? 413 : 500;
+      const message = status === 413 ? "Request body is too large" : "Unexpected request failure";
+      await send(response, Response.json({ error: message }, { status }), request);
     } else {
       response.destroy();
     }
@@ -98,9 +109,11 @@ server.on("upgrade", async (request, socket, head) => {
     const url = new URL(requestUrl(request));
     if (url.pathname !== "/api/room") throw new Error("Not found");
     if (request.headers.origin !== appOrigin) throw new Error("Forbidden origin");
-    const member = await authenticateRoomMember(webRequest(request), env);
-    if (!member) throw new Error("Unauthorized");
-    webSockets.handleUpgrade(request, socket, head, (webSocket) => room.connect(webSocket, member));
+    const authorization = await authenticateRoomMember(webRequest(request), env, requestMetadata(request));
+    if (!authorization) throw new Error("Unauthorized");
+    webSockets.handleUpgrade(request, socket, head, (webSocket) => (
+      room.connect(webSocket, authorization.member, authorization.expires)
+    ));
   } catch (error) {
     const status = error instanceof Error && error.message === "Unauthorized" ? "401 Unauthorized" : "403 Forbidden";
     socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);

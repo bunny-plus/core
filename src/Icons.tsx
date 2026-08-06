@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 type AssetName = "blossom" | "bunny" | "bunny-face" | "carrot" | "leafy";
 type IconName = "chat" | "disc" | "film" | "fullscreen" | "gear" | "heart" | "lock" | "moon" | "nail" | "paw" | "server" | "sparkle" | "volume" | "volume-off" | "wrench";
@@ -11,8 +11,25 @@ const assets: Record<AssetName, string> = {
   leafy: "/leafy_green_3d.png",
 };
 
-export function AssetIcon({ className = "", name }: { className?: string; name: AssetName }) {
-  return <img className={`asset-icon ${className}`} src={assets[name]} alt="" aria-hidden="true" />;
+const staticBunnies = {
+  bunny: "/rabbit_static.png",
+  "bunny-face": "/rabbit_face_static.png",
+};
+
+function reducedMotionSnapshot() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function subscribeToReducedMotion(update: () => void) {
+  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+  media.addEventListener("change", update);
+  return () => media.removeEventListener("change", update);
+}
+
+export function AssetIcon({ animate = true, className = "", name }: { animate?: boolean; className?: string; name: AssetName }) {
+  const reduceMotion = useSyncExternalStore(subscribeToReducedMotion, reducedMotionSnapshot, () => false);
+  const source = (reduceMotion || !animate) && (name === "bunny" || name === "bunny-face") ? staticBunnies[name] : assets[name];
+  return <img className={`asset-icon asset-${name} ${className}`} src={source} alt="" aria-hidden="true" />;
 }
 
 export function UiIcon({ className = "", name }: { className?: string; name: IconName }) {

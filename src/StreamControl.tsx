@@ -104,9 +104,9 @@ export default function StreamControl() {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = torrents.filter((torrent) => {
+  const playableTorrents = torrents.map((torrent) => ({ torrent, videos: torrent.files.filter(isVideo) })).filter(({ torrent, videos }) => {
     const needle = query.toLowerCase();
-    return !needle || torrent.name.toLowerCase().includes(needle) || torrent.files.some((file) => file.name.toLowerCase().includes(needle));
+    return videos.length > 0 && (!needle || torrent.name.toLowerCase().includes(needle) || videos.some((file) => file.name.toLowerCase().includes(needle)));
   });
 
   async function configure(torrent: TorBoxTorrent, file: TorBoxFile) {
@@ -188,13 +188,13 @@ export default function StreamControl() {
         )}
 
         <div className="source-picker" role="group" aria-label="Stream source">
-          <button className={source === "torbox" ? "active" : ""} type="button" onClick={() => setSource("torbox")}>
+          <button className={source === "torbox" ? "active" : ""} type="button" aria-pressed={source === "torbox"} onClick={() => setSource("torbox")}>
             <UiIcon name="disc" /><span><strong>TorBox</strong><small>Your downloads</small></span>
           </button>
-          <button className={source === "discover" ? "active" : ""} type="button" onClick={() => setSource("discover")}>
+          <button className={source === "discover" ? "active" : ""} type="button" aria-pressed={source === "discover"} onClick={() => setSource("discover")}>
             <UiIcon name="film" /><span><strong>Discover</strong><small>Movies + cached releases</small></span>
           </button>
-          <button className={source === "jellyfin" ? "active" : ""} type="button" onClick={() => setSource("jellyfin")}>
+          <button className={source === "jellyfin" ? "active" : ""} type="button" aria-pressed={source === "jellyfin"} onClick={() => setSource("jellyfin")}>
             <UiIcon name="server" /><span><strong>Jellyfin</strong><small>Coming soon</small></span>
           </button>
         </div>
@@ -203,11 +203,13 @@ export default function StreamControl() {
 
         {source === "torbox" && (
           <>
+          <label className="stream-search-label" htmlFor="torrent-search">Search torrents and playable files</label>
           <input
+            id="torrent-search"
             className="stream-search"
             type="search"
             value={query}
-            placeholder="Search torrents and files..."
+            placeholder="Name..."
             onChange={(event) => setQuery(event.target.value)}
           />
         {selected && (
@@ -253,10 +255,8 @@ export default function StreamControl() {
 
         <div className="torrent-list">
           {loading && <p className="torrent-empty"><AssetIcon name="bunny-face" /> Digging through TorBox...</p>}
-          {!loading && filtered.length === 0 && <p className="torrent-empty">No matching carrots in the stash.</p>}
-          {filtered.map((torrent) => {
-            const videos = torrent.files.filter(isVideo);
-            if (videos.length === 0) return null;
+          {!loading && playableTorrents.length === 0 && <p className="torrent-empty">No playable video files match this search.</p>}
+          {playableTorrents.map(({ torrent, videos }) => {
             return (
               <details className="torrent" key={torrent.id}>
                 <summary>
