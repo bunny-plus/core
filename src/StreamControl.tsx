@@ -93,7 +93,7 @@ export default function StreamControl() {
 
   useEffect(() => {
     Promise.allSettled([
-      api<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents"),
+      api<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1"),
       api<ControllerStatus>("/api/admin/torbox/status"),
     ])
       .then(([list, controllerStatus]) => {

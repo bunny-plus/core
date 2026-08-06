@@ -10,15 +10,25 @@ export type RoomMember = {
 };
 
 type RoomSession = {
+  lastChat?: number;
   lastReaction?: number;
   lastSeen: number;
   member: RoomMember;
+};
+
+type RoomChat = {
+  id: string;
+  member: RoomMember;
+  message: string;
+  type: "chat";
+  x: number;
 };
 
 const presenceTimeout = 2 * 60 * 1_000;
 const presenceSweepInterval = 30 * 1_000;
 
 export class WatchRoom {
+  private readonly chats: RoomChat[] = [];
   private readonly sessions = new Map<WebSocket, RoomSession>();
   private readonly sweep: NodeJS.Timeout;
 
@@ -32,7 +42,7 @@ export class WatchRoom {
     socket.on("message", (value) => this.message(socket, value.toString()));
     socket.on("close", () => this.disconnect(socket));
     socket.on("error", () => this.disconnect(socket));
-    socket.send(JSON.stringify({ members: this.members(), serverTime: Date.now(), type: "welcome" }));
+    socket.send(JSON.stringify({ chats: this.chats, members: this.members(), serverTime: Date.now(), type: "welcome" }));
     this.broadcastPresence();
   }
 
@@ -50,17 +60,33 @@ export class WatchRoom {
         if (!session || now - (session.lastReaction ?? 0) < 1_500) return;
         session.lastReaction = now;
         session.lastSeen = now;
-        const text = typeof message.message === "string"
-          ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
-          : "";
         this.broadcast(JSON.stringify({
           id: randomUUID(),
-          member: { id: session.member.id, name: session.member.name },
-          message: text || null,
           type: "reaction",
           variant: Math.random() < 0.5 ? "carrot" : "blossom",
           x: 18 + Math.round(Math.random() * 64),
         }));
+      }
+      if (message.type === "chat") {
+        const session = this.sessions.get(socket);
+        const now = Date.now();
+        if (!session || now - (session.lastChat ?? 0) < 1_500) return;
+        const text = typeof message.message === "string"
+          ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
+          : "";
+        if (!text) return;
+        session.lastChat = now;
+        session.lastSeen = now;
+        const chat: RoomChat = {
+          id: randomUUID(),
+          member: session.member,
+          message: text,
+          type: "chat",
+          x: 18 + Math.round(Math.random() * 64),
+        };
+        this.chats.push(chat);
+        if (this.chats.length > 50) this.chats.shift();
+        this.broadcast(JSON.stringify(chat));
       }
     } catch {
       // Malformed messages have no effect on room state.

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 type AssetName = "blossom" | "bunny" | "bunny-face" | "carrot" | "leafy";
-type IconName = "disc" | "film" | "fullscreen" | "gear" | "heart" | "lock" | "moon" | "nail" | "paw" | "server" | "sparkle" | "volume" | "volume-off" | "wrench";
+type IconName = "chat" | "disc" | "film" | "fullscreen" | "gear" | "heart" | "lock" | "moon" | "nail" | "paw" | "server" | "sparkle" | "volume" | "volume-off" | "wrench";
 
 const assets: Record<AssetName, string> = {
   blossom: "/cherry_blossom_3d.png",
@@ -17,6 +17,7 @@ export function AssetIcon({ className = "", name }: { className?: string; name: 
 
 export function UiIcon({ className = "", name }: { className?: string; name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
+    chat: <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v7a3.5 3.5 0 0 1-3.5 3.5H10l-5.5 4v-4.6A3.5 3.5 0 0 1 4 13.5v-8Z" />,
     disc: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2" /><path d="M12 4v3M12 17v3M4 12h3M17 12h3" /></>,
     film: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 5v14M17 5v14M3 9h4M17 9h4M3 15h4M17 15h4" /></>,
     fullscreen: <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />,

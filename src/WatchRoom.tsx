@@ -32,9 +32,14 @@ type RelayStatus = {
 
 type RoomReaction = {
   id: string;
-  member: { id: string; name: string };
-  message: string | null;
   variant: "blossom" | "carrot";
+  x: number;
+};
+
+type RoomChat = {
+  id: string;
+  member: { avatar: string | null; id: string; name: string };
+  message: string;
   x: number;
 };
 
@@ -77,6 +82,7 @@ export default function WatchRoom({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
+  const chatHistoryRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const clockOffsetRef = useRef(0);
@@ -92,8 +98,11 @@ export default function WatchRoom({
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
-  const [reactionComposer, setReactionComposer] = useState(false);
-  const [reactionMessage, setReactionMessage] = useState("");
+  const [chats, setChats] = useState<RoomChat[]>([]);
+  const [chatHistory, setChatHistory] = useState<RoomChat[]>([]);
+  const [chatComposer, setChatComposer] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
+  const [showChatHistory, setShowChatHistory] = useState(false);
 
   useEffect(() => {
     document.body.classList.toggle("lights-out", lightsOut);
@@ -101,16 +110,34 @@ export default function WatchRoom({
   }, [lightsOut]);
 
   useEffect(() => {
-    function openReactionComposer(event: KeyboardEvent) {
+    function reactionShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (event.key.toLowerCase() !== "f" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
       event.preventDefault();
-      setReactionComposer(true);
+      react();
     }
 
-    window.addEventListener("keydown", openReactionComposer);
-    return () => window.removeEventListener("keydown", openReactionComposer);
+    window.addEventListener("keydown", reactionShortcut);
+    return () => window.removeEventListener("keydown", reactionShortcut);
   }, []);
+
+  useEffect(() => {
+    function chatShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (event.key.toLowerCase() !== "c" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      setChatComposer(true);
+    }
+
+    window.addEventListener("keydown", chatShortcut);
+    return () => window.removeEventListener("keydown", chatShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (showChatHistory && chatHistoryRef.current) {
+      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+    }
+  }, [chatHistory, showChatHistory]);
 
   useEffect(() => {
     let stopped = false;
@@ -153,23 +180,31 @@ export default function WatchRoom({
         try {
           const message = JSON.parse(event.data as string) as {
             clientTime?: number;
+            chats?: RoomChat[];
             members?: User[];
             serverTime?: number;
             type: string;
             id?: string;
-            member?: { id: string; name: string };
+            member?: { avatar: string | null; id: string; name: string };
             message?: string | null;
             variant?: "blossom" | "carrot";
             x?: number;
           };
           if (message.members) setMembers(message.members);
+          if (message.chats) setChatHistory(message.chats);
           if (message.type === "pong" && message.clientTime && message.serverTime) {
             clockOffsetRef.current = message.serverTime - (message.clientTime + Date.now()) / 2;
           }
-          if (message.type === "reaction" && message.id && message.member && message.variant && typeof message.x === "number") {
-            const reaction = { id: message.id, member: message.member, message: message.message ?? null, variant: message.variant, x: message.x };
+          if (message.type === "reaction" && message.id && message.variant && typeof message.x === "number") {
+            const reaction = { id: message.id, variant: message.variant, x: message.x };
             setReactions((current) => [...current.slice(-7), reaction]);
             setTimeout(() => setReactions((current) => current.filter(({ id }) => id !== reaction.id)), 4_000);
+          }
+          if (message.type === "chat" && message.id && message.member && message.message && typeof message.x === "number") {
+            const chat = { id: message.id, member: message.member, message: message.message, x: message.x };
+            setChats((current) => [...current.slice(-5), chat]);
+            setChatHistory((current) => [...current.slice(-49), chat]);
+            setTimeout(() => setChats((current) => current.filter(({ id }) => id !== chat.id)), 6_000);
           }
         } catch {
           // Ignore malformed server messages and keep the current room state.
@@ -361,11 +396,18 @@ export default function WatchRoom({
     }
   }
 
-  function react(message = "") {
+  function react() {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({ type: "reaction", message }));
-      setReactionMessage("");
-      setReactionComposer(false);
+      socketRef.current.send(JSON.stringify({ type: "reaction" }));
+    }
+  }
+
+  function chat(message: string) {
+    const text = message.trim();
+    if (text && socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "chat", message: text }));
+      setChatMessage("");
+      setChatComposer(false);
     }
   }
 
@@ -422,29 +464,52 @@ export default function WatchRoom({
             {reactions.map((reaction) => (
               <span className="room-reaction" style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties} key={reaction.id}>
                 <AssetIcon name={reaction.variant} />
-                <strong>{reaction.member.id === currentUser.id ? "you!" : reaction.member.name}</strong>
-                {reaction.message && <p>{reaction.message}</p>}
+              </span>
+            ))}
+            {chats.map((chat) => (
+              <span className="room-chat" style={{ "--chat-x": `${chat.x}%` } as CSSProperties} key={chat.id}>
+                <span className="room-chat-avatar">
+                  {chat.member.avatar
+                    ? <img src={chat.member.avatar} alt="" />
+                    : <span>{chat.member.name[0]?.toUpperCase()}</span>}
+                </span>
+                <span className="room-chat-bubble"><strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>{chat.message}</span>
               </span>
             ))}
           </div>
           <span className="reaction-shortcut-hint" aria-hidden="true">Press <kbd>F</kbd> to react</span>
-          {reactionComposer && (
-            <form className="reaction-composer" onSubmit={(event) => { event.preventDefault(); react(reactionMessage); }}>
-              <label htmlFor="reaction-message">Say something cute</label>
+          {chatComposer && (
+            <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); chat(chatMessage); }}>
+              <label htmlFor="chat-message">Say something cute</label>
               <div>
                 <input
-                  id="reaction-message"
+                  id="chat-message"
                   autoFocus
                   maxLength={64}
                   placeholder="omg..."
-                  value={reactionMessage}
-                  onChange={(event) => setReactionMessage(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Escape") setReactionComposer(false); }}
+                  value={chatMessage}
+                  onChange={(event) => setChatMessage(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Escape") setChatComposer(false); }}
                 />
                 <button type="submit">Send</button>
               </div>
-              <small>Leave it blank for a quick reaction.</small>
             </form>
+          )}
+          {showChatHistory && (
+            <aside className="chat-history-panel" aria-label="Chat history">
+              <header><span>Chat history</span><button type="button" aria-label="Close chat history" onClick={() => setShowChatHistory(false)}>×</button></header>
+              <div ref={chatHistoryRef}>
+                {chatHistory.length === 0 && <p className="chat-history-empty">Quiet in here...</p>}
+                {chatHistory.map((chat) => (
+                  <div className="chat-history-entry" key={chat.id}>
+                    <span className="chat-history-avatar">
+                      {chat.member.avatar ? <img src={chat.member.avatar} alt="" /> : <span>{chat.member.name[0]?.toUpperCase()}</span>}
+                    </span>
+                    <p><strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>{chat.message}</p>
+                  </div>
+                ))}
+              </div>
+            </aside>
           )}
         </div>
         <div className="screen-footer">
@@ -472,7 +537,8 @@ export default function WatchRoom({
                 <AssetIcon name="carrot" />
               </span>
             </label>
-            <button type="button" aria-expanded={reactionComposer} onClick={() => setReactionComposer((open) => !open)}><UiIcon name="sparkle" /><span>React</span></button>
+            <button type="button" onClick={react}><UiIcon name="sparkle" /><span>React</span></button>
+            <button type="button" aria-expanded={chatComposer} title="Chat (C)" onClick={() => setChatComposer((open) => !open)}><UiIcon name="chat" /><span>Chat</span></button>
             <button className={lightsOut ? "active" : ""} type="button" aria-pressed={lightsOut} onClick={toggleLightsOut}><UiIcon name="moon" /><span>Lights</span></button>
             <button type="button" onClick={() => screenRef.current?.requestFullscreen()}><UiIcon name="fullscreen" /><span>Expand</span></button>
             <details className="player-menu">
@@ -487,6 +553,16 @@ export default function WatchRoom({
                   }}
                 >
                   {showStats ? "Hide stats" : "Show stats"}
+                </button>
+                <button
+                  type="button"
+                  aria-expanded={showChatHistory}
+                  onClick={(event) => {
+                    setShowChatHistory((visible) => !visible);
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                  }}
+                >
+                  {showChatHistory ? "Hide chat history" : "Chat history"}
                 </button>
                 {streamUrl && (
                   <a href={streamUrl} target="_blank" rel="noreferrer">
