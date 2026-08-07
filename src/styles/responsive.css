@@ -63,14 +63,18 @@
   .viewer-entry:nth-child(3n) {
     translate: 0 0;
   }
-  .carrot-link {
-    width: 38px;
-    height: auto;
+  .viewer-link {
+    width: 40px;
+    height: 52px;
     margin: 0 -2px;
-    transform: rotate(132deg);
   }
-  .viewer-entry:nth-child(even) .carrot-link {
-    transform: rotate(146deg) scaleX(-1);
+  .viewer-link-track {
+    top: 4px;
+    left: -6px;
+    transform: rotate(-90deg);
+  }
+  .viewer-link-charm {
+    rotate: 90deg;
   }
   .player-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));

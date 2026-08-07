@@ -48,6 +48,8 @@ type RoomChat = {
 type ChatDisplayMode = "bubbles" | "scrolling";
 type OverlayChat = RoomChat & { lane: number };
 
+const viewerConnectorCharms = ["blossom", "leafy", "bunny-face"] as const;
+
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds)) return "--:--";
   const whole = Math.max(0, Math.floor(seconds));
@@ -977,7 +979,23 @@ export default function WatchRoom({
                     <strong>{member.name}</strong>
                   </span>
                 </div>
-                {index < members.length - 1 && <AssetIcon className="carrot-link" name="carrot" />}
+                {index < members.length - 1 && (
+                  <span className="viewer-link" aria-hidden="true">
+                    <span className="viewer-link-track">
+                      <svg className="viewer-link-trail" viewBox="0 0 52 44" focusable="false">
+                        <path className="viewer-link-ribbon" d="M26 0C8 10 45 29 26 44" />
+                        <path className="viewer-link-stitches" d="M26 0C8 10 45 29 26 44" />
+                      </svg>
+                      <span className="viewer-link-paw paw-one" />
+                      <span className="viewer-link-paw paw-two" />
+                      <AssetIcon
+                        animate={false}
+                        className="viewer-link-charm"
+                        name={viewerConnectorCharms[index % viewerConnectorCharms.length]}
+                      />
+                    </span>
+                  </span>
+                )}
               </div>
             ))}
           </div>
