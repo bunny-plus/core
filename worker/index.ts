@@ -307,7 +307,7 @@ async function controller(env: Env, method: "GET" | "POST", body?: object) {
     method,
     maxBytes: 256_000,
     name: "Stream controller",
-    timeoutMs: action === "probe" ? 30_000 : 10_000,
+    timeoutMs: action === "probe" || action === "restream" ? 30_000 : 10_000,
   });
   if (!result || typeof result !== "object" || Array.isArray(result))
     throw new Error("Stream controller returned invalid data");
@@ -882,7 +882,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       const restream = parseRestreamRequest(await jsonObject(request));
-      await serializedController(() =>
+      const result = await serializedController(() =>
         controller(env, "POST", {
           action: "restream",
           quality: restream.quality,
@@ -894,7 +894,10 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         detail: "Restream is starting",
         platform: restream.platform,
         quality: restream.quality,
-        title: restream.title,
+        title:
+          typeof result.title === "string" && result.title.trim()
+            ? result.title.trim().slice(0, 200)
+            : restream.title,
       });
     } catch (error) {
       if (error instanceof RestreamValidationError) {

@@ -23,6 +23,21 @@ function platformForHost(hostname: string) {
   )?.[0];
 }
 
+function fallbackTitle(platform: RestreamPlatform, url: URL) {
+  const firstPathPart = url.pathname.split("/").filter(Boolean)[0] ?? "";
+  if (
+    platform === "twitch" &&
+    firstPathPart &&
+    !["directory", "downloads", "settings", "subscriptions", "turbo", "videos", "wallet"].includes(
+      firstPathPart.toLowerCase(),
+    )
+  ) {
+    return firstPathPart;
+  }
+  if (platform === "youtube" && firstPathPart.startsWith("@")) return firstPathPart;
+  return `${platform === "youtube" ? "YouTube" : "Twitch"} restream`;
+}
+
 export function parseRestreamRequest(input: Record<string, unknown>): RestreamRequest {
   if (typeof input.source !== "string" || !input.source.trim()) {
     throw new RestreamValidationError("A YouTube or Twitch URL is required");
@@ -52,12 +67,11 @@ export function parseRestreamRequest(input: Record<string, unknown>): RestreamRe
   }
 
   url.hash = "";
-  const platformName = platform === "youtube" ? "YouTube" : "Twitch";
   const requestedTitle = typeof input.title === "string" ? input.title.trim().slice(0, 200) : "";
   return {
     platform,
     quality: quality as RestreamQuality,
     source: url.toString(),
-    title: requestedTitle || `${platformName} restream`,
+    title: requestedTitle || fallbackTitle(platform, url),
   };
 }

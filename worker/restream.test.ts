@@ -23,6 +23,8 @@ test("accepts public YouTube and Twitch URLs", () => {
       title: "Bunny live",
     },
   );
+  assert.equal(parseRestreamRequest({ source: "https://twitch.tv/bunny" }).title, "bunny");
+  assert.equal(parseRestreamRequest({ source: "https://youtube.com/@bunny/live" }).title, "@bunny");
 });
 
 test("rejects unsafe and unsupported restream URLs", () => {
