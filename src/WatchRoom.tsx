@@ -44,6 +44,9 @@ type RoomChat = {
   x: number;
 };
 
+type ChatDisplayMode = "bubbles" | "scrolling";
+type OverlayChat = RoomChat & { lane: number };
+
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds)) return "--:--";
   const whole = Math.max(0, Math.floor(seconds));
@@ -80,6 +83,14 @@ function savedShortcuts() {
   }
 }
 
+function savedChatDisplayMode(): ChatDisplayMode {
+  try {
+    return localStorage.getItem("bunny-plus-chat-display") === "bubbles" ? "bubbles" : "scrolling";
+  } catch {
+    return "scrolling";
+  }
+}
+
 export default function WatchRoom({
   currentUser,
   delaySeconds,
@@ -109,12 +120,13 @@ export default function WatchRoom({
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
-  const [chats, setChats] = useState<RoomChat[]>([]);
+  const [chats, setChats] = useState<OverlayChat[]>([]);
   const [chatHistory, setChatHistory] = useState<RoomChat[]>([]);
   const [chatComposer, setChatComposer] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [shortcutsEnabled, setShortcutsEnabled] = useState(savedShortcuts);
+  const [chatDisplayMode, setChatDisplayMode] = useState(savedChatDisplayMode);
 
   useEffect(() => {
     document.body.classList.toggle("lights-out", lightsOut);
@@ -262,11 +274,21 @@ export default function WatchRoom({
               message: message.message,
               x: message.x,
             };
-            setChats((current) => [...current.slice(-5), chat]);
+            setChats((current) => {
+              const previousLane = current.at(-1)?.lane;
+              return [
+                ...current.slice(-5),
+                {
+                  ...chat,
+                  lane:
+                    previousLane === undefined ? Math.floor(chat.x) % 6 : (previousLane + 1) % 6,
+                },
+              ];
+            });
             setChatHistory((current) => [...current.slice(-49), chat]);
             setTimeout(
               () => setChats((current) => current.filter(({ id }) => id !== chat.id)),
-              6_000,
+              10_500,
             );
           }
         } catch {
@@ -515,6 +537,16 @@ export default function WatchRoom({
     }
   }
 
+  function toggleChatDisplayMode() {
+    const next = chatDisplayMode === "bubbles" ? "scrolling" : "bubbles";
+    setChatDisplayMode(next);
+    try {
+      localStorage.setItem("bunny-plus-chat-display", next);
+    } catch {
+      // The chat display preference still applies for this visit.
+    }
+  }
+
   function react() {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "reaction" }));
@@ -600,32 +632,44 @@ export default function WatchRoom({
                   <AssetIcon name={reaction.variant} />
                 </span>
               ))}
-              {chats.map((chat) => (
-                <span
-                  className="room-chat"
-                  style={{ "--chat-x": `${chat.x}%` } as CSSProperties}
-                  key={chat.id}
-                >
-                  <span className="room-chat-avatar" aria-hidden="true">
-                    {chat.member.avatar ? (
-                      <img src={chat.member.avatar} alt="" />
-                    ) : (
-                      <span>{chat.member.name[0]?.toUpperCase()}</span>
-                    )}
-                  </span>
-                  <span className="room-chat-bubble">
-                    <strong aria-hidden="true">
-                      {chat.member.id === currentUser.id ? "you" : chat.member.name}
-                    </strong>
-                    <span className="sr-only">
-                      {chat.member.id === currentUser.id
-                        ? "You say: "
-                        : `${chat.member.name} says: `}
-                    </span>
+              {chats.map((chat) =>
+                chatDisplayMode === "scrolling" ? (
+                  <span
+                    className="room-chat-scroll"
+                    style={{ "--chat-y": `${12 + chat.lane * 13}%` } as CSSProperties}
+                    key={chat.id}
+                  >
+                    <strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>
+                    <span aria-hidden="true">: </span>
                     <span>{chat.message}</span>
                   </span>
-                </span>
-              ))}
+                ) : (
+                  <span
+                    className="room-chat"
+                    style={{ "--chat-x": `${chat.x}%` } as CSSProperties}
+                    key={chat.id}
+                  >
+                    <span className="room-chat-avatar" aria-hidden="true">
+                      {chat.member.avatar ? (
+                        <img src={chat.member.avatar} alt="" />
+                      ) : (
+                        <span>{chat.member.name[0]?.toUpperCase()}</span>
+                      )}
+                    </span>
+                    <span className="room-chat-bubble">
+                      <strong aria-hidden="true">
+                        {chat.member.id === currentUser.id ? "you" : chat.member.name}
+                      </strong>
+                      <span className="sr-only">
+                        {chat.member.id === currentUser.id
+                          ? "You say: "
+                          : `${chat.member.name} says: `}
+                      </span>
+                      <span>{chat.message}</span>
+                    </span>
+                  </span>
+                ),
+              )}
             </div>
             {shortcutsEnabled && (
               <span className="reaction-shortcut-hint" aria-hidden="true">
@@ -659,41 +703,26 @@ export default function WatchRoom({
             )}
             {showChatHistory && (
               <aside className="chat-history-panel" aria-label="Chat history">
-                <header>
-                  <span>Chat history</span>
-                  <button
-                    type="button"
-                    aria-label="Close chat history"
-                    onClick={() => setShowChatHistory(false)}
-                  >
-                    ×
-                  </button>
-                </header>
+                <button
+                  className="chat-history-close"
+                  type="button"
+                  aria-label="Close chat history"
+                  onClick={() => setShowChatHistory(false)}
+                >
+                  ×
+                </button>
                 <div ref={chatHistoryRef}>
                   {chatHistory.length === 0 && (
                     <p className="chat-history-empty">Quiet in here...</p>
                   )}
                   {chatHistory.map((chat) => (
-                    <div className="chat-history-entry" key={chat.id}>
-                      <span className="chat-history-avatar" aria-hidden="true">
-                        {chat.member.avatar ? (
-                          <img src={chat.member.avatar} alt="" />
-                        ) : (
-                          <span>{chat.member.name[0]?.toUpperCase()}</span>
-                        )}
-                      </span>
-                      <p>
-                        <strong aria-hidden="true">
-                          {chat.member.id === currentUser.id ? "you" : chat.member.name}
-                        </strong>
-                        <span className="sr-only">
-                          {chat.member.id === currentUser.id
-                            ? "You said: "
-                            : `${chat.member.name} said: `}
-                        </span>
-                        <span>{chat.message}</span>
-                      </p>
-                    </div>
+                    <p className="chat-history-entry" key={chat.id}>
+                      <strong>
+                        {chat.member.id === currentUser.id ? "you" : chat.member.name}
+                      </strong>
+                      <span aria-hidden="true">: </span>
+                      <span>{chat.message}</span>
+                    </p>
                   ))}
                 </div>
               </aside>
@@ -728,7 +757,11 @@ export default function WatchRoom({
                 </span>
                 <span
                   className="volume-slider"
-                  style={{ "--volume": `${volume * 100}%` } as CSSProperties}
+                  style={
+                    {
+                      "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)`,
+                    } as CSSProperties
+                  }
                 >
                   <input
                     type="range"
@@ -803,6 +836,13 @@ export default function WatchRoom({
                     }}
                   >
                     {showChatHistory ? "Hide chat history" : "Chat history"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={chatDisplayMode === "scrolling"}
+                    onClick={toggleChatDisplayMode}
+                  >
+                    Chat overlay: {chatDisplayMode === "scrolling" ? "scrolling" : "bubbles"}
                   </button>
                   <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
                     Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}

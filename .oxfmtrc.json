@@ -1,4 +1,11 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["AGENT.md", "README.md", "STREAM.md", "opencode.json", "pnpm-lock.yaml"]
+  "ignorePatterns": [
+    "AGENT.md",
+    "AGENTS.md",
+    "README.md",
+    "STREAM.md",
+    "opencode.json",
+    "pnpm-lock.yaml"
+  ]
 }
