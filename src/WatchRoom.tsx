@@ -33,6 +33,7 @@ type RelayStatus = {
 
 type RoomReaction = {
   id: string;
+  member: { id: string; name: string };
   variant: "blossom" | "carrot";
   x: number;
 };
@@ -252,10 +253,16 @@ export default function WatchRoom({
           if (
             message.type === "reaction" &&
             message.id &&
+            message.member &&
             message.variant &&
             typeof message.x === "number"
           ) {
-            const reaction = { id: message.id, variant: message.variant, x: message.x };
+            const reaction = {
+              id: message.id,
+              member: message.member,
+              variant: message.variant,
+              x: message.x,
+            };
             setReactions((current) => [...current.slice(-7), reaction]);
             setTimeout(
               () => setReactions((current) => current.filter(({ id }) => id !== reaction.id)),
@@ -369,7 +376,7 @@ export default function WatchRoom({
     let attachedHls: Hls | null = null;
 
     async function attachStream(media: HTMLVideoElement) {
-      const { default: HlsPlayer } = await import("hls.js");
+      const { default: HlsPlayer } = await import("hls.js/light");
       if (disposed) return;
       if (HlsPlayer.isSupported()) {
         const hls = new HlsPlayer({
@@ -635,7 +642,9 @@ export default function WatchRoom({
                   style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties}
                   key={reaction.id}
                 >
+                  <span className="sr-only">{reaction.member.name} reacted</span>
                   <AssetIcon name={reaction.variant} />
+                  <strong aria-hidden="true">{reaction.member.name}</strong>
                 </span>
               ))}
               {chats.map((chat) =>
@@ -679,22 +688,40 @@ export default function WatchRoom({
             {chatComposer && (
               <form
                 className="chat-composer"
+                autoComplete="off"
                 onSubmit={(event) => {
                   event.preventDefault();
                   chat(chatMessage);
                 }}
               >
+                <button
+                  className="chat-composer-close"
+                  type="button"
+                  aria-label="Close chat"
+                  onClick={() => {
+                    setChatMessage("");
+                    setChatComposer(false);
+                  }}
+                >
+                  ×
+                </button>
                 <label htmlFor="chat-message">Say something cute</label>
                 <div>
                   <input
                     id="chat-message"
                     autoFocus
+                    autoCapitalize="off"
+                    autoComplete="off"
+                    autoCorrect="off"
                     maxLength={64}
                     placeholder="omg..."
                     value={chatMessage}
                     onChange={(event) => setChatMessage(event.target.value)}
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") setChatComposer(false);
+                      if (event.key === "Escape") {
+                        setChatMessage("");
+                        setChatComposer(false);
+                      }
                     }}
                   />
                   <button type="submit">Send</button>
@@ -702,19 +729,16 @@ export default function WatchRoom({
               </form>
             )}
             {showChatHistory && (
-              <aside className="chat-history-panel" aria-label="Chat history">
+              <aside className="chat-history-panel" aria-label="Chat">
                 <button
                   className="chat-history-close"
                   type="button"
-                  aria-label="Close chat history"
+                  aria-label="Hide chat"
                   onClick={() => setShowChatHistory(false)}
                 >
                   ×
                 </button>
                 <div ref={chatHistoryRef}>
-                  {chatHistory.length === 0 && (
-                    <p className="chat-history-empty">Quiet in here...</p>
-                  )}
                   {chatHistory.map((chat) => (
                     <p className="chat-history-entry" key={chat.id}>
                       <strong>{chat.member.name}</strong>
@@ -793,10 +817,25 @@ export default function WatchRoom({
                 aria-label="Chat"
                 aria-expanded={chatComposer}
                 data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
-                onClick={() => setChatComposer((open) => !open)}
+                onClick={() =>
+                  setChatComposer((open) => {
+                    if (open) setChatMessage("");
+                    return !open;
+                  })
+                }
               >
                 <UiIcon name="chat" />
                 <span>Chat</span>
+              </button>
+              <button
+                className={`chat-history-toggle${showChatHistory ? " active" : ""}`}
+                type="button"
+                aria-label={showChatHistory ? "Hide chat" : "Show chat"}
+                aria-expanded={showChatHistory}
+                onClick={() => setShowChatHistory((visible) => !visible)}
+              >
+                <UiIcon name="history" />
+                <span>{showChatHistory ? "Hide chat" : "Show chat"}</span>
               </button>
               <button
                 className={lightsOut ? "active" : ""}
@@ -814,7 +853,7 @@ export default function WatchRoom({
                 onClick={() => screenRef.current?.requestFullscreen()}
               >
                 <UiIcon name="fullscreen" />
-                <span>Expand</span>
+                <span>Fullscreen</span>
               </button>
               <details className="player-menu">
                 <summary aria-label="More player options" title="More player options">
@@ -830,16 +869,6 @@ export default function WatchRoom({
                     }}
                   >
                     {showStats ? "Hide stats" : "Show stats"}
-                  </button>
-                  <button
-                    type="button"
-                    aria-expanded={showChatHistory}
-                    onClick={(event) => {
-                      setShowChatHistory((visible) => !visible);
-                      event.currentTarget.closest("details")?.removeAttribute("open");
-                    }}
-                  >
-                    {showChatHistory ? "Hide chat history" : "Chat history"}
                   </button>
                   <button
                     type="button"
@@ -924,6 +953,26 @@ export default function WatchRoom({
                       {member.name[0]?.toUpperCase()}
                     </span>
                   )}
+                  <span className="avatar-particles" aria-hidden="true">
+                    <span className="avatar-particle particle-carrot-one">
+                      <AssetIcon name="carrot" />
+                    </span>
+                    <span className="avatar-particle particle-leafy-one">
+                      <AssetIcon name="leafy" />
+                    </span>
+                    <span className="avatar-particle particle-bunny-one">
+                      <AssetIcon animate={false} name="bunny-face" />
+                    </span>
+                    <span className="avatar-particle particle-carrot-two">
+                      <AssetIcon name="carrot" />
+                    </span>
+                    <span className="avatar-particle particle-leafy-two">
+                      <AssetIcon name="leafy" />
+                    </span>
+                    <span className="avatar-particle particle-bunny-two">
+                      <AssetIcon animate={false} name="bunny-face" />
+                    </span>
+                  </span>
                   <span className="avatar-hover-card" aria-hidden="true">
                     <strong>{member.name}</strong>
                   </span>

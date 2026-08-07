@@ -132,6 +132,7 @@ export class WatchRoom {
         this.broadcast(
           JSON.stringify({
             id: randomUUID(),
+            member: session.member,
             type: "reaction",
             variant: Math.random() < 0.5 ? "carrot" : "blossom",
             x: 18 + Math.round(Math.random() * 64),

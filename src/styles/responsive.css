@@ -176,24 +176,31 @@
   }
   .player-actions {
     width: 100%;
+    justify-content: space-between;
+    padding: 3px;
+    gap: 0;
   }
   .player-actions > button {
-    min-width: 44px;
+    min-width: 40px;
     justify-content: center;
-    padding-right: 8px;
-    padding-left: 8px;
+    padding-right: 6px;
+    padding-left: 6px;
   }
   .player-actions > button > span {
     display: none;
   }
   .volume-control {
     min-width: 0;
-    flex: 1;
+    padding: 0;
+    border: 0;
   }
   .volume-control > .volume-slider {
-    width: auto;
-    min-width: 45px;
-    flex: 1;
+    display: none;
+  }
+  .volume-toggle,
+  .player-actions > .chat-history-toggle,
+  .player-menu > summary {
+    width: 40px;
   }
   .player-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

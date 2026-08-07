@@ -8,6 +8,7 @@ type IconName =
   | "fullscreen"
   | "gear"
   | "heart"
+  | "history"
   | "lock"
   | "moon"
   | "nail"
@@ -98,6 +99,12 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     ),
     heart: (
       <path d="M20.8 5.8a5.5 5.5 0 0 0-7.8 0L12 6.9l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 22l8.8-8.4a5.5 5.5 0 0 0 0-7.8Z" />
+    ),
+    history: (
+      <>
+        <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6" />
+        <path d="M4 4v4.6h4.6M12 7.5V12l3 2" />
+      </>
     ),
     lock: (
       <>

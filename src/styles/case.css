@@ -1,0 +1,44 @@
+body {
+  text-transform: lowercase;
+}
+
+button {
+  text-transform: lowercase;
+}
+
+input,
+textarea,
+select,
+option,
+.profile-menu > summary > span,
+.profile-identity strong,
+.stream-title > span,
+.room-chat-bubble strong,
+.room-chat-bubble > span:last-child,
+.room-chat-scroll strong,
+.room-chat-scroll > span:last-child,
+.chat-history-entry strong,
+.chat-history-entry > span:last-child,
+.room-reaction strong,
+.viewer-avatar .avatar-fallback,
+.avatar-hover-card strong,
+.current-stream strong,
+.stream-options > header strong,
+.torrent summary div strong,
+.torrent-file strong,
+.movie-card strong,
+.movie-detail-hero h3,
+.movie-detail-hero p,
+.movie-release p {
+  text-transform: none;
+}
+
+input::placeholder,
+textarea::placeholder,
+.activity-spot b,
+.current-stream span,
+.track-selectors label span,
+.torrent summary > i,
+.player-stats span {
+  text-transform: lowercase;
+}
