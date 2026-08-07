@@ -20,5 +20,8 @@
 /chloe
   Cache-Control: no-cache, no-store, must-revalidate
 
+/version.json
+  Cache-Control: no-cache, no-store, must-revalidate
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable

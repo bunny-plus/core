@@ -195,3 +195,68 @@ a {
   width: 82px;
   height: 82px;
 }
+
+.update-prompt {
+  position: fixed;
+  z-index: 80;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  max-width: calc(100vw - 36px);
+  align-items: center;
+  padding: 8px 8px 8px 10px;
+  border: 2px solid var(--pink-300);
+  border-radius: 15px 15px 6px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    4px 5px 0 rgba(249, 168, 198, 0.45),
+    0 14px 34px rgba(84, 52, 78, 0.2);
+  color: var(--gray-700);
+  gap: 8px;
+  backdrop-filter: blur(10px);
+}
+.update-prompt > .asset-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+}
+.update-prompt span,
+.update-prompt strong,
+.update-prompt small {
+  display: block;
+}
+.update-prompt span {
+  min-width: 0;
+}
+.update-prompt strong {
+  color: var(--pink-500);
+  font-size: 11px;
+}
+.update-prompt small {
+  margin-top: 1px;
+  color: var(--gray-500);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.update-prompt button {
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--pink-400);
+  color: white;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 900;
+}
+.update-prompt button:hover {
+  background: var(--pink-500);
+}
+body.lights-out .update-prompt {
+  border-color: #5c3044;
+  background: rgba(24, 18, 23, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+body.lights-out .update-prompt small {
+  color: #baa4af;
+}

@@ -88,6 +88,9 @@ body.lights-out .stream-page .player-menu[open] > summary {
 body.lights-out .stream-page .volume-control {
   border-color: rgba(249, 168, 198, 0.14);
 }
+body.lights-out .stream-page .volume-toggle {
+  color: #d9a9bd;
+}
 body.lights-out .stream-page .volume-control input::-webkit-slider-runnable-track {
   background: linear-gradient(to right, #c7668e var(--volume), #382832 var(--volume));
 }
@@ -690,11 +693,22 @@ body.lights-out .chat-composer input {
   border-right: 1px solid var(--pink-200);
   gap: 6px;
 }
-.volume-control > span {
+.volume-toggle {
   display: grid;
-  width: 20px;
+  width: 28px;
+  height: 44px;
   place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #be185d;
+  cursor: pointer;
   font-size: 16px;
+}
+.volume-toggle:hover,
+.volume-toggle:focus-visible {
+  background: var(--pink-100);
 }
 .volume-control > .volume-slider {
   position: relative;

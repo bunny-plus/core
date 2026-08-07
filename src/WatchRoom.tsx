@@ -109,6 +109,7 @@ export default function WatchRoom({
   const [volume, setVolume] = useState(savedVolume);
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
   const initialVolumeRef = useRef(volume);
+  const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
   const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
     "loading",
@@ -506,6 +507,7 @@ export default function WatchRoom({
     if (!video) return;
     video.volume = value;
     video.muted = value === 0;
+    if (value > 0) lastAudibleVolumeRef.current = value;
     setVolume(value);
     try {
       localStorage.setItem("bunny-plus-volume", String(value));
@@ -515,6 +517,10 @@ export default function WatchRoom({
     if (value > 0 && video.paused) {
       void video.play().catch(() => setSyncLabel("Tap the video to resume audio"));
     }
+  }
+
+  function toggleMute() {
+    changeVolume(volume === 0 ? lastAudibleVolumeRef.current : 0);
   }
 
   function toggleLightsOut() {
@@ -639,7 +645,7 @@ export default function WatchRoom({
                     style={{ "--chat-y": `${12 + chat.lane * 13}%` } as CSSProperties}
                     key={chat.id}
                   >
-                    <strong>{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong>
+                    <strong>{chat.member.name}</strong>
                     <span aria-hidden="true">: </span>
                     <span>{chat.message}</span>
                   </span>
@@ -657,14 +663,8 @@ export default function WatchRoom({
                       )}
                     </span>
                     <span className="room-chat-bubble">
-                      <strong aria-hidden="true">
-                        {chat.member.id === currentUser.id ? "you" : chat.member.name}
-                      </strong>
-                      <span className="sr-only">
-                        {chat.member.id === currentUser.id
-                          ? "You say: "
-                          : `${chat.member.name} says: `}
-                      </span>
+                      <strong aria-hidden="true">{chat.member.name}</strong>
+                      <span className="sr-only">{chat.member.name} says: </span>
                       <span>{chat.message}</span>
                     </span>
                   </span>
@@ -717,9 +717,7 @@ export default function WatchRoom({
                   )}
                   {chatHistory.map((chat) => (
                     <p className="chat-history-entry" key={chat.id}>
-                      <strong>
-                        {chat.member.id === currentUser.id ? "you" : chat.member.name}
-                      </strong>
+                      <strong>{chat.member.name}</strong>
                       <span aria-hidden="true">: </span>
                       <span>{chat.message}</span>
                     </p>
@@ -751,10 +749,16 @@ export default function WatchRoom({
               <span className="sync-copy">{syncLabel}</span>
             </div>
             <div className="player-actions">
-              <label className="volume-control">
-                <span aria-hidden="true">
+              <div className="volume-control">
+                <button
+                  className="volume-toggle"
+                  type="button"
+                  aria-label={volume === 0 ? "Unmute" : "Mute"}
+                  aria-pressed={volume === 0}
+                  onClick={toggleMute}
+                >
                   <UiIcon name={volume === 0 ? "volume-off" : "volume"} />
-                </span>
+                </button>
                 <span
                   className="volume-slider"
                   style={
@@ -774,7 +778,7 @@ export default function WatchRoom({
                   />
                   <AssetIcon name="carrot" />
                 </span>
-              </label>
+              </div>
               <button
                 type="button"
                 aria-label="React"
