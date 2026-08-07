@@ -24,9 +24,16 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   const sessionSecret = required(source, "SESSION_SECRET");
   const streamUrl = required(source, "STREAM_URL");
   const controllerUrl = (source.RELAY_CONTROLLER_URL || source.STREAM_CONTROLLER_URL)?.trim();
-  const controllerSecret = (source.RELAY_CONTROLLER_SECRET || source.STREAM_CONTROLLER_SECRET)?.trim();
+  const controllerSecret = (
+    source.RELAY_CONTROLLER_SECRET || source.STREAM_CONTROLLER_SECRET
+  )?.trim();
 
-  for (const name of ["DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_GUILD_ID", "TORBOX_API_KEY"]) {
+  for (const name of [
+    "DISCORD_CLIENT_ID",
+    "DISCORD_CLIENT_SECRET",
+    "DISCORD_GUILD_ID",
+    "TORBOX_API_KEY",
+  ]) {
     required(source, name);
   }
   if (new TextEncoder().encode(sessionSecret).byteLength < 32) {
@@ -47,9 +54,17 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   const rolePermissions = source.DISCORD_ROLE_PERMISSIONS?.trim() || "{}";
   try {
     const parsed = JSON.parse(rolePermissions);
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object"
-      || !Object.values(parsed).every((permissions) => Array.isArray(permissions)
-        && permissions.every((permission) => typeof permission === "string"))) throw new Error();
+    if (
+      !parsed ||
+      Array.isArray(parsed) ||
+      typeof parsed !== "object" ||
+      !Object.values(parsed).every(
+        (permissions) =>
+          Array.isArray(permissions) &&
+          permissions.every((permission) => typeof permission === "string"),
+      )
+    )
+      throw new Error();
   } catch {
     throw new Error("DISCORD_ROLE_PERMISSIONS must map role IDs to permission arrays");
   }

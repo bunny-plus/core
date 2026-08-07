@@ -99,7 +99,9 @@ export default function WatchRoom({
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
   const initialVolumeRef = useRef(volume);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
-  const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">("loading");
+  const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
+    "loading",
+  );
   const [isBuffering, setIsBuffering] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
@@ -124,7 +126,15 @@ export default function WatchRoom({
 
     function reactionShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      if (event.key.toLowerCase() !== "f" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (
+        event.key.toLowerCase() !== "f" ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        target?.closest("input, textarea, select, [contenteditable='true']")
+      )
+        return;
       event.preventDefault();
       react();
     }
@@ -138,7 +148,15 @@ export default function WatchRoom({
 
     function chatShortcut(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      if (event.key.toLowerCase() !== "c" || event.repeat || event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (
+        event.key.toLowerCase() !== "c" ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        target?.closest("input, textarea, select, [contenteditable='true']")
+      )
+        return;
       event.preventDefault();
       setChatComposer(true);
     }
@@ -160,9 +178,12 @@ export default function WatchRoom({
 
     async function checkRelay() {
       try {
-        const response = await apiFetch("/api/stream-info", { cache: "no-store", signal: request.signal });
+        const response = await apiFetch("/api/stream-info", {
+          cache: "no-store",
+          signal: request.signal,
+        });
         if (!response.ok) return;
-        const status = await response.json() as RelayStatus;
+        const status = (await response.json()) as RelayStatus;
         if (!stopped) setRelayStatus(status);
       } catch {
         if (!stopped && !request.signal.aborted) setRelayStatus(null);
@@ -215,16 +236,38 @@ export default function WatchRoom({
           if (message.type === "pong" && message.clientTime && message.serverTime) {
             clockOffsetRef.current = message.serverTime - (message.clientTime + Date.now()) / 2;
           }
-          if (message.type === "reaction" && message.id && message.variant && typeof message.x === "number") {
+          if (
+            message.type === "reaction" &&
+            message.id &&
+            message.variant &&
+            typeof message.x === "number"
+          ) {
             const reaction = { id: message.id, variant: message.variant, x: message.x };
             setReactions((current) => [...current.slice(-7), reaction]);
-            setTimeout(() => setReactions((current) => current.filter(({ id }) => id !== reaction.id)), 4_000);
+            setTimeout(
+              () => setReactions((current) => current.filter(({ id }) => id !== reaction.id)),
+              4_000,
+            );
           }
-          if (message.type === "chat" && message.id && message.member && message.message && typeof message.x === "number") {
-            const chat = { id: message.id, member: message.member, message: message.message, x: message.x };
+          if (
+            message.type === "chat" &&
+            message.id &&
+            message.member &&
+            message.message &&
+            typeof message.x === "number"
+          ) {
+            const chat = {
+              id: message.id,
+              member: message.member,
+              message: message.message,
+              x: message.x,
+            };
             setChats((current) => [...current.slice(-5), chat]);
             setChatHistory((current) => [...current.slice(-49), chat]);
-            setTimeout(() => setChats((current) => current.filter(({ id }) => id !== chat.id)), 6_000);
+            setTimeout(
+              () => setChats((current) => current.filter(({ id }) => id !== chat.id)),
+              6_000,
+            );
           }
         } catch {
           // Ignore malformed server messages and keep the current room state.
@@ -261,8 +304,13 @@ export default function WatchRoom({
 
     async function checkStream() {
       try {
-        const response = await apiFetch("/api/stream-status", { cache: "no-store", signal: request.signal });
-        const status = response.ok ? await response.json() as { online: boolean } : { online: false };
+        const response = await apiFetch("/api/stream-status", {
+          cache: "no-store",
+          signal: request.signal,
+        });
+        const status = response.ok
+          ? ((await response.json()) as { online: boolean })
+          : { online: false };
         if (stopped) return;
         setStreamOnline(status.online);
         if (!status.online) {
@@ -270,7 +318,7 @@ export default function WatchRoom({
           setIsBuffering(false);
           setSyncLabel("Stream is offline");
         } else {
-          setPlayerStatus((current) => current === "error" ? "loading" : current);
+          setPlayerStatus((current) => (current === "error" ? "loading" : current));
         }
       } catch {
         if (!stopped && !request.signal.aborted) setStreamOnline(false);
@@ -359,7 +407,8 @@ export default function WatchRoom({
       const hlsDate = hlsRef.current?.playingDate;
       let drift: number | null = null;
       if (hlsDate) {
-        drift = (Date.now() + clockOffsetRef.current - delaySeconds * 1_000 - hlsDate.getTime()) / 1_000;
+        drift =
+          (Date.now() + clockOffsetRef.current - delaySeconds * 1_000 - hlsDate.getTime()) / 1_000;
       } else if (video.seekable.length > 0) {
         drift = video.seekable.end(video.seekable.length - 1) - delaySeconds - video.currentTime;
       }
@@ -368,7 +417,8 @@ export default function WatchRoom({
         if (correction.seek && video.seekable.length > 0) {
           const minimum = video.seekable.start(0) + 0.1;
           const maximum = video.seekable.end(video.seekable.length - 1) - 0.1;
-          if (maximum > minimum) video.currentTime = Math.min(maximum, Math.max(minimum, video.currentTime + drift));
+          if (maximum > minimum)
+            video.currentTime = Math.min(maximum, Math.max(minimum, video.currentTime + drift));
         }
         video.playbackRate = correction.rate;
         setSyncLabel(correction.label);
@@ -391,14 +441,18 @@ export default function WatchRoom({
         const start = video.buffered.start(index);
         const end = video.buffered.end(index);
         bufferTotal += end - start;
-        if (video.currentTime >= start && video.currentTime <= end) bufferAhead = end - video.currentTime;
+        if (video.currentTime >= start && video.currentTime <= end)
+          bufferAhead = end - video.currentTime;
       }
 
       const playingDate = hlsRef.current?.playingDate;
-      const liveEdge = video.seekable.length > 0 ? video.seekable.end(video.seekable.length - 1) : null;
+      const liveEdge =
+        video.seekable.length > 0 ? video.seekable.end(video.seekable.length - 1) : null;
       const delay = playingDate
         ? (Date.now() + clockOffsetRef.current - playingDate.getTime()) / 1_000
-        : liveEdge === null ? null : liveEdge - video.currentTime;
+        : liveEdge === null
+          ? null
+          : liveEdge - video.currentTime;
       const quality = video.getVideoPlaybackQuality?.();
 
       setStats({
@@ -409,10 +463,14 @@ export default function WatchRoom({
         droppedFrames: quality?.droppedVideoFrames ?? 0,
         playtime: video.currentTime,
         rate: video.playbackRate,
-        resolution: video.videoWidth && video.videoHeight ? `${video.videoWidth} × ${video.videoHeight}` : "--",
-        seekableWindow: video.seekable.length > 0
-          ? video.seekable.end(video.seekable.length - 1) - video.seekable.start(0)
-          : 0,
+        resolution:
+          video.videoWidth && video.videoHeight
+            ? `${video.videoWidth} × ${video.videoHeight}`
+            : "--",
+        seekableWindow:
+          video.seekable.length > 0
+            ? video.seekable.end(video.seekable.length - 1) - video.seekable.start(0)
+            : 0,
       });
     }
 
@@ -475,205 +533,362 @@ export default function WatchRoom({
   return (
     <div className="watch-content">
       <div className="room-grid">
-      <section className="screen-column">
-        <div className="screen-frame" ref={screenRef}>
-          <video
-            ref={videoRef}
-            autoPlay
-            muted={volume === 0}
-            playsInline
-            onCanPlay={() => {
-              setPlayerStatus("ready");
-              setIsBuffering(false);
-              void videoRef.current?.play().catch(() => setSyncLabel("Tap the video to resume audio"));
-            }}
-            onError={() => setPlayerStatus("error")}
-            onLoadedData={() => setPlayerStatus("ready")}
-            onPlaying={() => setIsBuffering(false)}
-            onStalled={() => {
-              setIsBuffering(true);
-              setSyncLabel("Buffering the live stream...");
-            }}
-            onWaiting={() => {
-              setIsBuffering(true);
-              setSyncLabel("Buffering the live stream...");
-            }}
-            onClick={() => {
-              if (videoRef.current?.paused) void videoRef.current.play();
-            }}
-          />
-          {(streamOnline === null || playerStatus === "loading") && streamUrl && (
-            <div className="stream-loading" role="status">
-              <AssetIcon name="carrot" />
-              <strong>Tuning the bunny ears...</strong>
-              <small>Waiting for the live stream</small>
-            </div>
-          )}
-          {playerStatus === "ready" && isBuffering && (
-            <div className="stream-loading buffering-overlay" role="status">
-              <AssetIcon name="carrot" />
-              <strong>Buffering the live stream...</strong>
-              <small>Catching everybun back up</small>
-            </div>
-          )}
-          {playerStatus === "unsupported" && (
-            <div className="stream-error" role="status">This browser does not support HLS playback. Open the stream in an HLS-capable browser or player.</div>
-          )}
-          {playerStatus !== "unsupported" && (!streamUrl || streamOnline === false || playerStatus === "error") && (
-            <div className="stream-error">
-              {streamUrl ? "The stream is offline right now. This screen will reconnect when broadcasting resumes." : "Set STREAM_URL to connect the screen."}
-            </div>
-          )}
-          <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
-            {reactions.map((reaction) => (
-              <span className="room-reaction" style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties} key={reaction.id}>
-                <AssetIcon name={reaction.variant} />
-              </span>
-            ))}
-            {chats.map((chat) => (
-              <span className="room-chat" style={{ "--chat-x": `${chat.x}%` } as CSSProperties} key={chat.id}>
-                <span className="room-chat-avatar" aria-hidden="true">
-                  {chat.member.avatar
-                    ? <img src={chat.member.avatar} alt="" />
-                    : <span>{chat.member.name[0]?.toUpperCase()}</span>}
-                </span>
-                <span className="room-chat-bubble"><strong aria-hidden="true">{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong><span className="sr-only">{chat.member.id === currentUser.id ? "You say: " : `${chat.member.name} says: `}</span><span>{chat.message}</span></span>
-              </span>
-            ))}
-          </div>
-          {shortcutsEnabled && <span className="reaction-shortcut-hint" aria-hidden="true">Press <kbd>F</kbd> to react</span>}
-          {chatComposer && (
-            <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); chat(chatMessage); }}>
-              <label htmlFor="chat-message">Say something cute</label>
-              <div>
-                <input
-                  id="chat-message"
-                  autoFocus
-                  maxLength={64}
-                  placeholder="omg..."
-                  value={chatMessage}
-                  onChange={(event) => setChatMessage(event.target.value)}
-                  onKeyDown={(event) => { if (event.key === "Escape") setChatComposer(false); }}
-                />
-                <button type="submit">Send</button>
-              </div>
-            </form>
-          )}
-          {showChatHistory && (
-            <aside className="chat-history-panel" aria-label="Chat history">
-              <header><span>Chat history</span><button type="button" aria-label="Close chat history" onClick={() => setShowChatHistory(false)}>×</button></header>
-              <div ref={chatHistoryRef}>
-                {chatHistory.length === 0 && <p className="chat-history-empty">Quiet in here...</p>}
-                {chatHistory.map((chat) => (
-                  <div className="chat-history-entry" key={chat.id}>
-                    <span className="chat-history-avatar" aria-hidden="true">
-                      {chat.member.avatar ? <img src={chat.member.avatar} alt="" /> : <span>{chat.member.name[0]?.toUpperCase()}</span>}
-                    </span>
-                    <p><strong aria-hidden="true">{chat.member.id === currentUser.id ? "you" : chat.member.name}</strong><span className="sr-only">{chat.member.id === currentUser.id ? "You said: " : `${chat.member.name} said: `}</span><span>{chat.message}</span></p>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          )}
-        </div>
-        <div className="screen-footer">
-          <div className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}>
-            <i aria-hidden="true" />
-            <span>{streamOnline === null || relayStatus === null ? "CHECKING" : !streamOnline ? "OFFLINE" : relayStatus.running ? "LIVE" : "IDLE"}</span>
-            {relayStatus?.running && (
-              <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}><AssetIcon name="carrot" /><span>{relayStatus.title ?? "TorBox stream"}</span></span>
-            )}
-            <span className="sync-copy">{syncLabel}</span>
-          </div>
-          <div className="player-actions">
-            <label className="volume-control">
-              <span aria-hidden="true"><UiIcon name={volume === 0 ? "volume-off" : "volume"} /></span>
-              <span className="volume-slider" style={{ "--volume": `${volume * 100}%` } as CSSProperties}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  aria-label="Volume"
-                  onChange={(event) => changeVolume(Number(event.target.value))}
-                />
+        <section className="screen-column">
+          <div className="screen-frame" ref={screenRef}>
+            <video
+              ref={videoRef}
+              autoPlay
+              muted={volume === 0}
+              playsInline
+              onCanPlay={() => {
+                setPlayerStatus("ready");
+                setIsBuffering(false);
+                void videoRef.current
+                  ?.play()
+                  .catch(() => setSyncLabel("Tap the video to resume audio"));
+              }}
+              onError={() => setPlayerStatus("error")}
+              onLoadedData={() => setPlayerStatus("ready")}
+              onPlaying={() => setIsBuffering(false)}
+              onStalled={() => {
+                setIsBuffering(true);
+                setSyncLabel("Buffering the live stream...");
+              }}
+              onWaiting={() => {
+                setIsBuffering(true);
+                setSyncLabel("Buffering the live stream...");
+              }}
+              onClick={() => {
+                if (videoRef.current?.paused) void videoRef.current.play();
+              }}
+            />
+            {(streamOnline === null || playerStatus === "loading") && streamUrl && (
+              <div className="stream-loading" role="status">
                 <AssetIcon name="carrot" />
-              </span>
-            </label>
-            <button type="button" aria-label="React" data-tooltip={shortcutsEnabled ? "Press F to react" : undefined} onClick={react}><UiIcon name="sparkle" /><span>React</span></button>
-            <button type="button" aria-label="Chat" aria-expanded={chatComposer} data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined} onClick={() => setChatComposer((open) => !open)}><UiIcon name="chat" /><span>Chat</span></button>
-            <button className={lightsOut ? "active" : ""} type="button" aria-label="Toggle lights" aria-pressed={lightsOut} onClick={toggleLightsOut}><UiIcon name="moon" /><span>Lights</span></button>
-            <button type="button" aria-label="Enter fullscreen" onClick={() => screenRef.current?.requestFullscreen()}><UiIcon name="fullscreen" /><span>Expand</span></button>
-            <details className="player-menu">
-              <summary aria-label="More player options" title="More player options"><UiIcon name="gear" /></summary>
-              <div className="player-menu-popover">
-                <button
-                  type="button"
-                  aria-expanded={showStats}
-                  onClick={(event) => {
-                    setShowStats((visible) => !visible);
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
-                >
-                  {showStats ? "Hide stats" : "Show stats"}
-                </button>
-                <button
-                  type="button"
-                  aria-expanded={showChatHistory}
-                  onClick={(event) => {
-                    setShowChatHistory((visible) => !visible);
-                    event.currentTarget.closest("details")?.removeAttribute("open");
-                  }}
-                >
-                  {showChatHistory ? "Hide chat history" : "Chat history"}
-                </button>
-                <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
-                  Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
-                </button>
-                {streamUrl && (
-                  <a href={streamUrl} target="_blank" rel="noreferrer">
-                    Open in own player ↗
-                    <small>May not stay in sync</small>
-                  </a>
-                )}
+                <strong>Tuning the bunny ears...</strong>
+                <small>Waiting for the live stream</small>
               </div>
-            </details>
-          </div>
-        </div>
-        {showStats && stats && (
-          <div className="player-stats" role="group" aria-label="Playback statistics">
-            <div><span>Delay</span><strong>{stats.delay === null ? "--" : `${stats.delay.toFixed(1)}s`}</strong></div>
-            <div><span>Target</span><strong>{delaySeconds}s</strong></div>
-            <div><span>Buffered ahead</span><strong>{stats.bufferAhead.toFixed(1)}s</strong></div>
-            <div><span>Total buffered</span><strong>{stats.bufferTotal.toFixed(1)}s</strong></div>
-            <div><span>Live window</span><strong>{stats.seekableWindow.toFixed(1)}s</strong></div>
-            <div><span>Playtime</span><strong>{formatTime(stats.playtime)}</strong></div>
-            <div><span>Playback rate</span><strong>{stats.rate.toFixed(3)}×</strong></div>
-            <div><span>Resolution</span><strong>{stats.resolution}</strong></div>
-            <div><span>Bandwidth</span><strong>{stats.bandwidth === null ? "--" : `${(stats.bandwidth / 1_000_000).toFixed(2)} Mbps`}</strong></div>
-            <div><span>Dropped frames</span><strong>{stats.droppedFrames}</strong></div>
-          </div>
-        )}
-      </section>
-      <aside className="audience-panel">
-        <div className="member-list">
-          {members.map((member, index) => (
-            <div className="viewer-entry" key={member.id}>
-              <div
-                className={`viewer-avatar${member.id === currentUser.id ? " current" : ""}`}
-                aria-label={`${member.name}${member.id === currentUser.id ? " (you)" : ""}`}
-              >
-                {member.avatar
-                  ? <img src={member.avatar} alt={member.name} />
-                  : <span className="avatar-fallback" aria-label={member.name}>{member.name[0]?.toUpperCase()}</span>}
-                <span className="avatar-hover-card" aria-hidden="true"><strong>{member.name}</strong></span>
+            )}
+            {playerStatus === "ready" && isBuffering && (
+              <div className="stream-loading buffering-overlay" role="status">
+                <AssetIcon name="carrot" />
+                <strong>Buffering the live stream...</strong>
+                <small>Catching everybun back up</small>
               </div>
-              {index < members.length - 1 && <AssetIcon className="carrot-link" name="carrot" />}
+            )}
+            {playerStatus === "unsupported" && (
+              <div className="stream-error" role="status">
+                This browser does not support HLS playback. Open the stream in an HLS-capable
+                browser or player.
+              </div>
+            )}
+            {playerStatus !== "unsupported" &&
+              (!streamUrl || streamOnline === false || playerStatus === "error") && (
+                <div className="stream-error">
+                  {streamUrl
+                    ? "The stream is offline right now. This screen will reconnect when broadcasting resumes."
+                    : "Set STREAM_URL to connect the screen."}
+                </div>
+              )}
+            <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
+              {reactions.map((reaction) => (
+                <span
+                  className="room-reaction"
+                  style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties}
+                  key={reaction.id}
+                >
+                  <AssetIcon name={reaction.variant} />
+                </span>
+              ))}
+              {chats.map((chat) => (
+                <span
+                  className="room-chat"
+                  style={{ "--chat-x": `${chat.x}%` } as CSSProperties}
+                  key={chat.id}
+                >
+                  <span className="room-chat-avatar" aria-hidden="true">
+                    {chat.member.avatar ? (
+                      <img src={chat.member.avatar} alt="" />
+                    ) : (
+                      <span>{chat.member.name[0]?.toUpperCase()}</span>
+                    )}
+                  </span>
+                  <span className="room-chat-bubble">
+                    <strong aria-hidden="true">
+                      {chat.member.id === currentUser.id ? "you" : chat.member.name}
+                    </strong>
+                    <span className="sr-only">
+                      {chat.member.id === currentUser.id
+                        ? "You say: "
+                        : `${chat.member.name} says: `}
+                    </span>
+                    <span>{chat.message}</span>
+                  </span>
+                </span>
+              ))}
             </div>
-          ))}
-        </div>
-      </aside>
+            {shortcutsEnabled && (
+              <span className="reaction-shortcut-hint" aria-hidden="true">
+                Press <kbd>F</kbd> to react
+              </span>
+            )}
+            {chatComposer && (
+              <form
+                className="chat-composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  chat(chatMessage);
+                }}
+              >
+                <label htmlFor="chat-message">Say something cute</label>
+                <div>
+                  <input
+                    id="chat-message"
+                    autoFocus
+                    maxLength={64}
+                    placeholder="omg..."
+                    value={chatMessage}
+                    onChange={(event) => setChatMessage(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setChatComposer(false);
+                    }}
+                  />
+                  <button type="submit">Send</button>
+                </div>
+              </form>
+            )}
+            {showChatHistory && (
+              <aside className="chat-history-panel" aria-label="Chat history">
+                <header>
+                  <span>Chat history</span>
+                  <button
+                    type="button"
+                    aria-label="Close chat history"
+                    onClick={() => setShowChatHistory(false)}
+                  >
+                    ×
+                  </button>
+                </header>
+                <div ref={chatHistoryRef}>
+                  {chatHistory.length === 0 && (
+                    <p className="chat-history-empty">Quiet in here...</p>
+                  )}
+                  {chatHistory.map((chat) => (
+                    <div className="chat-history-entry" key={chat.id}>
+                      <span className="chat-history-avatar" aria-hidden="true">
+                        {chat.member.avatar ? (
+                          <img src={chat.member.avatar} alt="" />
+                        ) : (
+                          <span>{chat.member.name[0]?.toUpperCase()}</span>
+                        )}
+                      </span>
+                      <p>
+                        <strong aria-hidden="true">
+                          {chat.member.id === currentUser.id ? "you" : chat.member.name}
+                        </strong>
+                        <span className="sr-only">
+                          {chat.member.id === currentUser.id
+                            ? "You said: "
+                            : `${chat.member.name} said: `}
+                        </span>
+                        <span>{chat.message}</span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            )}
+          </div>
+          <div className="screen-footer">
+            <div
+              className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}
+            >
+              <i aria-hidden="true" />
+              <span>
+                {streamOnline === null || relayStatus === null
+                  ? "CHECKING"
+                  : !streamOnline
+                    ? "OFFLINE"
+                    : relayStatus.running
+                      ? "LIVE"
+                      : "IDLE"}
+              </span>
+              {relayStatus?.running && (
+                <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
+                  <AssetIcon name="carrot" />
+                  <span>{relayStatus.title ?? "TorBox stream"}</span>
+                </span>
+              )}
+              <span className="sync-copy">{syncLabel}</span>
+            </div>
+            <div className="player-actions">
+              <label className="volume-control">
+                <span aria-hidden="true">
+                  <UiIcon name={volume === 0 ? "volume-off" : "volume"} />
+                </span>
+                <span
+                  className="volume-slider"
+                  style={{ "--volume": `${volume * 100}%` } as CSSProperties}
+                >
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    aria-label="Volume"
+                    onChange={(event) => changeVolume(Number(event.target.value))}
+                  />
+                  <AssetIcon name="carrot" />
+                </span>
+              </label>
+              <button
+                type="button"
+                aria-label="React"
+                data-tooltip={shortcutsEnabled ? "Press F to react" : undefined}
+                onClick={react}
+              >
+                <UiIcon name="sparkle" />
+                <span>React</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Chat"
+                aria-expanded={chatComposer}
+                data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
+                onClick={() => setChatComposer((open) => !open)}
+              >
+                <UiIcon name="chat" />
+                <span>Chat</span>
+              </button>
+              <button
+                className={lightsOut ? "active" : ""}
+                type="button"
+                aria-label="Toggle lights"
+                aria-pressed={lightsOut}
+                onClick={toggleLightsOut}
+              >
+                <UiIcon name="moon" />
+                <span>Lights</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Enter fullscreen"
+                onClick={() => screenRef.current?.requestFullscreen()}
+              >
+                <UiIcon name="fullscreen" />
+                <span>Expand</span>
+              </button>
+              <details className="player-menu">
+                <summary aria-label="More player options" title="More player options">
+                  <UiIcon name="gear" />
+                </summary>
+                <div className="player-menu-popover">
+                  <button
+                    type="button"
+                    aria-expanded={showStats}
+                    onClick={(event) => {
+                      setShowStats((visible) => !visible);
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    {showStats ? "Hide stats" : "Show stats"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-expanded={showChatHistory}
+                    onClick={(event) => {
+                      setShowChatHistory((visible) => !visible);
+                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    }}
+                  >
+                    {showChatHistory ? "Hide chat history" : "Chat history"}
+                  </button>
+                  <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
+                    Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
+                  </button>
+                  {streamUrl && (
+                    <a href={streamUrl} target="_blank" rel="noreferrer">
+                      Open in own player ↗<small>May not stay in sync</small>
+                    </a>
+                  )}
+                </div>
+              </details>
+            </div>
+          </div>
+          {showStats && stats && (
+            <div className="player-stats" role="group" aria-label="Playback statistics">
+              <div>
+                <span>Delay</span>
+                <strong>{stats.delay === null ? "--" : `${stats.delay.toFixed(1)}s`}</strong>
+              </div>
+              <div>
+                <span>Target</span>
+                <strong>{delaySeconds}s</strong>
+              </div>
+              <div>
+                <span>Buffered ahead</span>
+                <strong>{stats.bufferAhead.toFixed(1)}s</strong>
+              </div>
+              <div>
+                <span>Total buffered</span>
+                <strong>{stats.bufferTotal.toFixed(1)}s</strong>
+              </div>
+              <div>
+                <span>Live window</span>
+                <strong>{stats.seekableWindow.toFixed(1)}s</strong>
+              </div>
+              <div>
+                <span>Playtime</span>
+                <strong>{formatTime(stats.playtime)}</strong>
+              </div>
+              <div>
+                <span>Playback rate</span>
+                <strong>{stats.rate.toFixed(3)}×</strong>
+              </div>
+              <div>
+                <span>Resolution</span>
+                <strong>{stats.resolution}</strong>
+              </div>
+              <div>
+                <span>Bandwidth</span>
+                <strong>
+                  {stats.bandwidth === null
+                    ? "--"
+                    : `${(stats.bandwidth / 1_000_000).toFixed(2)} Mbps`}
+                </strong>
+              </div>
+              <div>
+                <span>Dropped frames</span>
+                <strong>{stats.droppedFrames}</strong>
+              </div>
+            </div>
+          )}
+        </section>
+        <aside className="audience-panel">
+          <div className="member-list">
+            {members.map((member, index) => (
+              <div className="viewer-entry" key={member.id}>
+                <div
+                  className={`viewer-avatar${member.id === currentUser.id ? " current" : ""}`}
+                  aria-label={`${member.name}${member.id === currentUser.id ? " (you)" : ""}`}
+                >
+                  {member.avatar ? (
+                    <img src={member.avatar} alt={member.name} />
+                  ) : (
+                    <span className="avatar-fallback" aria-label={member.name}>
+                      {member.name[0]?.toUpperCase()}
+                    </span>
+                  )}
+                  <span className="avatar-hover-card" aria-hidden="true">
+                    <strong>{member.name}</strong>
+                  </span>
+                </div>
+                {index < members.length - 1 && <AssetIcon className="carrot-link" name="carrot" />}
+              </div>
+            ))}
+          </div>
+        </aside>
       </div>
     </div>
   );

@@ -50,7 +50,9 @@ export class WatchRoom {
   }
 
   connect(socket: WebSocket, member: RoomMember, authorizationExpires: number) {
-    const memberConnections = [...this.sessions.values()].filter((session) => session.member.id === member.id).length;
+    const memberConnections = [...this.sessions.values()].filter(
+      (session) => session.member.id === member.id,
+    ).length;
     if (this.sessions.size >= maxConnections || memberConnections >= maxConnectionsPerMember) {
       socket.close(4008, "Too many room connections");
       return;
@@ -61,9 +63,18 @@ export class WatchRoom {
       socket.close(4001, "Session expired");
       return;
     }
-    const expiry = setTimeout(() => socket.close(4001, "Session expired"), authorizationExpires - now);
+    const expiry = setTimeout(
+      () => socket.close(4001, "Session expired"),
+      authorizationExpires - now,
+    );
     expiry.unref();
-    this.sessions.set(socket, { expiry, lastSeen: now, member, messageCount: 0, messageWindowStarted: now });
+    this.sessions.set(socket, {
+      expiry,
+      lastSeen: now,
+      member,
+      messageCount: 0,
+      messageWindowStarted: now,
+    });
     socket.on("message", (value, isBinary) => {
       if (isBinary) {
         socket.close(1003, "Text messages only");
@@ -73,7 +84,15 @@ export class WatchRoom {
     });
     socket.on("close", () => this.disconnect(socket));
     socket.on("error", () => this.disconnect(socket));
-    this.send(socket, JSON.stringify({ chats: this.chats, members: this.members(), serverTime: Date.now(), type: "welcome" }));
+    this.send(
+      socket,
+      JSON.stringify({
+        chats: this.chats,
+        members: this.members(),
+        serverTime: Date.now(),
+        type: "welcome",
+      }),
+    );
     this.broadcastPresence();
   }
 
@@ -92,10 +111,17 @@ export class WatchRoom {
         return;
       }
 
-      const message = JSON.parse(value) as { clientTime?: number; message?: unknown; type?: string };
+      const message = JSON.parse(value) as {
+        clientTime?: number;
+        message?: unknown;
+        type?: string;
+      };
       if (message.type === "ping" && typeof message.clientTime === "number") {
         session.lastSeen = now;
-        this.send(socket, JSON.stringify({ clientTime: message.clientTime, serverTime: now, type: "pong" }));
+        this.send(
+          socket,
+          JSON.stringify({ clientTime: message.clientTime, serverTime: now, type: "pong" }),
+        );
       }
       if (message.type === "reaction") {
         const activity = this.memberActivity.get(session.member.id) ?? {};
@@ -103,19 +129,22 @@ export class WatchRoom {
         activity.lastReaction = now;
         this.memberActivity.set(session.member.id, activity);
         session.lastSeen = now;
-        this.broadcast(JSON.stringify({
-          id: randomUUID(),
-          type: "reaction",
-          variant: Math.random() < 0.5 ? "carrot" : "blossom",
-          x: 18 + Math.round(Math.random() * 64),
-        }));
+        this.broadcast(
+          JSON.stringify({
+            id: randomUUID(),
+            type: "reaction",
+            variant: Math.random() < 0.5 ? "carrot" : "blossom",
+            x: 18 + Math.round(Math.random() * 64),
+          }),
+        );
       }
       if (message.type === "chat") {
         const activity = this.memberActivity.get(session.member.id) ?? {};
         if (now - (activity.lastChat ?? 0) < 1_500) return;
-        const text = typeof message.message === "string"
-          ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
-          : "";
+        const text =
+          typeof message.message === "string"
+            ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
+            : "";
         if (!text) return;
         activity.lastChat = now;
         this.memberActivity.set(session.member.id, activity);
@@ -157,13 +186,16 @@ export class WatchRoom {
     const activeMembers = new Set([...this.sessions.values()].map(({ member }) => member.id));
     for (const [memberId, activity] of this.memberActivity) {
       const lastActivity = Math.max(activity.lastChat ?? 0, activity.lastReaction ?? 0);
-      if (!activeMembers.has(memberId) && lastActivity < cutoff) this.memberActivity.delete(memberId);
+      if (!activeMembers.has(memberId) && lastActivity < cutoff)
+        this.memberActivity.delete(memberId);
     }
     if (changed) this.broadcastPresence();
   }
 
   private members() {
-    return [...new Map([...this.sessions.values()].map(({ member }) => [member.id, member])).values()];
+    return [
+      ...new Map([...this.sessions.values()].map(({ member }) => [member.id, member])).values(),
+    ];
   }
 
   private broadcastPresence() {

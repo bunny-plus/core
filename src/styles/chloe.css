@@ -1,0 +1,102 @@
+.chloe-page {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-height: calc(100vh - 80px);
+  place-items: center;
+  padding: 40px 20px;
+}
+.chloe-phone {
+  position: relative;
+  width: min(410px, 100%);
+  padding: 18px;
+  border: 5px solid #29232c;
+  border-radius: 38px;
+  background: linear-gradient(145deg, #fff, #ffe4f0);
+  box-shadow:
+    13px 15px 0 #f9a8c6,
+    22px 25px 0 rgba(41, 35, 44, 0.12);
+  rotate: -1deg;
+}
+.chloe-phone::before {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 70px;
+  height: 7px;
+  border-radius: 99px;
+  background: #29232c;
+  content: "";
+  transform: translateX(-50%);
+}
+.chloe-phone-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 7px;
+  padding: 10px 5px 13px;
+  border-bottom: 2px dashed var(--pink-300);
+}
+.chloe-phone-top span {
+  color: #dc2775;
+  font-size: 9px;
+  font-weight: 1000;
+  letter-spacing: 0.13em;
+}
+.chloe-phone-top .ui-icon {
+  width: 25px;
+  height: 25px;
+  color: #dc2775;
+}
+.chloe-chat-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 22px;
+}
+.chloe-avatar {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 3px solid #29232c;
+  border-radius: 50%;
+  background: var(--pink-200);
+  font-size: 25px;
+}
+.chloe-avatar .ui-icon {
+  width: 25px;
+  height: 25px;
+  color: #dc2775;
+}
+.chloe-chat-preview strong {
+  color: #dc2775;
+  font-family: Georgia, serif;
+  font-style: italic;
+}
+.chloe-chat-preview p {
+  margin: 4px 0 0;
+  padding: 11px 13px;
+  border-radius: 5px 16px 16px 16px;
+  background: white;
+  box-shadow: 0 5px 15px rgba(220, 39, 117, 0.1);
+  font-size: 13px;
+}
+.chloe-coming-soon {
+  margin: 20px 5px;
+  color: var(--gray-500);
+  font-size: 11px;
+  text-align: center;
+}
+.chloe-phone > a {
+  display: block;
+  padding: 11px;
+  border-radius: 12px;
+  background: #29232c;
+  color: white;
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  text-decoration: none;
+}

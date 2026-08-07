@@ -25,13 +25,25 @@ test("production environment accepts valid configuration and fills safe defaults
 });
 
 test("environment rejects missing or weak session secrets", () => {
-  assert.throws(() => loadEnvironment({ ...validEnvironment, SESSION_SECRET: undefined }), /SESSION_SECRET is required/);
-  assert.throws(() => loadEnvironment({ ...validEnvironment, SESSION_SECRET: "too-short" }), /at least 32 bytes/);
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, SESSION_SECRET: undefined }),
+    /SESSION_SECRET is required/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, SESSION_SECRET: "too-short" }),
+    /at least 32 bytes/,
+  );
 });
 
 test("production environment requires fixed HTTPS public URLs", () => {
-  assert.throws(() => loadEnvironment({ ...validEnvironment, API_URL: undefined }), /API_URL is required/);
-  assert.throws(() => loadEnvironment({ ...validEnvironment, APP_URL: "http://bunny.plus" }), /APP_URL must use HTTPS/);
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, API_URL: undefined }),
+    /API_URL is required/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, APP_URL: "http://bunny.plus" }),
+    /APP_URL must use HTTPS/,
+  );
 });
 
 test("development environment can run without a relay controller", () => {
@@ -48,12 +60,15 @@ test("development environment can run without a relay controller", () => {
 });
 
 test("production environment rejects development authentication", () => {
-  assert.throws(() => loadEnvironment({ ...validEnvironment, ENABLE_DEV_AUTH: "true" }), /cannot be enabled in production/);
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, ENABLE_DEV_AUTH: "true" }),
+    /cannot be enabled in production/,
+  );
 });
 
 test("environment validates Discord role permission values", () => {
   assert.throws(
-    () => loadEnvironment({ ...validEnvironment, DISCORD_ROLE_PERMISSIONS: "{\"role\":\"admin\"}" }),
+    () => loadEnvironment({ ...validEnvironment, DISCORD_ROLE_PERMISSIONS: '{"role":"admin"}' }),
     /permission arrays/,
   );
 });

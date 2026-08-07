@@ -22,37 +22,56 @@ const env: Env = {
 };
 
 async function adminCookie() {
-  const token = await createSession({ admin: true, avatar: null, id: "1", name: "Bunny", permissions: ["stream.manage"] }, env.SESSION_SECRET);
+  const token = await createSession(
+    { admin: true, avatar: null, id: "1", name: "Bunny", permissions: ["stream.manage"] },
+    env.SESSION_SECRET,
+  );
   return `bp_session=${token}`;
 }
 
 test("authenticated API responses are private and mutation origins are enforced", async () => {
   const cookie = await adminCookie();
-  const session = await handleRequest(new Request("https://api.bunny.plus/api/session", { headers: { Cookie: cookie } }), env);
+  const session = await handleRequest(
+    new Request("https://api.bunny.plus/api/session", { headers: { Cookie: cookie } }),
+    env,
+  );
   assert.equal(session.status, 200);
   assert.equal(session.headers.get("Cache-Control"), "private, no-store");
 
-  const rejected = await handleRequest(new Request("https://api.bunny.plus/api/admin/movies/add", {
-    body: JSON.stringify({ hash: "bad" }),
-    headers: { "Content-Type": "application/json", Cookie: cookie, Origin: "https://example.test" },
-    method: "POST",
-  }), env);
+  const rejected = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/movies/add", {
+      body: JSON.stringify({ hash: "bad" }),
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie,
+        Origin: "https://example.test",
+      },
+      method: "POST",
+    }),
+    env,
+  );
   assert.equal(rejected.status, 403);
 });
 
 test("JSON mutations reject invalid content and malformed input before upstream calls", async () => {
   const cookie = await adminCookie();
-  const unsupported = await handleRequest(new Request("https://api.bunny.plus/api/admin/movies/add", {
-    body: "hash=bad",
-    headers: { "Content-Type": "text/plain", Cookie: cookie, Origin: env.APP_URL },
-    method: "POST",
-  }), env);
+  const unsupported = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/movies/add", {
+      body: "hash=bad",
+      headers: { "Content-Type": "text/plain", Cookie: cookie, Origin: env.APP_URL },
+      method: "POST",
+    }),
+    env,
+  );
   assert.equal(unsupported.status, 415);
 
-  const invalid = await handleRequest(new Request("https://api.bunny.plus/api/admin/movies/add", {
-    body: JSON.stringify({ hash: "bad" }),
-    headers: { "Content-Type": "application/json", Cookie: cookie, Origin: env.APP_URL },
-    method: "POST",
-  }), env);
+  const invalid = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/movies/add", {
+      body: JSON.stringify({ hash: "bad" }),
+      headers: { "Content-Type": "application/json", Cookie: cookie, Origin: env.APP_URL },
+      method: "POST",
+    }),
+    env,
+  );
   assert.equal(invalid.status, 400);
 });

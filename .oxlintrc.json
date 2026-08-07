@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "react/exhaustive-deps": "error",
+    "react/only-export-components": ["error", { "allowConstantExport": true }],
+    "react/rules-of-hooks": "error"
+  },
+  "env": {
+    "browser": true,
+    "builtin": true,
+    "node": true,
+    "serviceworker": true
+  },
+  "ignorePatterns": [
+    ".next/**",
+    "dist/**",
+    "node_modules/**",
+    "result/**",
+    "worker-configuration.d.ts"
+  ],
+  "settings": {
+    "react": {
+      "version": "19.2"
+    }
+  }
+}

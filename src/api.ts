@@ -1,5 +1,6 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, "")
-  || (location.hostname === "bunny.plus" ? "https://api.bunny.plus" : "");
+const configuredApiUrl =
+  import.meta.env.VITE_API_URL?.trim().replace(/\/$/, "") ||
+  (location.hostname === "bunny.plus" ? "https://api.bunny.plus" : "");
 
 export function apiUrl(path: string) {
   return `${configuredApiUrl}${path}`;

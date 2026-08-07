@@ -54,20 +54,24 @@ function formatBytes(bytes: number) {
 }
 
 function isVideo(file: TorBoxFile) {
-  return !file.infected && !file.zipped && (
-    file.mimetype?.startsWith("video/") || /\.(mkv|mp4|m4v|mov|avi|webm|ts)$/i.test(file.name)
+  return (
+    !file.infected &&
+    !file.zipped &&
+    (file.mimetype?.startsWith("video/") || /\.(mkv|mp4|m4v|mov|avi|webm|ts)$/i.test(file.name))
   );
 }
 
 function trackLabel(track: MediaTrack, fallback: string) {
   const name = track.title || track.language || fallback;
-  const details = [track.codec, track.channels ? `${track.channels}ch` : null].filter(Boolean).join(" · ");
+  const details = [track.codec, track.channels ? `${track.channels}ch` : null]
+    .filter(Boolean)
+    .join(" · ");
   return `${name}${details ? ` (${details})` : ""}${track.default ? " · default" : ""}`;
 }
 
 async function api<T>(url: string, init?: RequestInit) {
   const response = await apiFetch(url, init);
-  const result = await response.json() as T & { error?: string };
+  const result = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(result.error || "Request failed");
   return result;
 }
@@ -80,14 +84,18 @@ export default function StreamControl() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [selected, setSelected] = useState<{ file: TorBoxFile; torrent: TorBoxTorrent } | null>(null);
+  const [selected, setSelected] = useState<{ file: TorBoxFile; torrent: TorBoxTorrent } | null>(
+    null,
+  );
   const [options, setOptions] = useState<MediaOptions | null>(null);
   const [audioIndex, setAudioIndex] = useState(0);
   const [subtitleIndex, setSubtitleIndex] = useState(-1);
   const [resolutionIndex, setResolutionIndex] = useState(-1);
 
   async function loadTorrents(refresh = false) {
-    const result = await api<{ torrents: TorBoxTorrent[] }>(`/api/admin/torbox/torrents${refresh ? "?refresh=1" : ""}`);
+    const result = await api<{ torrents: TorBoxTorrent[] }>(
+      `/api/admin/torbox/torrents${refresh ? "?refresh=1" : ""}`,
+    );
     setTorrents(result.torrents);
   }
 
@@ -98,16 +106,24 @@ export default function StreamControl() {
     ])
       .then(([list, controllerStatus]) => {
         if (list.status === "fulfilled") setTorrents(list.value.torrents);
-        else setMessage(list.reason instanceof Error ? list.reason.message : "Could not load TorBox");
+        else
+          setMessage(list.reason instanceof Error ? list.reason.message : "Could not load TorBox");
         if (controllerStatus.status === "fulfilled") setStatus(controllerStatus.value);
       })
       .finally(() => setLoading(false));
   }, []);
 
-  const playableTorrents = torrents.map((torrent) => ({ torrent, videos: torrent.files.filter(isVideo) })).filter(({ torrent, videos }) => {
-    const needle = query.toLowerCase();
-    return videos.length > 0 && (!needle || torrent.name.toLowerCase().includes(needle) || videos.some((file) => file.name.toLowerCase().includes(needle)));
-  });
+  const playableTorrents = torrents
+    .map((torrent) => ({ torrent, videos: torrent.files.filter(isVideo) }))
+    .filter(({ torrent, videos }) => {
+      const needle = query.toLowerCase();
+      return (
+        videos.length > 0 &&
+        (!needle ||
+          torrent.name.toLowerCase().includes(needle) ||
+          videos.some((file) => file.name.toLowerCase().includes(needle)))
+      );
+    });
 
   async function configure(torrent: TorBoxTorrent, file: TorBoxFile) {
     const key = `options:${torrent.id}:${file.id}`;
@@ -122,7 +138,9 @@ export default function StreamControl() {
         method: "POST",
       });
       setOptions(result);
-      setAudioIndex(result.audio.find((track) => track.default)?.index ?? result.audio[0]?.index ?? 0);
+      setAudioIndex(
+        result.audio.find((track) => track.default)?.index ?? result.audio[0]?.index ?? 0,
+      );
       setSubtitleIndex(-1);
       setResolutionIndex(result.sourceResolution && result.sourceResolution > 1_080 ? 5 : -1);
     } catch (error) {
@@ -175,35 +193,76 @@ export default function StreamControl() {
   }
 
   return (
-      <section className="stream-modal admin-stream-panel" aria-labelledby="stream-control-title">
-        <header>
-          <div><AssetIcon name="carrot" /><div><h2 id="stream-control-title">Choose a stream source</h2><p>Pick where tonight's movie comes from.</p></div></div>
-        </header>
-
-        {status?.running && (
-          <div className="current-stream">
-            <div><i /><span>Now relaying</span><strong>{status.title || "TorBox stream"}</strong></div>
-            <button type="button" disabled={busy !== null} onClick={() => void stop()}>{busy === "stop" ? "Stopping..." : "Stop"}</button>
+    <section className="stream-modal admin-stream-panel" aria-labelledby="stream-control-title">
+      <header>
+        <div>
+          <AssetIcon name="carrot" />
+          <div>
+            <h2 id="stream-control-title">Choose a stream source</h2>
+            <p>Pick where tonight's movie comes from.</p>
           </div>
-        )}
+        </div>
+      </header>
 
-        <div className="source-picker" role="group" aria-label="Stream source">
-          <button className={source === "torbox" ? "active" : ""} type="button" aria-pressed={source === "torbox"} onClick={() => setSource("torbox")}>
-            <UiIcon name="disc" /><span><strong>TorBox</strong><small>Your downloads</small></span>
-          </button>
-          <button className={source === "discover" ? "active" : ""} type="button" aria-pressed={source === "discover"} onClick={() => setSource("discover")}>
-            <UiIcon name="film" /><span><strong>Discover</strong><small>Movies + cached releases</small></span>
-          </button>
-          <button className={source === "jellyfin" ? "active" : ""} type="button" aria-pressed={source === "jellyfin"} onClick={() => setSource("jellyfin")}>
-            <UiIcon name="server" /><span><strong>Jellyfin</strong><small>Coming soon</small></span>
+      {status?.running && (
+        <div className="current-stream">
+          <div>
+            <i />
+            <span>Now relaying</span>
+            <strong>{status.title || "TorBox stream"}</strong>
+          </div>
+          <button type="button" disabled={busy !== null} onClick={() => void stop()}>
+            {busy === "stop" ? "Stopping..." : "Stop"}
           </button>
         </div>
+      )}
 
-        {message && <p className="stream-message">{message}</p>}
+      <div className="source-picker" role="group" aria-label="Stream source">
+        <button
+          className={source === "torbox" ? "active" : ""}
+          type="button"
+          aria-pressed={source === "torbox"}
+          onClick={() => setSource("torbox")}
+        >
+          <UiIcon name="disc" />
+          <span>
+            <strong>TorBox</strong>
+            <small>Your downloads</small>
+          </span>
+        </button>
+        <button
+          className={source === "discover" ? "active" : ""}
+          type="button"
+          aria-pressed={source === "discover"}
+          onClick={() => setSource("discover")}
+        >
+          <UiIcon name="film" />
+          <span>
+            <strong>Discover</strong>
+            <small>Movies + cached releases</small>
+          </span>
+        </button>
+        <button
+          className={source === "jellyfin" ? "active" : ""}
+          type="button"
+          aria-pressed={source === "jellyfin"}
+          onClick={() => setSource("jellyfin")}
+        >
+          <UiIcon name="server" />
+          <span>
+            <strong>Jellyfin</strong>
+            <small>Coming soon</small>
+          </span>
+        </button>
+      </div>
 
-        {source === "torbox" && (
-          <>
-          <label className="stream-search-label" htmlFor="torrent-search">Search torrents and playable files</label>
+      {message && <p className="stream-message">{message}</p>}
+
+      {source === "torbox" && (
+        <>
+          <label className="stream-search-label" htmlFor="torrent-search">
+            Search torrents and playable files
+          </label>
           <input
             id="torrent-search"
             className="stream-search"
@@ -212,102 +271,164 @@ export default function StreamControl() {
             placeholder="Name..."
             onChange={(event) => setQuery(event.target.value)}
           />
-        {selected && (
-          <div className="stream-options">
-            <header>
-              <div><small>SETTING UP</small><strong>{selected.file.short_name || selected.file.name}</strong></div>
-              <button type="button" aria-label="Close media options" onClick={() => { setSelected(null); setOptions(null); }}>×</button>
-            </header>
-            {!options ? (
-              <p><UiIcon name="disc" /> Reading audio and subtitle tracks...</p>
-            ) : (
-              <>
-                <div className="track-selectors">
-                  <label>
-                    <span>Audio</span>
-                    <select value={audioIndex} onChange={(event) => setAudioIndex(Number(event.target.value))}>
-                      {options.audio.length === 0 && <option value="0">Default audio</option>}
-                      {options.audio.map((track) => <option value={track.index} key={track.index}>{trackLabel(track, `Track ${track.index + 1}`)}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Subtitles</span>
-                    <select value={subtitleIndex} onChange={(event) => setSubtitleIndex(Number(event.target.value))}>
-                      <option value="-1">None</option>
-                      {options.subtitles.map((track) => <option value={track.index} key={track.index}>{trackLabel(track, `Subtitle ${track.index + 1}`)}</option>)}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Resolution</span>
-                    <select value={resolutionIndex} onChange={(event) => setResolutionIndex(Number(event.target.value))}>
-                      <option value="-1">Original{options.sourceResolution ? ` (${options.sourceResolution}p)` : ""}</option>
-                      {resolutions.map((resolution, index) => <option value={index} key={resolution}>{resolution}</option>)}
-                    </select>
-                  </label>
+          {selected && (
+            <div className="stream-options">
+              <header>
+                <div>
+                  <small>SETTING UP</small>
+                  <strong>{selected.file.short_name || selected.file.name}</strong>
                 </div>
-                <button className="start-relay" type="button" disabled={busy !== null} onClick={() => void start()}>
-                  {busy === "start" ? "Starting relay..." : "Stream this file"}
+                <button
+                  type="button"
+                  aria-label="Close media options"
+                  onClick={() => {
+                    setSelected(null);
+                    setOptions(null);
+                  }}
+                >
+                  ×
                 </button>
-              </>
-            )}
-          </div>
-        )}
+              </header>
+              {!options ? (
+                <p>
+                  <UiIcon name="disc" /> Reading audio and subtitle tracks...
+                </p>
+              ) : (
+                <>
+                  <div className="track-selectors">
+                    <label>
+                      <span>Audio</span>
+                      <select
+                        value={audioIndex}
+                        onChange={(event) => setAudioIndex(Number(event.target.value))}
+                      >
+                        {options.audio.length === 0 && <option value="0">Default audio</option>}
+                        {options.audio.map((track) => (
+                          <option value={track.index} key={track.index}>
+                            {trackLabel(track, `Track ${track.index + 1}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Subtitles</span>
+                      <select
+                        value={subtitleIndex}
+                        onChange={(event) => setSubtitleIndex(Number(event.target.value))}
+                      >
+                        <option value="-1">None</option>
+                        {options.subtitles.map((track) => (
+                          <option value={track.index} key={track.index}>
+                            {trackLabel(track, `Subtitle ${track.index + 1}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Resolution</span>
+                      <select
+                        value={resolutionIndex}
+                        onChange={(event) => setResolutionIndex(Number(event.target.value))}
+                      >
+                        <option value="-1">
+                          Original
+                          {options.sourceResolution ? ` (${options.sourceResolution}p)` : ""}
+                        </option>
+                        {resolutions.map((resolution, index) => (
+                          <option value={index} key={resolution}>
+                            {resolution}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <button
+                    className="start-relay"
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void start()}
+                  >
+                    {busy === "start" ? "Starting relay..." : "Stream this file"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
-        <div className="torrent-list">
-          {loading && <p className="torrent-empty"><AssetIcon name="bunny-face" /> Digging through TorBox...</p>}
-          {!loading && playableTorrents.length === 0 && <p className="torrent-empty">No playable video files match this search.</p>}
-          {playableTorrents.map(({ torrent, videos }) => {
-            return (
-              <details className="torrent" key={torrent.id}>
-                <summary>
-                  <UiIcon name="film" />
-                  <div><strong>{torrent.name}</strong><small>{videos.length} video{videos.length === 1 ? "" : "s"} · {formatBytes(torrent.size)}</small></div>
-                  <i>{torrent.download_present ? "ready" : `${Math.round(torrent.progress)}%`}</i>
-                </summary>
-                <div className="torrent-files">
-                  {videos.map((file) => {
-                    const key = `options:${torrent.id}:${file.id}`;
-                    return (
-                      <div className="torrent-file" key={file.id}>
-                        <div><strong>{file.short_name || file.name}</strong><small>{formatBytes(file.size)}</small></div>
-                        <button
-                          type="button"
-                          disabled={!torrent.download_present || busy !== null}
-                          onClick={() => void configure(torrent, file)}
-                        >
-                          {busy === key ? "Reading..." : "Set up"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </details>
-            );
-          })}
-        </div>
-          </>
-        )}
-        {source === "discover" && (
-          <MovieDiscover onAdded={async (detail) => {
+          <div className="torrent-list">
+            {loading && (
+              <p className="torrent-empty">
+                <AssetIcon name="bunny-face" /> Digging through TorBox...
+              </p>
+            )}
+            {!loading && playableTorrents.length === 0 && (
+              <p className="torrent-empty">No playable video files match this search.</p>
+            )}
+            {playableTorrents.map(({ torrent, videos }) => {
+              return (
+                <details className="torrent" key={torrent.id}>
+                  <summary>
+                    <UiIcon name="film" />
+                    <div>
+                      <strong>{torrent.name}</strong>
+                      <small>
+                        {videos.length} video{videos.length === 1 ? "" : "s"} ·{" "}
+                        {formatBytes(torrent.size)}
+                      </small>
+                    </div>
+                    <i>{torrent.download_present ? "ready" : `${Math.round(torrent.progress)}%`}</i>
+                  </summary>
+                  <div className="torrent-files">
+                    {videos.map((file) => {
+                      const key = `options:${torrent.id}:${file.id}`;
+                      return (
+                        <div className="torrent-file" key={file.id}>
+                          <div>
+                            <strong>{file.short_name || file.name}</strong>
+                            <small>{formatBytes(file.size)}</small>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!torrent.download_present || busy !== null}
+                            onClick={() => void configure(torrent, file)}
+                          >
+                            {busy === key ? "Reading..." : "Set up"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </>
+      )}
+      {source === "discover" && (
+        <MovieDiscover
+          onAdded={async (detail) => {
             setMessage(`${detail}. Pick it from TorBox to choose the file and tracks.`);
             setSource("torbox");
             setLoading(true);
             try {
               await loadTorrents(true);
             } catch {
-              setMessage(`${detail}. TorBox may need a moment before the movie appears; refresh the page if needed.`);
+              setMessage(
+                `${detail}. TorBox may need a moment before the movie appears; refresh the page if needed.`,
+              );
             } finally {
               setLoading(false);
             }
-          }} />
-        )}
-        {source === "jellyfin" && (
-          <div className="source-coming-soon">
-            <UiIcon name="server" />
-            <strong>Jellyfin is still wiring up</strong>
-            <p>The button has its seat saved. Library browsing and playback come later.</p>
-          </div>
-        )}
-      </section>
+          }}
+        />
+      )}
+      {source === "jellyfin" && (
+        <div className="source-coming-soon">
+          <UiIcon name="server" />
+          <strong>Jellyfin is still wiring up</strong>
+          <p>The button has its seat saved. Library browsing and playback come later.</p>
+        </div>
+      )}
+    </section>
   );
 }

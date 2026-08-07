@@ -1,0 +1,422 @@
+.stream-modal {
+  display: flex;
+  width: min(720px, 100%);
+  max-height: min(800px, calc(100vh - 40px));
+  padding: 22px;
+  border: 4px solid var(--pink-300);
+  border-radius: 24px;
+  background: rgba(255, 251, 249, 0.97);
+  box-shadow: 0 28px 70px rgba(80, 45, 73, 0.28);
+  flex-direction: column;
+}
+.stream-modal.admin-stream-panel {
+  max-height: none;
+}
+.stream-modal > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.stream-modal > header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.stream-modal > header > div > .asset-icon {
+  width: 42px;
+  height: 42px;
+  transform: rotate(-12deg);
+}
+.stream-modal h2 {
+  margin: 0;
+  color: var(--pink-500);
+  font-size: 25px;
+  letter-spacing: -0.03em;
+}
+.stream-modal header p {
+  margin: 3px 0 0;
+  color: var(--gray-500);
+  font-size: 12px;
+}
+.stream-modal > header > button {
+  border: 0;
+  background: transparent;
+  color: var(--pink-400);
+  cursor: pointer;
+  font-size: 29px;
+  line-height: 1;
+}
+.source-picker {
+  display: grid;
+  margin-top: 18px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.source-picker > button {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  padding: 10px;
+  border: 2px solid var(--pink-100);
+  border-radius: 13px;
+  background: white;
+  color: var(--gray-700);
+  cursor: pointer;
+  gap: 8px;
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    transform 0.2s,
+    background 0.2s;
+}
+.source-picker > button:hover {
+  border-color: var(--pink-300);
+  transform: translateY(-2px);
+}
+.source-picker > button.active {
+  border-color: var(--pink-400);
+  background: linear-gradient(145deg, white, var(--pink-50));
+  box-shadow: 3px 4px 0 rgba(249, 168, 198, 0.2);
+}
+.source-picker .ui-icon {
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  color: var(--pink-400);
+}
+.source-picker span,
+.source-picker strong,
+.source-picker small {
+  display: block;
+  min-width: 0;
+}
+.source-picker strong {
+  font-size: 12px;
+}
+.source-picker small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--gray-500);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-stream {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 2px solid #bbf7d0;
+  border-radius: 13px;
+  background: #f0fdf4;
+}
+.current-stream > div {
+  display: grid;
+  grid-template-columns: 9px auto;
+  gap: 3px 8px;
+}
+.current-stream i {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.15);
+  grid-row: 1 / 3;
+}
+.current-stream span {
+  color: #15803d;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.current-stream strong {
+  max-width: 480px;
+  overflow: hidden;
+  color: var(--gray-700);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.current-stream button,
+.torrent-file button {
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--pink-400);
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.current-stream button {
+  background: #fb7185;
+}
+.current-stream button:disabled,
+.torrent-file button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.stream-search-label,
+.movie-search > label {
+  display: block;
+  margin: 17px 0 5px 3px;
+  color: var(--gray-500);
+  font-size: 11px;
+  font-weight: 900;
+}
+.stream-search {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 2px solid var(--pink-200);
+  border-radius: 12px;
+  outline: none;
+  background: white;
+  color: var(--gray-700);
+}
+.stream-search:focus {
+  border-color: var(--pink-400);
+  box-shadow: 0 0 0 4px rgba(244, 114, 166, 0.12);
+}
+.stream-message {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--orange-50);
+  color: #c2410c;
+  font-size: 11px;
+}
+.stream-options {
+  margin-top: 12px;
+  padding: 14px;
+  border: 3px solid var(--orange-300);
+  border-radius: 16px 7px 16px 16px;
+  background: linear-gradient(145deg, white, var(--orange-50));
+  box-shadow: 6px 7px 0 rgba(251, 146, 60, 0.12);
+}
+.stream-options > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stream-options > header small,
+.stream-options > header strong {
+  display: block;
+}
+.stream-options > header small {
+  color: var(--orange-400);
+  font-size: 10px;
+  font-weight: 1000;
+  letter-spacing: 0.13em;
+}
+.stream-options > header strong {
+  max-width: 590px;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stream-options > header button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--orange-400);
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 0.8;
+}
+.stream-options > p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 18px 0 8px;
+  color: var(--gray-500);
+  font-size: 11px;
+  gap: 7px;
+  text-align: center;
+}
+.stream-options > p .ui-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.track-selectors {
+  display: grid;
+  margin-top: 13px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.track-selectors label span {
+  display: block;
+  margin: 0 0 4px 3px;
+  color: var(--gray-500);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.track-selectors select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 27px 9px 9px;
+  border: 2px solid var(--pink-200);
+  border-radius: 9px;
+  outline: none;
+  background: white;
+  color: var(--gray-700);
+  font-size: 12px;
+}
+.track-selectors select:focus {
+  border-color: var(--pink-400);
+}
+.start-relay {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  padding: 11px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--orange-400);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 1000;
+}
+.start-relay:hover {
+  background: #f97316;
+}
+.start-relay:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+.torrent-list {
+  margin-top: 13px;
+  padding-right: 5px;
+  overflow-y: auto;
+}
+.torrent-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 35px;
+  color: var(--gray-500);
+  gap: 8px;
+  text-align: center;
+}
+.torrent-empty .asset-icon {
+  width: 31px;
+  height: 31px;
+}
+.torrent {
+  margin-bottom: 8px;
+  border: 2px solid var(--pink-100);
+  border-radius: 13px;
+  background: white;
+  overflow: hidden;
+}
+.torrent > summary {
+  display: grid;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  list-style: none;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 9px;
+}
+.torrent > summary > .ui-icon {
+  width: 23px;
+  height: 23px;
+  justify-self: center;
+  color: var(--pink-500);
+}
+.torrent > summary::-webkit-details-marker {
+  display: none;
+}
+.torrent > summary:hover {
+  background: var(--pink-50);
+}
+.torrent summary div strong,
+.torrent summary div small,
+.torrent-file strong,
+.torrent-file small {
+  display: block;
+}
+.torrent summary div strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.torrent summary div small,
+.torrent-file small {
+  margin-top: 3px;
+  color: var(--gray-500);
+  font-size: 10px;
+}
+.torrent summary > i {
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--pink-100);
+  color: var(--pink-500);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.torrent-files {
+  padding: 0 10px 10px;
+}
+.torrent-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-top: 1px dashed var(--pink-200);
+}
+.torrent-file > div {
+  min-width: 0;
+}
+.torrent-file strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-coming-soon {
+  display: grid;
+  min-height: 260px;
+  place-items: center;
+  align-content: center;
+  padding: 30px;
+  color: var(--gray-500);
+  text-align: center;
+}
+.source-coming-soon .ui-icon {
+  width: 58px;
+  height: 58px;
+  color: var(--pink-300);
+  filter: drop-shadow(5px 6px 0 rgba(249, 168, 198, 0.18));
+}
+.source-coming-soon strong {
+  margin-top: 13px;
+  color: var(--pink-500);
+  font-size: 17px;
+}
+.source-coming-soon p {
+  max-width: 330px;
+  margin: 6px 0 0;
+  font-size: 11px;
+}

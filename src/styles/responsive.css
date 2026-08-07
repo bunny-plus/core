@@ -1,0 +1,210 @@
+@media (max-width: 900px) {
+  .burrow-map {
+    display: flex;
+    min-height: auto;
+    padding: 45px 6px 15px;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .burrow-map::before {
+    inset: 15px -5px 0;
+  }
+  .burrow-trail,
+  .trail-carrot,
+  .burrow-hole {
+    display: none;
+  }
+  .activity-spot.cinema,
+  .activity-spot.admin,
+  .activity-spot.chloe {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: min(100%, 390px);
+    height: 210px;
+    margin: 0 auto;
+    transform: none;
+  }
+  .activity-spot.admin,
+  .activity-spot.chloe {
+    margin-top: 30px;
+  }
+  .activity-spot.cinema:hover,
+  .activity-spot.admin:hover,
+  .activity-spot.chloe:hover {
+    transform: translateY(-5px) rotate(1deg);
+  }
+  .activity-spot.locked:hover {
+    transform: none;
+  }
+  .future-patch {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    align-self: center;
+    margin: 3px 0 24px;
+  }
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+  .audience-panel {
+    width: 100%;
+  }
+  .member-list {
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-direction: row;
+  }
+  .viewer-entry {
+    flex-direction: row;
+  }
+  .viewer-entry:nth-child(2n),
+  .viewer-entry:nth-child(3n) {
+    translate: 0 0;
+  }
+  .carrot-link {
+    width: 38px;
+    height: auto;
+    margin: 0 -2px;
+    transform: rotate(132deg);
+  }
+  .viewer-entry:nth-child(even) .carrot-link {
+    transform: rotate(146deg) scaleX(-1);
+  }
+  .player-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .login-shell {
+    padding: 24px 16px;
+  }
+  .hero-bunny {
+    width: 80px;
+    height: 80px;
+  }
+  .login-hero {
+    gap: 10px;
+  }
+  .login-hero p {
+    font-size: 14px;
+  }
+  .login-card {
+    padding: 26px 20px;
+    border-width: 3px;
+  }
+  .room-header {
+    min-height: 68px;
+    padding: 0 14px;
+  }
+  .wordmark {
+    font-size: 22px;
+  }
+  .wordmark > .asset-icon {
+    width: 33px;
+    height: 33px;
+  }
+  .stream-modal {
+    max-height: calc(100vh - 20px);
+    padding: 17px;
+    border-width: 3px;
+  }
+  .source-picker {
+    grid-template-columns: 1fr;
+  }
+  .source-picker > button {
+    padding: 8px 10px;
+  }
+  .track-selectors {
+    grid-template-columns: 1fr;
+  }
+  .movie-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .movie-release {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .movie-release button {
+    grid-column: 1 / -1;
+  }
+  .activity-home,
+  .admin-page {
+    width: calc(100% - 28px);
+    padding-top: 35px;
+  }
+  .burrow-title {
+    margin-bottom: -5px;
+  }
+  .admin-page-heading {
+    gap: 10px;
+  }
+  .admin-page-heading > .ui-icon {
+    width: 42px;
+    height: 42px;
+  }
+  .admin-page-heading small {
+    font-size: 11px;
+  }
+  .watch-content {
+    width: calc(100% - 24px);
+    margin-top: 25px;
+  }
+  .screen-frame {
+    border-radius: 13px;
+    box-shadow:
+      0 0 0 2px var(--pink-300),
+      0 14px 30px rgba(244, 114, 166, 0.22);
+  }
+  .screen-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .live-state {
+    display: grid;
+    grid-template-columns: 9px auto;
+  }
+  .stream-title,
+  .sync-copy {
+    grid-column: 1 / -1;
+    margin: 2px 0 0;
+  }
+  .stream-title {
+    max-width: 52vw;
+  }
+  .player-actions {
+    width: 100%;
+  }
+  .player-actions > button {
+    min-width: 44px;
+    justify-content: center;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+  .player-actions > button > span {
+    display: none;
+  }
+  .volume-control {
+    min-width: 0;
+    flex: 1;
+  }
+  .volume-control > .volume-slider {
+    width: auto;
+    min-width: 45px;
+    flex: 1;
+  }
+  .player-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -7,7 +7,10 @@ export type JsonFetchOptions = RequestInit & {
 };
 
 export class UpstreamError extends Error {
-  constructor(message: string, readonly status?: number) {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
     super(message);
     this.name = "UpstreamError";
   }
@@ -45,7 +48,10 @@ async function readBounded(response: Response, maxBytes: number, name: string) {
   return new TextDecoder().decode(bytes);
 }
 
-export async function fetchJson<T>(url: string | URL, options: JsonFetchOptions): Promise<{ data: T; response: Response }> {
+export async function fetchJson<T>(
+  url: string | URL,
+  options: JsonFetchOptions,
+): Promise<{ data: T; response: Response }> {
   const {
     fetch: fetchImplementation = fetch,
     maxBytes = 1_000_000,
@@ -69,7 +75,8 @@ export async function fetchJson<T>(url: string | URL, options: JsonFetchOptions)
     await response.body?.cancel();
     throw new UpstreamError(`${name} request failed (${response.status})`, response.status);
   }
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  const contentType =
+    response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
   if (contentType !== "application/json" && !contentType.endsWith("+json")) {
     await response.body?.cancel();
     throw new UpstreamError(`${name} returned an invalid response`, response.status);

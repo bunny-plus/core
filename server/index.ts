@@ -11,16 +11,22 @@ const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
 const room = new WatchRoom();
-const webSockets = new WebSocketServer({ maxPayload: 16 * 1_024, noServer: true, perMessageDeflate: false });
+const webSockets = new WebSocketServer({
+  maxPayload: 16 * 1_024,
+  noServer: true,
+  perMessageDeflate: false,
+});
 
 class RequestBodyError extends Error {}
 
 function requestUrl(request: IncomingMessage) {
   const forwardedProtocol = request.headers["x-forwarded-proto"]?.toString().split(",")[0]?.trim();
-  const protocol = forwardedProtocol || ((request.socket as { encrypted?: boolean }).encrypted ? "https" : "http");
-  const host = request.headers["x-forwarded-host"]?.toString().split(",")[0]?.trim()
-    || request.headers.host
-    || `localhost:${port}`;
+  const protocol =
+    forwardedProtocol || ((request.socket as { encrypted?: boolean }).encrypted ? "https" : "http");
+  const host =
+    request.headers["x-forwarded-host"]?.toString().split(",")[0]?.trim() ||
+    request.headers.host ||
+    `localhost:${port}`;
   return new URL(request.url || "/", `${protocol}://${host}`).toString();
 }
 
@@ -81,7 +87,11 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(requestUrl(request));
     if (url.pathname === "/healthz" && request.method === "GET") {
-      await send(response, Response.json({ status: "ok", version: env.APP_VERSION || "development" }), request);
+      await send(
+        response,
+        Response.json({ status: "ok", version: env.APP_VERSION || "development" }),
+        request,
+      );
       return;
     }
     if (request.method === "OPTIONS") {
@@ -90,8 +100,13 @@ const server = createServer(async (request, response) => {
       response.end();
       return;
     }
-    const body = request.method === "GET" || request.method === "HEAD" ? undefined : await readBody(request);
-    await send(response, await handleRequest(webRequest(request, body), env, requestMetadata(request)), request);
+    const body =
+      request.method === "GET" || request.method === "HEAD" ? undefined : await readBody(request);
+    await send(
+      response,
+      await handleRequest(webRequest(request, body), env, requestMetadata(request)),
+      request,
+    );
   } catch (error) {
     console.error(error);
     if (!response.headersSent) {
@@ -109,13 +124,20 @@ server.on("upgrade", async (request, socket, head) => {
     const url = new URL(requestUrl(request));
     if (url.pathname !== "/api/room") throw new Error("Not found");
     if (request.headers.origin !== appOrigin) throw new Error("Forbidden origin");
-    const authorization = await authenticateRoomMember(webRequest(request), env, requestMetadata(request));
+    const authorization = await authenticateRoomMember(
+      webRequest(request),
+      env,
+      requestMetadata(request),
+    );
     if (!authorization) throw new Error("Unauthorized");
-    webSockets.handleUpgrade(request, socket, head, (webSocket) => (
-      room.connect(webSocket, authorization.member, authorization.expires)
-    ));
+    webSockets.handleUpgrade(request, socket, head, (webSocket) =>
+      room.connect(webSocket, authorization.member, authorization.expires),
+    );
   } catch (error) {
-    const status = error instanceof Error && error.message === "Unauthorized" ? "401 Unauthorized" : "403 Forbidden";
+    const status =
+      error instanceof Error && error.message === "Unauthorized"
+        ? "401 Unauthorized"
+        : "403 Forbidden";
     socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
   }
 });

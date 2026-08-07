@@ -18,29 +18,47 @@ function encode(bytes: Uint8Array) {
 }
 
 function decode(value: string) {
-  const base64 = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const base64 = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(base64);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 async function key(secret: string) {
-  return crypto.subtle.importKey("raw", encoder.encode(secret), { hash: "SHA-256", name: "HMAC" }, false, ["sign", "verify"]);
+  return crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { hash: "SHA-256", name: "HMAC" },
+    false,
+    ["sign", "verify"],
+  );
 }
 
 function isViewer(value: unknown): value is Viewer {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const viewer = value as Partial<Viewer>;
-  return typeof viewer.admin === "boolean"
-    && (viewer.avatar === null || typeof viewer.avatar === "string")
-    && typeof viewer.expires === "number" && Number.isFinite(viewer.expires)
-    && typeof viewer.id === "string" && viewer.id.length > 0
-    && typeof viewer.name === "string" && viewer.name.length > 0
-    && Array.isArray(viewer.permissions)
-    && viewer.permissions.every((permission) => typeof permission === "string");
+  return (
+    typeof viewer.admin === "boolean" &&
+    (viewer.avatar === null || typeof viewer.avatar === "string") &&
+    typeof viewer.expires === "number" &&
+    Number.isFinite(viewer.expires) &&
+    typeof viewer.id === "string" &&
+    viewer.id.length > 0 &&
+    typeof viewer.name === "string" &&
+    viewer.name.length > 0 &&
+    Array.isArray(viewer.permissions) &&
+    viewer.permissions.every((permission) => typeof permission === "string")
+  );
 }
 
 export async function createSession(viewer: Omit<Viewer, "expires">, secret: string) {
-  const body = encode(encoder.encode(JSON.stringify({ ...viewer, expires: Date.now() + sessionLifetimeSeconds * 1_000 })));
+  const body = encode(
+    encoder.encode(
+      JSON.stringify({ ...viewer, expires: Date.now() + sessionLifetimeSeconds * 1_000 }),
+    ),
+  );
   const signature = await crypto.subtle.sign("HMAC", await key(secret), encoder.encode(body));
   return `${body}.${encode(new Uint8Array(signature))}`;
 }
@@ -52,7 +70,12 @@ export async function readSession(request: Request, secret: string): Promise<Vie
   if (!body || !signature || extra) return null;
 
   try {
-    const valid = await crypto.subtle.verify("HMAC", await key(secret), decode(signature), encoder.encode(body));
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      await key(secret),
+      decode(signature),
+      encoder.encode(body),
+    );
     if (!valid) return null;
     const viewer: unknown = JSON.parse(decoder.decode(decode(body)));
     return isViewer(viewer) && viewer.expires > Date.now() ? viewer : null;
