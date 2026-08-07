@@ -47,8 +47,172 @@ type RoomChat = {
 
 type ChatDisplayMode = "bubbles" | "scrolling";
 type OverlayChat = RoomChat & { lane: number };
+type ParticleVariant = "blossom" | "bunny-face" | "carrot" | "leafy";
+type ViewerParticle = {
+  age: number;
+  bounces: number;
+  id: number;
+  lifetime: number;
+  rotation: number;
+  size: number;
+  spin: number;
+  variant: ParticleVariant;
+  vx: number;
+  vy: number;
+  x: number;
+  y: number;
+};
 
 const viewerConnectorCharms = ["blossom", "leafy", "bunny-face"] as const;
+const particleThemes: ParticleVariant[][] = [
+  ["carrot", "leafy"],
+  ["blossom", "bunny-face"],
+  ["carrot", "blossom", "leafy"],
+  ["bunny-face", "leafy", "blossom"],
+];
+
+function newViewerParticle(id: number, theme: ParticleVariant[]): ViewerParticle {
+  return {
+    age: 0,
+    bounces: 0,
+    id,
+    lifetime: 1.05 + Math.random() * 0.65,
+    rotation: Math.random() * 90 - 45,
+    size: 17 + Math.random() * 12,
+    spin: Math.random() * 260 - 130,
+    variant: theme[Math.floor(Math.random() * theme.length)] ?? "blossom",
+    vx: Math.random() * 190 - 95,
+    vy: -(75 + Math.random() * 105),
+    x: Math.random() * 10 - 5,
+    y: Math.random() * 8 - 2,
+  };
+}
+
+function ViewerParticleEmitter({ active }: { active: boolean }) {
+  const [particles, setParticles] = useState<ViewerParticle[]>([]);
+  const activeRef = useRef(active);
+  const frameRef = useRef<number | null>(null);
+  const lastFrameRef = useRef(0);
+  const nextIdRef = useRef(0);
+  const particlesRef = useRef<ViewerParticle[]>([]);
+  const spawnTimeRef = useRef(0);
+  const themeRef = useRef<ParticleVariant[]>(particleThemes[0]!);
+  const tickRef = useRef<(time: number) => void>(() => undefined);
+
+  tickRef.current = (time: number) => {
+    const delta = Math.min((time - lastFrameRef.current) / 1_000, 0.034);
+    lastFrameRef.current = time;
+    spawnTimeRef.current += delta;
+
+    const next = particlesRef.current
+      .map((particle) => {
+        const drag = Math.pow(0.982, delta * 60);
+        let vx = particle.vx * drag;
+        let vy = particle.vy + 270 * delta;
+        let x = particle.x + vx * delta;
+        let y = particle.y + vy * delta;
+        let bounces = particle.bounces;
+        if (y > 40 && vy > 0 && bounces === 0) {
+          y = 40;
+          vy *= -0.36;
+          vx *= 0.72;
+          bounces += 1;
+        }
+        return {
+          ...particle,
+          age: particle.age + delta,
+          bounces,
+          rotation: particle.rotation + particle.spin * delta,
+          vx,
+          vy,
+          x,
+          y,
+        };
+      })
+      .filter((particle) => particle.age < particle.lifetime);
+
+    if (activeRef.current) {
+      while (spawnTimeRef.current >= 0.085 && next.length < 16) {
+        spawnTimeRef.current -= 0.085;
+        next.push(newViewerParticle(nextIdRef.current++, themeRef.current));
+      }
+    }
+
+    particlesRef.current = next;
+    setParticles(next);
+    if (activeRef.current || next.length > 0) {
+      frameRef.current = requestAnimationFrame((nextTime) => tickRef.current(nextTime));
+    } else {
+      frameRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    activeRef.current = active;
+    if (active) {
+      themeRef.current = particleThemes[Math.floor(Math.random() * particleThemes.length)]!;
+      spawnTimeRef.current = 0.085;
+      if (frameRef.current === null && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        lastFrameRef.current = performance.now();
+        frameRef.current = requestAnimationFrame((time) => tickRef.current(time));
+      }
+    }
+  }, [active]);
+
+  useEffect(
+    () => () => {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    },
+    [],
+  );
+
+  return (
+    <span className="avatar-particle-field" aria-hidden="true">
+      {particles.map((particle) => {
+        const opacity = Math.min(1, particle.age / 0.1, (particle.lifetime - particle.age) / 0.28);
+        const scale = 0.45 + Math.min(1, particle.age / 0.16) * 0.55;
+        return (
+          <span
+            className="physics-particle"
+            style={{
+              height: particle.size,
+              opacity,
+              transform: `translate(-50%, -50%) translate3d(${particle.x}px, ${particle.y}px, 0) rotate(${particle.rotation}deg) scale(${scale})`,
+              width: particle.size,
+            }}
+            key={particle.id}
+          >
+            <AssetIcon animate={false} name={particle.variant} />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function ViewerAvatar({ current, member }: { current: boolean; member: User }) {
+  const [spraying, setSpraying] = useState(false);
+  return (
+    <div
+      className={`viewer-avatar${current ? " current" : ""}`}
+      aria-label={`${member.name}${current ? " (you)" : ""}`}
+      onPointerEnter={() => setSpraying(true)}
+      onPointerLeave={() => setSpraying(false)}
+    >
+      {member.avatar ? (
+        <img src={member.avatar} alt={member.name} />
+      ) : (
+        <span className="avatar-fallback" aria-label={member.name}>
+          {member.name[0]?.toUpperCase()}
+        </span>
+      )}
+      <ViewerParticleEmitter active={spraying} />
+      <span className="avatar-hover-card" aria-hidden="true">
+        <strong>{member.name}</strong>
+      </span>
+    </div>
+  );
+}
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds)) return "--:--";
@@ -944,41 +1108,7 @@ export default function WatchRoom({
           <div className="member-list">
             {members.map((member, index) => (
               <div className="viewer-entry" key={member.id}>
-                <div
-                  className={`viewer-avatar${member.id === currentUser.id ? " current" : ""}`}
-                  aria-label={`${member.name}${member.id === currentUser.id ? " (you)" : ""}`}
-                >
-                  {member.avatar ? (
-                    <img src={member.avatar} alt={member.name} />
-                  ) : (
-                    <span className="avatar-fallback" aria-label={member.name}>
-                      {member.name[0]?.toUpperCase()}
-                    </span>
-                  )}
-                  <span className="avatar-particles" aria-hidden="true">
-                    <span className="avatar-particle particle-carrot-one">
-                      <AssetIcon name="carrot" />
-                    </span>
-                    <span className="avatar-particle particle-leafy-one">
-                      <AssetIcon name="leafy" />
-                    </span>
-                    <span className="avatar-particle particle-bunny-one">
-                      <AssetIcon animate={false} name="bunny-face" />
-                    </span>
-                    <span className="avatar-particle particle-carrot-two">
-                      <AssetIcon name="carrot" />
-                    </span>
-                    <span className="avatar-particle particle-leafy-two">
-                      <AssetIcon name="leafy" />
-                    </span>
-                    <span className="avatar-particle particle-bunny-two">
-                      <AssetIcon animate={false} name="bunny-face" />
-                    </span>
-                  </span>
-                  <span className="avatar-hover-card" aria-hidden="true">
-                    <strong>{member.name}</strong>
-                  </span>
-                </div>
+                <ViewerAvatar current={member.id === currentUser.id} member={member} />
                 {index < members.length - 1 && (
                   <span className="viewer-link" aria-hidden="true">
                     <span className="viewer-link-track">
@@ -986,8 +1116,6 @@ export default function WatchRoom({
                         <path className="viewer-link-ribbon" d="M26 0C8 10 45 29 26 44" />
                         <path className="viewer-link-stitches" d="M26 0C8 10 45 29 26 44" />
                       </svg>
-                      <span className="viewer-link-paw paw-one" />
-                      <span className="viewer-link-paw paw-two" />
                       <AssetIcon
                         animate={false}
                         className="viewer-link-charm"

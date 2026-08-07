@@ -922,8 +922,21 @@ body.lights-out .player-stats strong {
   box-shadow: 0 7px 16px rgba(244, 114, 166, 0.3);
 }
 .viewer-avatar.current {
-  outline: 3px solid var(--pink-300);
-  outline-offset: 2px;
+  box-shadow:
+    0 0 0 1.5px rgba(244, 114, 166, 0.72),
+    0 4px 13px rgba(244, 114, 166, 0.24);
+}
+.viewer-avatar.current::after {
+  position: absolute;
+  z-index: 8;
+  right: -3px;
+  bottom: -2px;
+  width: 10px;
+  height: 10px;
+  background: #f472a6;
+  clip-path: polygon(50% 0, 62% 36%, 100% 50%, 62% 64%, 50% 100%, 38% 64%, 0 50%, 38% 36%);
+  content: "";
+  filter: drop-shadow(0 0 1px white) drop-shadow(0 1px 2px rgba(116, 73, 103, 0.2));
 }
 .viewer-avatar > img,
 .viewer-avatar > .avatar-fallback {
@@ -939,98 +952,22 @@ body.lights-out .player-stats strong {
   font-weight: 900;
   object-fit: cover;
 }
-.avatar-particles {
+.avatar-particle-field {
   position: absolute;
   z-index: 3;
   inset: 0;
   pointer-events: none;
 }
-.avatar-particle {
+.physics-particle {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--particle-size);
-  height: var(--particle-size);
-  opacity: 0;
-  translate: -50% -50%;
-  transform: translate(0, 0) scale(0.2) rotate(0);
+  will-change: transform, opacity;
 }
-.avatar-particle > .asset-icon {
+.physics-particle > .asset-icon {
   width: 100%;
   height: 100%;
   filter: drop-shadow(0 3px 3px rgba(41, 35, 44, 0.22));
-}
-.viewer-avatar:hover .avatar-particle {
-  animation: avatar-particle-spray 0.52s var(--particle-delay) cubic-bezier(0.16, 0.84, 0.28, 1.2)
-    forwards;
-}
-.viewer-avatar:hover .avatar-particle > .asset-icon {
-  animation: avatar-particle-float 0.9s calc(var(--particle-delay) + 0.45s) ease-in-out infinite
-    alternate;
-}
-.particle-carrot-one {
-  --particle-x: -43px;
-  --particle-y: -34px;
-  --particle-rotate: -38deg;
-  --particle-size: 25px;
-  --particle-delay: 0s;
-}
-.particle-leafy-one {
-  --particle-x: 39px;
-  --particle-y: -37px;
-  --particle-rotate: 24deg;
-  --particle-size: 25px;
-  --particle-delay: 0.05s;
-}
-.particle-bunny-one {
-  --particle-x: -48px;
-  --particle-y: 8px;
-  --particle-rotate: -12deg;
-  --particle-size: 27px;
-  --particle-delay: 0.1s;
-}
-.particle-carrot-two {
-  --particle-x: 43px;
-  --particle-y: 14px;
-  --particle-rotate: 46deg;
-  --particle-size: 22px;
-  --particle-delay: 0.14s;
-}
-.particle-leafy-two {
-  --particle-x: -17px;
-  --particle-y: -52px;
-  --particle-rotate: -21deg;
-  --particle-size: 21px;
-  --particle-delay: 0.18s;
-}
-.particle-bunny-two {
-  --particle-x: 18px;
-  --particle-y: 48px;
-  --particle-rotate: 9deg;
-  --particle-size: 24px;
-  --particle-delay: 0.22s;
-}
-@keyframes avatar-particle-spray {
-  0% {
-    opacity: 0;
-    transform: translate(0, 0) scale(0.2) rotate(0);
-  }
-  65% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.96;
-    transform: translate(var(--particle-x), var(--particle-y)) scale(1)
-      rotate(var(--particle-rotate));
-  }
-}
-@keyframes avatar-particle-float {
-  from {
-    translate: 0 -1px;
-  }
-  to {
-    translate: 0 3px;
-  }
 }
 .avatar-hover-card {
   position: absolute;
@@ -1124,39 +1061,6 @@ body.lights-out .player-stats strong {
   stroke-dasharray: 1 6;
   stroke-width: 2.4px;
   animation: viewer-trail-march 2.4s linear infinite;
-}
-.viewer-link-paw {
-  position: absolute;
-  width: 7px;
-  height: 8px;
-  border-radius: 55% 55% 48% 48%;
-  background: #fb8fba;
-  box-shadow: 0 1px 0 white;
-  opacity: 0.72;
-}
-.viewer-link-paw::before {
-  position: absolute;
-  top: -4px;
-  left: -1px;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #fb8fba;
-  box-shadow:
-    3px -2px 0 #fb8fba,
-    6px 0 0 #fb8fba;
-  content: "";
-}
-.viewer-link-paw.paw-one {
-  top: 7px;
-  left: 14px;
-  rotate: -31deg;
-  transform: scale(0.82);
-}
-.viewer-link-paw.paw-two {
-  right: 13px;
-  bottom: 5px;
-  rotate: 32deg;
 }
 .viewer-link-charm {
   position: absolute;
