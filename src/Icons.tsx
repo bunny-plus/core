@@ -2,6 +2,7 @@ import { useSyncExternalStore, type ReactNode } from "react";
 
 type AssetName = "blossom" | "bunny" | "bunny-face" | "carrot" | "leafy";
 type IconName =
+  | "broadcast"
   | "chat"
   | "disc"
   | "film"
@@ -74,6 +75,12 @@ export function AssetIcon({
 
 export function UiIcon({ className = "", name }: { className?: string; name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
+    broadcast: (
+      <>
+        <circle cx="12" cy="12" r="2" />
+        <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.5 5.5a9 9 0 0 0 0 13M18.5 5.5a9 9 0 0 1 0 13" />
+      </>
+    ),
     chat: (
       <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v7a3.5 3.5 0 0 1-3.5 3.5H10l-5.5 4v-4.6A3.5 3.5 0 0 1 4 13.5v-8Z" />
     ),

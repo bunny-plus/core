@@ -120,6 +120,9 @@
   .track-selectors {
     grid-template-columns: 1fr;
   }
+  .restream-panel form {
+    grid-template-columns: 1fr;
+  }
   .movie-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -74,4 +74,17 @@ test("JSON mutations reject invalid content and malformed input before upstream 
     env,
   );
   assert.equal(invalid.status, 400);
+
+  const unsupportedRestream = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/restream/start", {
+      body: JSON.stringify({ quality: "best", source: "https://example.com/live" }),
+      headers: { "Content-Type": "application/json", Cookie: cookie, Origin: env.APP_URL },
+      method: "POST",
+    }),
+    env,
+  );
+  assert.equal(unsupportedRestream.status, 400);
+  assert.deepEqual(await unsupportedRestream.json(), {
+    error: "Only YouTube and Twitch streams are supported",
+  });
 });

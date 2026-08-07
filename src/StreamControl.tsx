@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import MovieDiscover from "./MovieDiscover";
-import { apiFetch } from "./api";
+import RestreamControl from "./RestreamControl";
+import { apiJson } from "./api";
 
 type TorBoxFile = {
   id: number;
@@ -69,15 +70,8 @@ function trackLabel(track: MediaTrack, fallback: string) {
   return `${name}${details ? ` (${details})` : ""}${track.default ? " · default" : ""}`;
 }
 
-async function api<T>(url: string, init?: RequestInit) {
-  const response = await apiFetch(url, init);
-  const result = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(result.error || "Request failed");
-  return result;
-}
-
 export default function StreamControl() {
-  const [source, setSource] = useState<"discover" | "jellyfin" | "torbox">("torbox");
+  const [source, setSource] = useState<"discover" | "jellyfin" | "restream" | "torbox">("torbox");
   const [torrents, setTorrents] = useState<TorBoxTorrent[]>([]);
   const [status, setStatus] = useState<ControllerStatus | null>(null);
   const [query, setQuery] = useState("");
@@ -93,7 +87,7 @@ export default function StreamControl() {
   const [resolutionIndex, setResolutionIndex] = useState(-1);
 
   async function loadTorrents(refresh = false) {
-    const result = await api<{ torrents: TorBoxTorrent[] }>(
+    const result = await apiJson<{ torrents: TorBoxTorrent[] }>(
       `/api/admin/torbox/torrents${refresh ? "?refresh=1" : ""}`,
     );
     setTorrents(result.torrents);
@@ -101,8 +95,8 @@ export default function StreamControl() {
 
   useEffect(() => {
     Promise.allSettled([
-      api<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1"),
-      api<ControllerStatus>("/api/admin/torbox/status"),
+      apiJson<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1"),
+      apiJson<ControllerStatus>("/api/admin/torbox/status"),
     ])
       .then(([list, controllerStatus]) => {
         if (list.status === "fulfilled") setTorrents(list.value.torrents);
@@ -132,7 +126,7 @@ export default function StreamControl() {
     setBusy(key);
     setMessage(null);
     try {
-      const result = await api<MediaOptions>("/api/admin/torbox/options", {
+      const result = await apiJson<MediaOptions>("/api/admin/torbox/options", {
         body: JSON.stringify({ fileId: file.id, torrentId: torrent.id }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -155,7 +149,7 @@ export default function StreamControl() {
     setBusy("start");
     setMessage(null);
     try {
-      const result = await api<{ detail: string }>("/api/admin/torbox/start", {
+      const result = await apiJson<{ detail: string }>("/api/admin/torbox/start", {
         body: JSON.stringify({
           audioIndex,
           fileId: selected.file.id,
@@ -182,7 +176,7 @@ export default function StreamControl() {
     setBusy("stop");
     setMessage(null);
     try {
-      await api("/api/admin/torbox/stop", { method: "POST" });
+      await apiJson("/api/admin/torbox/stop", { method: "POST" });
       setStatus({ running: false, title: null });
       setMessage("Stream stopped");
     } catch (error) {
@@ -199,7 +193,7 @@ export default function StreamControl() {
           <AssetIcon name="carrot" />
           <div>
             <h2 id="stream-control-title">Choose a stream source</h2>
-            <p>Pick where tonight's movie comes from.</p>
+            <p>Pick what everyone watches next.</p>
           </div>
         </div>
       </header>
@@ -240,6 +234,18 @@ export default function StreamControl() {
           <span>
             <strong>Discover</strong>
             <small>Movies + cached releases</small>
+          </span>
+        </button>
+        <button
+          className={source === "restream" ? "active" : ""}
+          type="button"
+          aria-pressed={source === "restream"}
+          onClick={() => setSource("restream")}
+        >
+          <UiIcon name="broadcast" />
+          <span>
+            <strong>Restream</strong>
+            <small>YouTube + Twitch</small>
           </span>
         </button>
         <button
@@ -419,6 +425,14 @@ export default function StreamControl() {
             } finally {
               setLoading(false);
             }
+          }}
+        />
+      )}
+      {source === "restream" && (
+        <RestreamControl
+          onStarted={(title) => {
+            setStatus({ running: true, title });
+            setMessage(null);
           }}
         />
       )}

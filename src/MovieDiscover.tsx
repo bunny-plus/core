@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
-import { apiFetch } from "./api";
+import { apiJson } from "./api";
 
 type Movie = {
   backdrop: string | null;
@@ -21,13 +21,6 @@ type Release = {
   trackers: string[];
 };
 
-async function api<T>(url: string, init?: RequestInit) {
-  const response = await apiFetch(url, init);
-  const result = (await response.json()) as T & { error?: string };
-  if (!response.ok) throw new Error(result.error || "Request failed");
-  return result;
-}
-
 export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) => Promise<void> }) {
   const movieRequestRef = useRef<AbortController>(null);
   const releaseRequestRef = useRef<AbortController>(null);
@@ -46,7 +39,7 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
     setLoading(true);
     setError(null);
     try {
-      const result = await api<{ movies: Movie[] }>(
+      const result = await apiJson<{ movies: Movie[] }>(
         `/api/admin/movies${search ? `?q=${encodeURIComponent(search)}` : ""}`,
         { signal: request.signal },
       );
@@ -63,7 +56,7 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
   useEffect(() => {
     const request = new AbortController();
     movieRequestRef.current = request;
-    api<{ movies: Movie[] }>("/api/admin/movies", { signal: request.signal })
+    apiJson<{ movies: Movie[] }>("/api/admin/movies", { signal: request.signal })
       .then((result) => {
         if (movieRequestRef.current === request) setMovies(result.movies);
       })
@@ -88,9 +81,10 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
     setReleases(null);
     setError(null);
     try {
-      const result = await api<{ releases: Release[] }>(`/api/admin/movies/${movie.id}/releases`, {
-        signal: request.signal,
-      });
+      const result = await apiJson<{ releases: Release[] }>(
+        `/api/admin/movies/${movie.id}/releases`,
+        { signal: request.signal },
+      );
       if (releaseRequestRef.current !== request) return;
       setReleases(result.releases);
     } catch (loadError) {
@@ -105,7 +99,7 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
     setBusy(release.hash);
     setError(null);
     try {
-      const result = await api<{ detail: string }>("/api/admin/movies/add", {
+      const result = await apiJson<{ detail: string }>("/api/admin/movies/add", {
         body: JSON.stringify({
           hash: release.hash,
           title: selected.title,

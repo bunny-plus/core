@@ -1,6 +1,7 @@
 import { createSession, readCookie, readSession, sessionCookie, type Viewer } from "./session";
 import { TtlCache } from "../server/cache";
 import { fetchJson } from "../server/upstream";
+import { parseRestreamRequest, RestreamValidationError } from "./restream";
 
 export interface Env {
   ADMIN_DISCORD_IDS: string;
@@ -395,6 +396,7 @@ function mutationGuard(request: Request, env: Env, pathname: string) {
   }
   const jsonRoutes = new Set([
     "/api/admin/movies/add",
+    "/api/admin/restream/start",
     "/api/admin/torbox/options",
     "/api/admin/torbox/start",
   ]);
@@ -868,7 +870,43 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       return apiError(error);
     }
   }
-  if (url.pathname === "/api/admin/torbox/stop" && request.method === "POST") {
+  if (url.pathname === "/api/admin/restream/start" && request.method === "POST") {
+    const authorization = await authorizeCostly(
+      request,
+      env,
+      metadata,
+      "controller-mutation",
+      10,
+      "stream.manage",
+    );
+    if (authorization instanceof Response) return authorization;
+    try {
+      const restream = parseRestreamRequest(await jsonObject(request));
+      await serializedController(() =>
+        controller(env, "POST", {
+          action: "restream",
+          quality: restream.quality,
+          source: restream.source,
+          title: restream.title,
+        }),
+      );
+      return Response.json({
+        detail: "Restream is starting",
+        platform: restream.platform,
+        quality: restream.quality,
+        title: restream.title,
+      });
+    } catch (error) {
+      if (error instanceof RestreamValidationError) {
+        return Response.json({ error: error.message }, { status: 400 });
+      }
+      return apiError(error);
+    }
+  }
+  if (
+    ["/api/admin/stream/stop", "/api/admin/torbox/stop"].includes(url.pathname) &&
+    request.method === "POST"
+  ) {
     const authorization = await authorizeCostly(
       request,
       env,
@@ -886,7 +924,10 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       return apiError(error);
     }
   }
-  if (url.pathname === "/api/admin/torbox/status" && request.method === "GET") {
+  if (
+    ["/api/admin/stream/status", "/api/admin/torbox/status"].includes(url.pathname) &&
+    request.method === "GET"
+  ) {
     const authorization = await authorizeCostly(
       request,
       env,
