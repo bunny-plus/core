@@ -4,13 +4,14 @@ import { Readable } from "node:stream";
 import { WebSocketServer } from "ws";
 
 import { authenticateRoomMember, handleRequest, type Env } from "../worker/index";
+import { ChatHistory } from "./chat-history";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
 
 const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
-const room = new WatchRoom();
+const room = new WatchRoom(new ChatHistory(env.CHAT_DB_PATH || "data/chat.sqlite", 200));
 const webSockets = new WebSocketServer({
   maxPayload: 16 * 1_024,
   noServer: true,

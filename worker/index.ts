@@ -8,6 +8,7 @@ export interface Env {
   APP_VERSION?: string;
   APP_URL: string;
   API_URL?: string;
+  CHAT_DB_PATH?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   DISCORD_GUILD_ID: string;

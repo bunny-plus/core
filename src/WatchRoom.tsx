@@ -39,6 +39,7 @@ type RoomReaction = {
 };
 
 type RoomChat = {
+  createdAt: string;
   id: string;
   member: { avatar: string | null; id: string; name: string };
   message: string;
@@ -402,6 +403,7 @@ export default function WatchRoom({
           const message = JSON.parse(event.data as string) as {
             clientTime?: number;
             chats?: RoomChat[];
+            createdAt?: string;
             members?: User[];
             serverTime?: number;
             type: string;
@@ -443,6 +445,7 @@ export default function WatchRoom({
             typeof message.x === "number"
           ) {
             const chat = {
+              createdAt: message.createdAt ?? new Date().toISOString(),
               id: message.id,
               member: message.member,
               message: message.message,
@@ -459,7 +462,7 @@ export default function WatchRoom({
                 },
               ];
             });
-            setChatHistory((current) => [...current.slice(-49), chat]);
+            setChatHistory((current) => [...current.slice(-199), chat]);
             setTimeout(
               () => setChats((current) => current.filter(({ id }) => id !== chat.id)),
               10_500,
