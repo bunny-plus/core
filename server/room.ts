@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import WebSocket from "ws";
 
+import { ChatHistory, type RoomChat } from "./chat-history";
+
 export type RoomMember = {
   admin: boolean;
   avatar: string | null;
@@ -22,14 +24,6 @@ type MemberActivity = {
   lastReaction?: number;
 };
 
-type RoomChat = {
-  id: string;
-  member: RoomMember;
-  message: string;
-  type: "chat";
-  x: number;
-};
-
 const presenceTimeout = 2 * 60 * 1_000;
 const presenceSweepInterval = 30 * 1_000;
 const messageWindow = 10_000;
@@ -39,12 +33,11 @@ const maxConnectionsPerMember = 5;
 const maxBufferedAmount = 64 * 1_024;
 
 export class WatchRoom {
-  private readonly chats: RoomChat[] = [];
   private readonly memberActivity = new Map<string, MemberActivity>();
   private readonly sessions = new Map<WebSocket, RoomSession>();
   private readonly sweep: NodeJS.Timeout;
 
-  constructor() {
+  constructor(private readonly chatHistory: ChatHistory) {
     this.sweep = setInterval(() => this.sweepPresence(), presenceSweepInterval);
     this.sweep.unref();
   }
@@ -87,7 +80,7 @@ export class WatchRoom {
     this.send(
       socket,
       JSON.stringify({
-        chats: this.chats,
+        chats: this.chatHistory.all(),
         members: this.members(),
         serverTime: Date.now(),
         type: "welcome",
@@ -151,14 +144,19 @@ export class WatchRoom {
         this.memberActivity.set(session.member.id, activity);
         session.lastSeen = now;
         const chat: RoomChat = {
+          createdAt: new Date(now).toISOString(),
           id: randomUUID(),
           member: session.member,
           message: text,
           type: "chat",
           x: 18 + Math.round(Math.random() * 64),
         };
-        this.chats.push(chat);
-        if (this.chats.length > 50) this.chats.shift();
+        try {
+          this.chatHistory.append(chat);
+        } catch (error) {
+          console.error("Could not persist room chat", error);
+          return;
+        }
         this.broadcast(JSON.stringify(chat));
       }
     } catch {

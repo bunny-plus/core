@@ -8,6 +8,7 @@
 .wrangler/
 .next/
 dist/
+data/
 node_modules/
 result
 *.tsbuildinfo
