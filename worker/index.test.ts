@@ -88,3 +88,69 @@ test("JSON mutations reject invalid content and malformed input before upstream 
     error: "Only YouTube and Twitch streams are supported",
   });
 });
+
+test("stream info combines relay metadata and HLS availability", async (context) => {
+  const cookie = await adminCookie();
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === env.RELAY_CONTROLLER_URL) {
+      return Response.json({ running: true, title: "Movie night" });
+    }
+    if (url === env.STREAM_URL) {
+      return new Response("#EXTM3U", { status: 200 });
+    }
+    throw new Error(`Unexpected request: ${url}`);
+  });
+
+  const response = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-info", { headers: { Cookie: cookie } }),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    online: true,
+    running: true,
+    title: "Movie night",
+    upstreamStatus: 200,
+  });
+  assert.deepEqual(requests.sort(), [env.RELAY_CONTROLLER_URL, env.STREAM_URL].sort());
+
+  const removed = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-status", { headers: { Cookie: cookie } }),
+    env,
+  );
+  assert.equal(removed.status, 404);
+});
+
+test("stream info coalesces concurrent upstream probes", async (context) => {
+  const cookie = await adminCookie();
+  const isolatedEnv = {
+    ...env,
+    RELAY_CONTROLLER_URL: "http://coalesced-controller.test",
+    STREAM_URL: "https://coalesced-stream.test/index.m3u8",
+  };
+  let requests = 0;
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    requests += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return String(input) === isolatedEnv.RELAY_CONTROLLER_URL
+      ? Response.json({ running: true, title: "Together" })
+      : new Response("#EXTM3U");
+  });
+  const request = () =>
+    handleRequest(
+      new Request("https://api.bunny.plus/api/stream-info", { headers: { Cookie: cookie } }),
+      isolatedEnv,
+    );
+
+  const responses = await Promise.all([request(), request(), request()]);
+
+  assert.deepEqual(
+    await Promise.all(responses.map((response) => response.json())),
+    Array(3).fill({ online: true, running: true, title: "Together", upstreamStatus: 200 }),
+  );
+  assert.equal(requests, 2);
+});
