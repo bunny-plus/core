@@ -382,6 +382,202 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   font-size: 0.72em;
   letter-spacing: 0.02em;
 }
+.runescape-chat-text,
+.runescape-chat-character {
+  display: inline-block;
+}
+.runescape-chat-character {
+  animation-delay: calc(var(--character-index) * -55ms);
+  animation-duration: 1s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+.runescape-color-yellow {
+  color: #ffff00;
+}
+.runescape-color-red {
+  color: #ff3030;
+}
+.runescape-color-green {
+  color: #00ff40;
+}
+.runescape-color-cyan {
+  color: #00ffff;
+}
+.runescape-color-purple {
+  color: #d060ff;
+}
+.runescape-color-white {
+  color: #ffffff;
+}
+.runescape-color-flash1 {
+  animation: runescape-flash1 0.7s steps(1) infinite;
+}
+.runescape-color-flash2 {
+  animation: runescape-flash2 0.7s steps(1) infinite;
+}
+.runescape-color-flash3 {
+  animation: runescape-flash3 0.7s steps(1) infinite;
+}
+.runescape-color-glow1 {
+  animation: runescape-glow1 2.4s linear infinite;
+}
+.runescape-color-glow2 {
+  animation: runescape-glow2 2.4s linear infinite;
+}
+.runescape-color-glow3 {
+  animation: runescape-glow3 2.4s linear infinite;
+}
+.runescape-motion-wave .runescape-chat-character {
+  animation-name: runescape-wave;
+}
+.runescape-motion-wave2 .runescape-chat-character {
+  animation-name: runescape-wave2;
+}
+.runescape-motion-shake .runescape-chat-character {
+  animation-name: runescape-shake;
+  animation-duration: 0.28s;
+}
+.runescape-motion-scroll .runescape-chat-character {
+  animation-name: runescape-text-scroll;
+  animation-duration: 1.4s;
+}
+.runescape-motion-slide .runescape-chat-character {
+  animation-name: runescape-slide;
+  animation-delay: calc(var(--character-index) * 45ms);
+  animation-duration: 1.8s;
+}
+@keyframes runescape-wave {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.42em);
+  }
+}
+@keyframes runescape-wave2 {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  25% {
+    transform: translateY(-0.35em) rotate(-7deg);
+  }
+  75% {
+    transform: translateY(0.35em) rotate(7deg);
+  }
+}
+@keyframes runescape-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-0.08em, 0.12em);
+  }
+  50% {
+    transform: translate(0.1em, -0.1em);
+  }
+  75% {
+    transform: translate(0.06em, 0.1em);
+  }
+}
+@keyframes runescape-text-scroll {
+  0%,
+  100% {
+    transform: translateY(0.65em);
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(-0.65em);
+  }
+}
+@keyframes runescape-slide {
+  0%,
+  20% {
+    transform: translateX(0.8em);
+    opacity: 0;
+  }
+  35%,
+  85% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes runescape-flash1 {
+  0%,
+  49% {
+    color: #ff0000;
+  }
+  50%,
+  100% {
+    color: #ffff00;
+  }
+}
+@keyframes runescape-flash2 {
+  0%,
+  49% {
+    color: #00ffff;
+  }
+  50%,
+  100% {
+    color: #0000ff;
+  }
+}
+@keyframes runescape-flash3 {
+  0%,
+  49% {
+    color: #80ff80;
+  }
+  50%,
+  100% {
+    color: #006400;
+  }
+}
+@keyframes runescape-glow1 {
+  0%,
+  100% {
+    color: #ff0000;
+  }
+  33% {
+    color: #ffff00;
+  }
+  66% {
+    color: #00ff00;
+  }
+}
+@keyframes runescape-glow2 {
+  0%,
+  100% {
+    color: #ff0000;
+  }
+  33% {
+    color: #ff00ff;
+  }
+  66% {
+    color: #0000ff;
+  }
+}
+@keyframes runescape-glow3 {
+  0%,
+  100% {
+    color: #ffffff;
+  }
+  33% {
+    color: #00ff00;
+  }
+  66% {
+    color: #00ffff;
+  }
+}
 @keyframes room-chat-scroll {
   from {
     transform: translateX(0);
