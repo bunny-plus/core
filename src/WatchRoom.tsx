@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
+import { parseChatEffects } from "./chat-effects";
 import { playbackCorrection } from "./playback";
 
 export type User = {
@@ -65,6 +66,33 @@ type ViewerParticle = {
   x: number;
   y: number;
 };
+
+function ChatMessage({ message, scrolling = false }: { message: string; scrolling?: boolean }) {
+  const effects = parseChatEffects(message);
+  if (!scrolling) return effects.text;
+  const classes = [
+    "runescape-chat-text",
+    effects.color && `runescape-color-${effects.color}`,
+    effects.motion && `runescape-motion-${effects.motion}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <span className={classes} aria-label={effects.text}>
+      {[...effects.text].map((character, index) => (
+        <span
+          className="runescape-chat-character"
+          style={{ "--character-index": index } as CSSProperties}
+          aria-hidden="true"
+          key={index}
+        >
+          {character === " " ? "\u00a0" : character}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 const viewerConnectorCharms = ["blossom", "leafy", "bunny-face"] as const;
 const particleThemes: ParticleVariant[][] = [
@@ -801,7 +829,7 @@ export default function WatchRoom({
                   >
                     <strong>{chat.member.name}</strong>
                     <span aria-hidden="true">: </span>
-                    <span>{chat.message}</span>
+                    <ChatMessage message={chat.message} scrolling />
                   </span>
                 ) : (
                   <span
@@ -819,7 +847,9 @@ export default function WatchRoom({
                     <span className="room-chat-bubble">
                       <strong aria-hidden="true">{chat.member.name}</strong>
                       <span className="sr-only">{chat.member.name} says: </span>
-                      <span>{chat.message}</span>
+                      <span>
+                        <ChatMessage message={chat.message} />
+                      </span>
                     </span>
                   </span>
                 ),
@@ -888,7 +918,9 @@ export default function WatchRoom({
                     <p className="chat-history-entry" key={chat.id}>
                       <strong>{chat.member.name}</strong>
                       <span aria-hidden="true">: </span>
-                      <span>{chat.message}</span>
+                      <span>
+                        <ChatMessage message={chat.message} />
+                      </span>
                     </p>
                   ))}
                 </div>
