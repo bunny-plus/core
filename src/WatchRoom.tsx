@@ -27,8 +27,10 @@ type PlayerStats = {
 };
 
 type RelayStatus = {
+  online: boolean;
   running: boolean;
   title: string | null;
+  upstreamStatus: number | null;
 };
 
 type RoomReaction = {
@@ -357,7 +359,7 @@ export default function WatchRoom({
     let timer: ReturnType<typeof setTimeout> | undefined;
     const request = new AbortController();
 
-    async function checkRelay() {
+    async function checkStreamInfo() {
       try {
         const response = await apiFetch("/api/stream-info", {
           cache: "no-store",
@@ -365,15 +367,27 @@ export default function WatchRoom({
         });
         if (!response.ok) return;
         const status = (await response.json()) as RelayStatus;
-        if (!stopped) setRelayStatus(status);
+        if (stopped) return;
+        setRelayStatus(status);
+        setStreamOnline(status.online);
+        if (!status.online) {
+          setPlayerStatus("error");
+          setIsBuffering(false);
+          setSyncLabel("Stream is offline");
+        } else {
+          setPlayerStatus((current) => (current === "error" ? "loading" : current));
+        }
       } catch {
-        if (!stopped && !request.signal.aborted) setRelayStatus(null);
+        if (!stopped && !request.signal.aborted) {
+          setRelayStatus(null);
+          setStreamOnline(false);
+        }
       } finally {
-        if (!stopped) timer = setTimeout(checkRelay, 10_000);
+        if (!stopped) timer = setTimeout(checkStreamInfo, 10_000);
       }
     }
 
-    void checkRelay();
+    void checkStreamInfo();
     return () => {
       stopped = true;
       request.abort();
@@ -493,44 +507,6 @@ export default function WatchRoom({
       clearTimeout(retry);
       socket?.close();
       socketRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const request = new AbortController();
-
-    async function checkStream() {
-      try {
-        const response = await apiFetch("/api/stream-status", {
-          cache: "no-store",
-          signal: request.signal,
-        });
-        const status = response.ok
-          ? ((await response.json()) as { online: boolean })
-          : { online: false };
-        if (stopped) return;
-        setStreamOnline(status.online);
-        if (!status.online) {
-          setPlayerStatus("error");
-          setIsBuffering(false);
-          setSyncLabel("Stream is offline");
-        } else {
-          setPlayerStatus((current) => (current === "error" ? "loading" : current));
-        }
-      } catch {
-        if (!stopped && !request.signal.aborted) setStreamOnline(false);
-      } finally {
-        if (!stopped) timer = setTimeout(checkStream, 10_000);
-      }
-    }
-
-    void checkStream();
-    return () => {
-      stopped = true;
-      request.abort();
-      clearTimeout(timer);
     };
   }, []);
 

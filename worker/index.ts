@@ -315,6 +315,36 @@ async function controller(env: Env, method: "GET" | "POST", body?: object) {
   return result;
 }
 
+function streamInfoCacheKey(env: Env) {
+  return `stream-info:${env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL}:${env.STREAM_URL}`;
+}
+
+async function streamInfo(env: Env) {
+  return cachedData(streamInfoCacheKey(env), 5, async () => {
+    const [relay, upstream] = await Promise.all([
+      controller(env, "GET")
+        .then((status) => ({ running: status.running === true, title: status.title ?? null }))
+        .catch(() => ({ running: false, title: null })),
+      fetch(env.STREAM_URL, {
+        headers: { Accept: "application/vnd.apple.mpegurl" },
+        signal: AbortSignal.timeout(5_000),
+      })
+        .then(async (response) => {
+          await response.body?.cancel();
+          return { online: response.ok, upstreamStatus: response.status };
+        })
+        .catch(() => ({ online: false, upstreamStatus: null })),
+    ]);
+    return { ...relay, ...upstream };
+  });
+}
+
+async function mutateController(env: Env, body: object) {
+  const result = await serializedController(() => controller(env, "POST", body));
+  cache.invalidate(streamInfoCacheKey(env));
+  return result;
+}
+
 function apiError(error: unknown) {
   return Response.json(
     { error: error instanceof Error ? error.message : "Unexpected request failure" },
@@ -853,19 +883,17 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         input.torrentId as number,
         input.fileId as number,
       );
-      await serializedController(() =>
-        controller(env, "POST", {
-          action: "start",
-          audioIndex: Number.isInteger(input.audioIndex) ? input.audioIndex : 0,
-          resolutionIndex: Number.isInteger(input.resolutionIndex) ? input.resolutionIndex : null,
-          source,
-          subtitleIndex: Number.isInteger(input.subtitleIndex) ? input.subtitleIndex : null,
-          title:
-            typeof input.title === "string"
-              ? input.title.slice(0, 200) || "TorBox stream"
-              : "TorBox stream",
-        }),
-      );
+      await mutateController(env, {
+        action: "start",
+        audioIndex: Number.isInteger(input.audioIndex) ? input.audioIndex : 0,
+        resolutionIndex: Number.isInteger(input.resolutionIndex) ? input.resolutionIndex : null,
+        source,
+        subtitleIndex: Number.isInteger(input.subtitleIndex) ? input.subtitleIndex : null,
+        title:
+          typeof input.title === "string"
+            ? input.title.slice(0, 200) || "TorBox stream"
+            : "TorBox stream",
+      });
       return Response.json({ detail: "Stream is starting" });
     } catch (error) {
       return apiError(error);
@@ -883,14 +911,12 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       const restream = parseRestreamRequest(await jsonObject(request));
-      const result = await serializedController(() =>
-        controller(env, "POST", {
-          action: "restream",
-          quality: restream.quality,
-          source: restream.source,
-          title: restream.title,
-        }),
-      );
+      const result = await mutateController(env, {
+        action: "restream",
+        quality: restream.quality,
+        source: restream.source,
+        title: restream.title,
+      });
       return Response.json({
         detail: "Restream is starting",
         platform: restream.platform,
@@ -921,9 +947,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     );
     if (authorization instanceof Response) return authorization;
     try {
-      return Response.json(
-        await serializedController(() => controller(env, "POST", { action: "stop" })),
-      );
+      return Response.json(await mutateController(env, { action: "stop" }));
     } catch (error) {
       return apiError(error);
     }
@@ -947,41 +971,10 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       return apiError(error);
     }
   }
-  if (url.pathname === "/api/stream-status" && request.method === "GET") {
-    const authorization = await authorizeCostly(request, env, metadata, "stream-status", 60);
-    if (authorization instanceof Response) return authorization;
-    try {
-      const response = await fetch(env.STREAM_URL, {
-        headers: { Accept: "application/vnd.apple.mpegurl" },
-        signal: AbortSignal.timeout(5_000),
-      });
-      await response.body?.cancel();
-      return Response.json(
-        { online: response.ok, upstreamStatus: response.status },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    } catch {
-      return Response.json(
-        { online: false, upstreamStatus: null },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    }
-  }
   if (url.pathname === "/api/stream-info" && request.method === "GET") {
-    const authorization = await authorizeCostly(request, env, metadata, "controller-read", 60);
+    const authorization = await authorizeCostly(request, env, metadata, "stream-info", 60);
     if (authorization instanceof Response) return authorization;
-    try {
-      const status = await controller(env, "GET");
-      return Response.json(
-        { running: status.running === true, title: status.title ?? null },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    } catch {
-      return Response.json(
-        { running: false, title: null },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    }
+    return Response.json(await streamInfo(env), { headers: { "Cache-Control": "no-store" } });
   }
   if (url.pathname === "/api/room" && request.method === "GET")
     return new Response("Expected a WebSocket upgrade", { status: 426 });
