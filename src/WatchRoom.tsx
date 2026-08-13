@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { playbackCorrection } from "./playback";
+import { normalizeStreamInfo, streamDisplay, type StreamInfo } from "./stream-display";
 
 export type User = {
   admin: boolean;
@@ -24,13 +25,6 @@ type PlayerStats = {
   rate: number;
   resolution: string;
   seekableWindow: number;
-};
-
-type RelayStatus = {
-  online: boolean;
-  running: boolean;
-  title: string | null;
-  upstreamStatus: number | null;
 };
 
 type RoomReaction = {
@@ -287,7 +281,7 @@ export default function WatchRoom({
   const [isBuffering, setIsBuffering] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
-  const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
+  const [relayStatus, setRelayStatus] = useState<StreamInfo | null>(null);
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
@@ -366,7 +360,7 @@ export default function WatchRoom({
           signal: request.signal,
         });
         if (!response.ok) return;
-        const status = (await response.json()) as RelayStatus;
+        const status = normalizeStreamInfo((await response.json()) as Record<string, unknown>);
         if (stopped) return;
         setRelayStatus(status);
         setStreamOnline(status.online);
@@ -720,6 +714,8 @@ export default function WatchRoom({
     }
   }
 
+  const streamPresentation = streamDisplay(relayStatus);
+
   return (
     <div className="watch-content">
       <div className="room-grid">
@@ -900,19 +896,11 @@ export default function WatchRoom({
               className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}
             >
               <i aria-hidden="true" />
-              <span>
-                {streamOnline === null || relayStatus === null
-                  ? "CHECKING"
-                  : !streamOnline
-                    ? "OFFLINE"
-                    : relayStatus.running
-                      ? "LIVE"
-                      : "IDLE"}
-              </span>
-              {relayStatus?.running && (
-                <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
+              <span>{streamPresentation.label}</span>
+              {streamPresentation.title && (
+                <span className="stream-title" title={streamPresentation.title}>
                   <AssetIcon name="carrot" />
-                  <span>{relayStatus.title ?? "TorBox stream"}</span>
+                  <span>{streamPresentation.title}</span>
                 </span>
               )}
               <span className="sync-copy">{syncLabel}</span>
