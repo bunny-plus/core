@@ -549,7 +549,7 @@ export default function WatchRoom({
     let attachedHls: Hls | null = null;
 
     async function attachStream(media: HTMLVideoElement) {
-      const { default: HlsPlayer } = await import("hls.js/light");
+      const { default: HlsPlayer } = await import("hls.js");
       if (disposed) return;
       if (HlsPlayer.isSupported()) {
         const hls = new HlsPlayer({
