@@ -52,6 +52,18 @@ type RoomChat = {
 type ChatDisplayMode = "bubbles" | "scrolling";
 type OverlayChat = RoomChat & { lane: number };
 type ParticleVariant = "blossom" | "bunny-face" | "carrot" | "leafy";
+type RoomStyle = CSSProperties & {
+  "--character-index"?: number;
+  "--chat-x"?: string;
+  "--chat-y"?: string;
+  "--reaction-x"?: string;
+  "--volume"?: string;
+};
+
+function roomStyle(style: RoomStyle): CSSProperties {
+  return style;
+}
+
 type ViewerParticle = {
   age: number;
   bounces: number;
@@ -83,7 +95,7 @@ function ChatMessage({ message, scrolling = false }: { message: string; scrollin
       {[...effects.text].map((character, index) => (
         <span
           className="runescape-chat-character"
-          style={{ "--character-index": index } as CSSProperties}
+          style={roomStyle({ "--character-index": index })}
           aria-hidden="true"
           key={index}
         >
@@ -336,7 +348,7 @@ export default function WatchRoom({
     if (!shortcutsEnabled) return;
 
     function reactionShortcut(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       if (
         event.key.toLowerCase() !== "f" ||
         event.repeat ||
@@ -358,7 +370,7 @@ export default function WatchRoom({
     if (!shortcutsEnabled) return;
 
     function chatShortcut(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       if (
         event.key.toLowerCase() !== "c" ||
         event.repeat ||
@@ -394,6 +406,7 @@ export default function WatchRoom({
           signal: request.signal,
         });
         if (!response.ok) return;
+        // SAFETY: /api/stream-info is produced by the matching RelayStatus server contract.
         const status = (await response.json()) as RelayStatus;
         if (stopped) return;
         setRelayStatus(status);
@@ -442,6 +455,7 @@ export default function WatchRoom({
       });
       socket.addEventListener("message", (event) => {
         try {
+          // SAFETY: This listener receives text frames from the first-party room protocol.
           const message = JSON.parse(event.data as string) as {
             clientTime?: number;
             chats?: RoomChat[];
@@ -465,7 +479,8 @@ export default function WatchRoom({
             message.id &&
             message.member &&
             message.variant &&
-            typeof message.x === "number"
+            message.x !== undefined &&
+            Number.isFinite(message.x)
           ) {
             const reaction = {
               id: message.id,
@@ -484,7 +499,8 @@ export default function WatchRoom({
             message.id &&
             message.member &&
             message.message &&
-            typeof message.x === "number"
+            message.x !== undefined &&
+            Number.isFinite(message.x)
           ) {
             const chat = {
               createdAt: message.createdAt ?? new Date().toISOString(),
@@ -812,7 +828,7 @@ export default function WatchRoom({
               {reactions.map((reaction) => (
                 <span
                   className="room-reaction"
-                  style={{ "--reaction-x": `${reaction.x}%` } as CSSProperties}
+                  style={roomStyle({ "--reaction-x": `${reaction.x}%` })}
                   key={reaction.id}
                 >
                   <span className="sr-only">{reaction.member.name} reacted</span>
@@ -824,7 +840,7 @@ export default function WatchRoom({
                 chatDisplayMode === "scrolling" ? (
                   <span
                     className="room-chat-scroll"
-                    style={{ "--chat-y": `${12 + chat.lane * 13}%` } as CSSProperties}
+                    style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
                     key={chat.id}
                   >
                     <strong>{chat.member.name}</strong>
@@ -834,7 +850,7 @@ export default function WatchRoom({
                 ) : (
                   <span
                     className="room-chat"
-                    style={{ "--chat-x": `${chat.x}%` } as CSSProperties}
+                    style={roomStyle({ "--chat-x": `${chat.x}%` })}
                     key={chat.id}
                   >
                     <span className="room-chat-avatar" aria-hidden="true">
@@ -962,11 +978,9 @@ export default function WatchRoom({
                 </button>
                 <span
                   className="volume-slider"
-                  style={
-                    {
-                      "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)`,
-                    } as CSSProperties
-                  }
+                  style={roomStyle({
+                    "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)`,
+                  })}
                 >
                   <input
                     type="range"

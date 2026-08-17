@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
+import { TLSSocket } from "node:tls";
 
 import { WebSocketServer } from "ws";
 
@@ -23,7 +24,8 @@ class RequestBodyError extends Error {}
 function requestUrl(request: IncomingMessage) {
   const forwardedProtocol = request.headers["x-forwarded-proto"]?.toString().split(",")[0]?.trim();
   const protocol =
-    forwardedProtocol || ((request.socket as { encrypted?: boolean }).encrypted ? "https" : "http");
+    forwardedProtocol ||
+    (request.socket instanceof TLSSocket && request.socket.encrypted ? "https" : "http");
   const host =
     request.headers["x-forwarded-host"]?.toString().split(",")[0]?.trim() ||
     request.headers.host ||
@@ -59,7 +61,7 @@ async function readBody(request: IncomingMessage) {
     chunks.push(buffer);
   }
   const body = Buffer.concat(chunks);
-  return body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
+  return Uint8Array.from(body).buffer;
 }
 
 function corsHeaders(request: IncomingMessage) {
@@ -81,6 +83,7 @@ async function send(response: ServerResponse, result: Response, request: Incomin
     response.end();
     return;
   }
+  // SAFETY: Node's fetch body is the Web ReadableStream implementation accepted by fromWeb.
   Readable.fromWeb(result.body as import("node:stream/web").ReadableStream).pipe(response);
 }
 

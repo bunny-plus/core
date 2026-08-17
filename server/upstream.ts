@@ -1,3 +1,6 @@
+export type JsonObject = { [key: string]: JsonValue };
+export type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
+
 export type JsonFetchOptions = RequestInit & {
   fetch?: typeof fetch;
   maxBytes?: number;
@@ -83,6 +86,7 @@ export async function fetchJson<T>(
   }
 
   try {
+    // SAFETY: Callers provide the expected response contract and validate required fields before use.
     return { data: JSON.parse(await readBounded(response, maxBytes, name)) as T, response };
   } catch (error) {
     if (error instanceof UpstreamError) throw error;

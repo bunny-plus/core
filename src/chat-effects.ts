@@ -27,6 +27,14 @@ export type ChatEffects = {
 const colors = new Set<string>(chatColors);
 const motions = new Set<string>(chatMotions);
 
+function isChatColor(value: string): value is ChatColor {
+  return colors.has(value);
+}
+
+function isChatMotion(value: string): value is ChatMotion {
+  return motions.has(value);
+}
+
 function leadingCode(message: string) {
   const wrapped = message.match(/^:([a-z][a-z0-9]*):/i);
   if (wrapped) return { code: wrapped[1].toLowerCase(), length: wrapped[0].length };
@@ -42,12 +50,12 @@ export function parseChatEffects(message: string): ChatEffects {
   while (true) {
     const prefix = leadingCode(remaining);
     if (!prefix) break;
-    if (colors.has(prefix.code)) {
+    if (isChatColor(prefix.code)) {
       if (color) break;
-      color = prefix.code as ChatColor;
-    } else if (motions.has(prefix.code)) {
+      color = prefix.code;
+    } else if (isChatMotion(prefix.code)) {
       if (motion) break;
-      motion = prefix.code as ChatMotion;
+      motion = prefix.code;
     } else {
       break;
     }

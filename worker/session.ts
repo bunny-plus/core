@@ -1,3 +1,5 @@
+import type { JsonValue } from "../server/upstream";
+
 export type Viewer = {
   admin: boolean;
   avatar: string | null;
@@ -36,20 +38,23 @@ async function key(secret: string) {
   );
 }
 
-function isViewer(value: unknown): value is Viewer {
+function isString(value: JsonValue): value is string {
+  return typeof value === "string";
+}
+
+function isViewer(value: JsonValue): value is Viewer {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const viewer = value as Partial<Viewer>;
   return (
-    typeof viewer.admin === "boolean" &&
-    (viewer.avatar === null || typeof viewer.avatar === "string") &&
-    typeof viewer.expires === "number" &&
-    Number.isFinite(viewer.expires) &&
-    typeof viewer.id === "string" &&
-    viewer.id.length > 0 &&
-    typeof viewer.name === "string" &&
-    viewer.name.length > 0 &&
-    Array.isArray(viewer.permissions) &&
-    viewer.permissions.every((permission) => typeof permission === "string")
+    typeof value.admin === "boolean" &&
+    (value.avatar === null || typeof value.avatar === "string") &&
+    typeof value.expires === "number" &&
+    Number.isFinite(value.expires) &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    typeof value.name === "string" &&
+    value.name.length > 0 &&
+    Array.isArray(value.permissions) &&
+    value.permissions.every(isString)
   );
 }
 
@@ -77,7 +82,7 @@ export async function readSession(request: Request, secret: string): Promise<Vie
       encoder.encode(body),
     );
     if (!valid) return null;
-    const viewer: unknown = JSON.parse(decoder.decode(decode(body)));
+    const viewer: JsonValue = JSON.parse(decoder.decode(decode(body)));
     return isViewer(viewer) && viewer.expires > Date.now() ? viewer : null;
   } catch {
     return null;

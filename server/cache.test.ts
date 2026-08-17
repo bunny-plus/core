@@ -51,5 +51,7 @@ test("TTL cache invalidation prevents stale loads from overwriting fresh values"
   resolveStale("stale");
   assert.equal(await stale, "stale");
   assert.equal(await cache.getOrLoad("movie:1", 60, async () => "wrong"), "fresh");
-  assert.equal((cache as unknown as { generations: Map<string, number> }).generations.size, 0);
+  const generations = Object.getOwnPropertyDescriptor(cache, "generations")?.value;
+  assert.ok(generations instanceof Map);
+  assert.equal(generations.size, 0);
 });

@@ -1,6 +1,6 @@
 import { createSession, readCookie, readSession, sessionCookie, type Viewer } from "./session";
 import { TtlCache } from "../server/cache";
-import { fetchJson } from "../server/upstream";
+import { fetchJson, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
 
 export interface Env {
@@ -34,6 +34,20 @@ type DiscordUser = {
   id: string;
   username: string;
 };
+
+type DiscordMember = {
+  roles: string[];
+};
+
+type ControllerResponse = {
+  detail?: string;
+  error?: string;
+  running?: boolean;
+  title?: string | null;
+};
+
+type DevViewer = Partial<Omit<Viewer, "expires">>;
+type RolePermissions = { [roleId: string]: string[] };
 
 export type RoomMember = Pick<Viewer, "admin" | "avatar" | "id" | "name">;
 
@@ -86,6 +100,85 @@ type TorBoxResponse<T> = {
   error: string | null;
   success: boolean;
 };
+
+function isJsonObject(value: JsonValue): value is JsonObject {
+  return value !== null && !Array.isArray(value) && typeof value === "object";
+}
+
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isStringList(value: JsonValue | undefined): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+function isInteger(value: JsonValue | undefined): value is number {
+  return Number.isInteger(value);
+}
+
+function isDevViewer(value: JsonValue): value is DevViewer {
+  if (!isJsonObject(value)) return false;
+  return (
+    (value.admin === undefined || typeof value.admin === "boolean") &&
+    (value.avatar === undefined || value.avatar === null || typeof value.avatar === "string") &&
+    (value.id === undefined || typeof value.id === "string") &&
+    (value.name === undefined || typeof value.name === "string") &&
+    (value.permissions === undefined || isStringList(value.permissions))
+  );
+}
+
+function isRolePermissions(value: JsonValue): value is RolePermissions {
+  return isJsonObject(value) && Object.values(value).every(isStringList);
+}
+
+function isDiscordUser(value: JsonValue): value is DiscordUser {
+  if (!isJsonObject(value)) return false;
+  return (
+    isString(value.id) &&
+    isString(value.username) &&
+    (value.avatar === null || isString(value.avatar)) &&
+    (value.global_name === null || isString(value.global_name))
+  );
+}
+
+function isDiscordMember(value: JsonValue): value is DiscordMember {
+  return isJsonObject(value) && isStringList(value.roles);
+}
+
+function isControllerResponse(value: JsonValue): value is ControllerResponse {
+  if (!isJsonObject(value)) return false;
+  return (
+    (value.detail === undefined || isString(value.detail)) &&
+    (value.error === undefined || isString(value.error)) &&
+    (value.running === undefined || typeof value.running === "boolean") &&
+    (value.title === undefined || value.title === null || isString(value.title))
+  );
+}
+
+function isTmdbMovie(movie: JsonValue): movie is TmdbMovie {
+  if (!isJsonObject(movie)) return false;
+  return (
+    Number.isInteger(movie.id) &&
+    isString(movie.title) &&
+    isString(movie.overview) &&
+    isString(movie.release_date) &&
+    typeof movie.vote_average === "number" &&
+    (movie.backdrop_path === null || isString(movie.backdrop_path)) &&
+    (movie.poster_path === null || isString(movie.poster_path))
+  );
+}
+
+function isStremioStream(stream: JsonValue): stream is StremioStream {
+  if (!isJsonObject(stream)) return false;
+  return (
+    (stream.fileIdx === undefined || isInteger(stream.fileIdx)) &&
+    (stream.infoHash === undefined || isString(stream.infoHash)) &&
+    (stream.name === undefined || isString(stream.name)) &&
+    (stream.sources === undefined || isStringList(stream.sources)) &&
+    (stream.title === undefined || isString(stream.title))
+  );
+}
 
 const cache = new TtlCache(500);
 const rateLimits = new Map<string, { count: number; started: number }>();
@@ -151,22 +244,9 @@ async function viewerForRequest(request: Request, env: Env, metadata?: RequestMe
   const localHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
   if (!localHosts.has(hostname) || !localHosts.has(appHostname)) return null;
   try {
-    const parsed: unknown = env.DEV_USER_JSON ? JSON.parse(env.DEV_USER_JSON) : {};
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
-    const configured = parsed as Partial<Viewer>;
-    if (
-      (configured.admin !== undefined && typeof configured.admin !== "boolean") ||
-      (configured.avatar !== undefined &&
-        configured.avatar !== null &&
-        typeof configured.avatar !== "string") ||
-      (configured.id !== undefined && typeof configured.id !== "string") ||
-      (configured.name !== undefined && typeof configured.name !== "string") ||
-      (configured.permissions !== undefined &&
-        (!Array.isArray(configured.permissions) ||
-          !configured.permissions.every((permission) => typeof permission === "string")))
-    ) {
-      throw new Error();
-    }
+    const parsed: JsonValue = env.DEV_USER_JSON ? JSON.parse(env.DEV_USER_JSON) : {};
+    if (!isDevViewer(parsed)) throw new Error();
+    const configured = parsed;
     return {
       admin: configured.admin ?? true,
       avatar: configured.avatar ?? null,
@@ -182,21 +262,9 @@ async function viewerForRequest(request: Request, env: Env, metadata?: RequestMe
 
 function permissionsForRoles(roleIds: string[], env: Env) {
   try {
-    const parsed: unknown = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}");
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      !Object.values(parsed).every(
-        (permissions) =>
-          Array.isArray(permissions) &&
-          permissions.every((permission) => typeof permission === "string"),
-      )
-    ) {
-      throw new Error();
-    }
-    const configured = parsed as Record<string, string[]>;
-    return [...new Set(roleIds.flatMap((roleId) => configured[roleId] ?? []))];
+    const parsed: JsonValue = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}");
+    if (!isRolePermissions(parsed)) throw new Error();
+    return [...new Set(roleIds.flatMap((roleId) => parsed[roleId] ?? []))];
   } catch {
     throw new Error("DISCORD_ROLE_PERMISSIONS must map Discord role IDs to permission arrays");
   }
@@ -209,7 +277,7 @@ async function torBox<T>(path: string, env: Env) {
     name: "TorBox",
     timeoutMs: 10_000,
   });
-  if (!result || typeof result !== "object" || result.success !== true || !("data" in result)) {
+  if (result.success !== true) {
     throw new Error("TorBox request failed");
   }
   return result.data;
@@ -241,20 +309,6 @@ function cleanMovie(movie: TmdbMovie) {
   };
 }
 
-function isTmdbMovie(movie: unknown): movie is TmdbMovie {
-  if (!movie || typeof movie !== "object") return false;
-  const value = movie as Partial<TmdbMovie>;
-  return (
-    Number.isInteger(value.id) &&
-    typeof value.title === "string" &&
-    typeof value.overview === "string" &&
-    typeof value.release_date === "string" &&
-    typeof value.vote_average === "number" &&
-    (value.backdrop_path === null || typeof value.backdrop_path === "string") &&
-    (value.poster_path === null || typeof value.poster_path === "string")
-  );
-}
-
 function addonBase(env: Env) {
   if (!env.STREMIO_ADDON_URL) throw new Error("STREMIO_ADDON_URL is not configured");
   const url = new URL(env.STREMIO_ADDON_URL);
@@ -263,20 +317,15 @@ function addonBase(env: Env) {
   return url.toString().replace(/\/$/, "");
 }
 
-function torrentCached(data: unknown, hash: string) {
+function torrentCached(data: JsonValue, hash: string) {
   if (!data) return false;
   if (Array.isArray(data))
     return data.some(
-      (entry) =>
-        typeof entry === "object" &&
-        entry !== null &&
-        "hash" in entry &&
-        String(entry.hash).toLowerCase() === hash,
+      (entry) => isJsonObject(entry) && String(entry.hash ?? "").toLowerCase() === hash,
     );
-  if (typeof data !== "object") return false;
-  const entries = data as Record<string, unknown>;
-  const match = entries[hash] ?? entries[hash.toLowerCase()] ?? entries[hash.toUpperCase()];
-  return match === undefined ? String(entries.hash ?? "").toLowerCase() === hash : Boolean(match);
+  if (!isJsonObject(data)) return false;
+  const match = data[hash] ?? data[hash.toLowerCase()] ?? data[hash.toUpperCase()];
+  return match === undefined ? String(data.hash ?? "").toLowerCase() === hash : Boolean(match);
 }
 
 function releaseScore(label: string) {
@@ -287,19 +336,12 @@ function releaseScore(label: string) {
   return 1;
 }
 
-async function controller(env: Env, method: "GET" | "POST", body?: object) {
+async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
   const url = env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL;
   const secret = env.RELAY_CONTROLLER_SECRET || env.STREAM_CONTROLLER_SECRET;
   if (!url || !secret) throw new Error("Relay controller is not configured");
   const action = body && "action" in body ? body.action : null;
-  const { data: result } = await fetchJson<
-    Record<string, unknown> & {
-      detail?: string;
-      error?: string;
-      running?: boolean;
-      title?: string | null;
-    }
-  >(url, {
+  const { data: result } = await fetchJson<JsonValue>(url, {
     body: body ? JSON.stringify(body) : undefined,
     headers: {
       Authorization: `Bearer ${secret}`,
@@ -310,8 +352,7 @@ async function controller(env: Env, method: "GET" | "POST", body?: object) {
     name: "Stream controller",
     timeoutMs: action === "probe" || action === "restream" ? 30_000 : 10_000,
   });
-  if (!result || typeof result !== "object" || Array.isArray(result))
-    throw new Error("Stream controller returned invalid data");
+  if (!isControllerResponse(result)) throw new Error("Stream controller returned invalid data");
   return result;
 }
 
@@ -339,15 +380,15 @@ async function streamInfo(env: Env) {
   });
 }
 
-async function mutateController(env: Env, body: object) {
+async function mutateController(env: Env, body: JsonObject) {
   const result = await serializedController(() => controller(env, "POST", body));
   cache.invalidate(streamInfoCacheKey(env));
   return result;
 }
 
-function apiError(error: unknown) {
+function apiError(error: Error | null) {
   return Response.json(
-    { error: error instanceof Error ? error.message : "Unexpected request failure" },
+    { error: error?.message ?? "Unexpected request failure" },
     { status: error instanceof ClientError ? error.status : 502 },
   );
 }
@@ -409,10 +450,9 @@ async function serializedController<T>(operation: () => Promise<T>) {
 
 async function jsonObject(request: Request) {
   try {
-    const value: unknown = await request.json();
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      throw new ClientError("A JSON object is required", 400);
-    return value as Record<string, unknown>;
+    const value: JsonValue = await request.json();
+    if (!isJsonObject(value)) throw new ClientError("A JSON object is required", 400);
+    return value;
   } catch (error) {
     if (error instanceof ClientError) throw error;
     throw new ClientError("Malformed JSON", 400);
@@ -455,8 +495,7 @@ async function temporaryDownload(env: Env, torrentId: number, fileId: number) {
       timeoutMs: 10_000,
     },
   );
-  if (!result || typeof result !== "object" || result.success !== true)
-    throw new Error("Could not create TorBox download URL");
+  if (result.success !== true) throw new Error("Could not create TorBox download URL");
   if (!result.data?.startsWith("https://"))
     throw new Error("TorBox returned an invalid download URL");
   return result.data;
@@ -484,35 +523,34 @@ async function finishLogin(request: Request, env: Env) {
   }
 
   try {
-    const { data: token, response: tokenResponse } = await fetchJson<{ access_token?: unknown }>(
-      "https://discord.com/api/oauth2/token",
-      {
-        body: new URLSearchParams({
-          client_id: env.DISCORD_CLIENT_ID,
-          client_secret: env.DISCORD_CLIENT_SECRET,
-          code,
-          grant_type: "authorization_code",
-          redirect_uri: redirectUri(request, env),
-        }),
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        method: "POST",
-        name: "Discord OAuth",
-        requireOk: false,
-        timeoutMs: 10_000,
-      },
-    );
+    const { data: token, response: tokenResponse } = await fetchJson<{
+      access_token?: JsonValue;
+    }>("https://discord.com/api/oauth2/token", {
+      body: new URLSearchParams({
+        client_id: env.DISCORD_CLIENT_ID,
+        client_secret: env.DISCORD_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri(request, env),
+      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: "POST",
+      name: "Discord OAuth",
+      requireOk: false,
+      timeoutMs: 10_000,
+    });
     if (!tokenResponse.ok) throw new Error("Discord token exchange failed");
-    if (typeof token.access_token !== "string" || !token.access_token)
+    if (!isString(token.access_token) || !token.access_token)
       throw new Error("Discord token exchange failed");
     const headers = { Authorization: `Bearer ${token.access_token}` };
     const [userResult, memberResult] = await Promise.all([
-      fetchJson<unknown>("https://discord.com/api/users/@me", {
+      fetchJson<JsonValue>("https://discord.com/api/users/@me", {
         headers,
         name: "Discord API",
         requireOk: false,
         timeoutMs: 10_000,
       }),
-      fetchJson<unknown>(
+      fetchJson<JsonValue>(
         `https://discord.com/api/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`,
         {
           headers,
@@ -529,18 +567,9 @@ async function finishLogin(request: Request, env: Env) {
       );
     }
 
-    const user = userResult.data as Partial<DiscordUser> | null;
-    const member = memberResult.data as { roles?: unknown } | null;
-    if (
-      !user ||
-      typeof user.id !== "string" ||
-      typeof user.username !== "string" ||
-      (user.avatar !== null && typeof user.avatar !== "string") ||
-      (user.global_name !== null && typeof user.global_name !== "string") ||
-      !member ||
-      !Array.isArray(member.roles) ||
-      !member.roles.every((role) => typeof role === "string")
-    ) {
+    const user = userResult.data;
+    const member = memberResult.data;
+    if (!isDiscordUser(user) || !isDiscordMember(member)) {
       throw new Error("Discord API returned invalid data");
     }
 
@@ -638,7 +667,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         : "tmdb/trending/week";
       const maxAge = query ? 6 * 60 * 60 : 24 * 60 * 60;
       const result = await cachedData(cacheKey, maxAge, () =>
-        tmdb<{ results: TmdbMovie[] }>(
+        tmdb<{ results: JsonValue[] }>(
           query
             ? `/search/movie?query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`
             : "/trending/movie/week?language=en-US",
@@ -653,7 +682,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           .map(cleanMovie),
       });
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   const movieReleaseMatch = url.pathname.match(/^\/api\/admin\/movies\/(\d+)\/releases$/);
@@ -678,7 +707,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         throw new Error("This movie has no IMDb ID");
 
       const addon = await cachedData(`stremio/movie/${external.imdb_id}`, 30 * 60, async () => {
-        const { data } = await fetchJson<{ streams?: StremioStream[] }>(
+        const { data } = await fetchJson<JsonValue>(
           `${addonBase(env)}/stream/movie/${external.imdb_id}.json`,
           {
             headers: { Accept: "application/json" },
@@ -687,21 +716,17 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
             timeoutMs: 15_000,
           },
         );
-        if (
-          !data ||
-          typeof data !== "object" ||
-          (data.streams !== undefined && !Array.isArray(data.streams))
-        ) {
+        if (!isJsonObject(data) || (data.streams !== undefined && !Array.isArray(data.streams))) {
           throw new Error("Movie addon returned invalid data");
         }
-        return data;
+        return { streams: Array.isArray(data.streams) ? data.streams : [] };
       });
       const seen = new Set<string>();
-      const candidates = (addon.streams ?? [])
-        .filter((stream): stream is StremioStream => Boolean(stream) && typeof stream === "object")
+      const candidates = addon.streams
+        .filter(isStremioStream)
         .flatMap((stream) => {
           const hash = stream.infoHash?.toLowerCase();
-          const fileIndex = Number.isInteger(stream.fileIdx) ? stream.fileIdx! : null;
+          const fileIndex = isInteger(stream.fileIdx) ? stream.fileIdx : null;
           if (!hash || !/^[a-f0-9]{40}$/.test(hash)) return [];
           const key = `${hash}:${fileIndex ?? ""}`;
           if (seen.has(key)) return [];
@@ -713,8 +738,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
               hash,
               label: label || hash,
               score: releaseScore(label),
-              trackers: (Array.isArray(stream.sources) ? stream.sources : [])
-                .filter((source): source is string => typeof source === "string")
+              trackers: (stream.sources ?? [])
                 .filter((source) => source.startsWith("tracker:"))
                 .map((source) => source.slice(8))
                 .filter((tracker) => tracker.startsWith("https://") || tracker.startsWith("udp://"))
@@ -732,7 +756,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           for (const release of candidates) query.append("hash", release.hash);
           const data =
             candidates.length > 0
-              ? await torBox<unknown>(`/v1/api/torrents/checkcached?${query}`, env)
+              ? await torBox<JsonValue>(`/v1/api/torrents/checkcached?${query}`, env)
               : null;
           return Object.fromEntries(
             candidates.map((release) => [release.hash, torrentCached(data, release.hash)]),
@@ -746,7 +770,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       releases.sort((a, b) => Number(b.cached) - Number(a.cached) || b.score - a.score);
       return Response.json({ imdbId: external.imdb_id, releases });
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/admin/movies/add" && request.method === "POST") {
@@ -761,22 +785,20 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       const input = await jsonObject(request);
-      const hash = typeof input.hash === "string" ? input.hash.toLowerCase() : "";
+      const hash = isString(input.hash) ? input.hash.toLowerCase() : "";
       if (!/^[a-f0-9]{40}$/.test(hash))
         return Response.json({ error: "A valid torrent hash is required" }, { status: 400 });
       const magnet = new URL("magnet:?");
       magnet.searchParams.set("xt", `urn:btih:${hash}`);
-      if (typeof input.title === "string") magnet.searchParams.set("dn", input.title.slice(0, 200));
-      const trackers = Array.isArray(input.trackers)
-        ? input.trackers.filter((tracker): tracker is string => typeof tracker === "string")
-        : [];
+      if (isString(input.title)) magnet.searchParams.set("dn", input.title.slice(0, 200));
+      const trackers = Array.isArray(input.trackers) ? input.trackers.filter(isString) : [];
       for (const tracker of trackers.slice(0, 20)) {
         if (tracker.startsWith("https://") || tracker.startsWith("udp://"))
           magnet.searchParams.append("tr", tracker);
       }
       const body = new FormData();
       body.set("magnet", magnet.toString());
-      const { data: result } = await fetchJson<TorBoxResponse<unknown>>(
+      const { data: result } = await fetchJson<TorBoxResponse<JsonValue>>(
         "https://api.torbox.app/v1/api/torrents/createtorrent",
         {
           body,
@@ -786,17 +808,13 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           timeoutMs: 15_000,
         },
       );
-      if (!result || typeof result !== "object" || !result.success)
-        throw new Error("Could not add movie to TorBox");
+      if (!result.success) throw new Error("Could not add movie to TorBox");
       cache.invalidatePrefix("torbox/movie/");
       return Response.json({
-        detail:
-          typeof result.detail === "string" && result.detail
-            ? result.detail
-            : "Movie added to TorBox",
+        detail: result.detail || "Movie added to TorBox",
       });
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/admin/torbox/torrents" && request.method === "GET") {
@@ -835,7 +853,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         })),
       });
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/admin/torbox/options" && request.method === "POST") {
@@ -850,17 +868,13 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       const input = await jsonObject(request);
-      if (!Number.isInteger(input.torrentId) || !Number.isInteger(input.fileId)) {
+      if (!isInteger(input.torrentId) || !isInteger(input.fileId)) {
         return Response.json({ error: "A valid torrent and file are required" }, { status: 400 });
       }
-      const source = await temporaryDownload(
-        env,
-        input.torrentId as number,
-        input.fileId as number,
-      );
+      const source = await temporaryDownload(env, input.torrentId, input.fileId);
       return Response.json(await controller(env, "POST", { action: "probe", source }));
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/admin/torbox/start" && request.method === "POST") {
@@ -875,28 +889,23 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       const input = await jsonObject(request);
-      if (!Number.isInteger(input.torrentId) || !Number.isInteger(input.fileId)) {
+      if (!isInteger(input.torrentId) || !isInteger(input.fileId)) {
         return Response.json({ error: "A valid torrent and file are required" }, { status: 400 });
       }
-      const source = await temporaryDownload(
-        env,
-        input.torrentId as number,
-        input.fileId as number,
-      );
+      const source = await temporaryDownload(env, input.torrentId, input.fileId);
       await mutateController(env, {
         action: "start",
-        audioIndex: Number.isInteger(input.audioIndex) ? input.audioIndex : 0,
-        resolutionIndex: Number.isInteger(input.resolutionIndex) ? input.resolutionIndex : null,
+        audioIndex: isInteger(input.audioIndex) ? input.audioIndex : 0,
+        resolutionIndex: isInteger(input.resolutionIndex) ? input.resolutionIndex : null,
         source,
-        subtitleIndex: Number.isInteger(input.subtitleIndex) ? input.subtitleIndex : null,
-        title:
-          typeof input.title === "string"
-            ? input.title.slice(0, 200) || "TorBox stream"
-            : "TorBox stream",
+        subtitleIndex: isInteger(input.subtitleIndex) ? input.subtitleIndex : null,
+        title: isString(input.title)
+          ? input.title.slice(0, 200) || "TorBox stream"
+          : "TorBox stream",
       });
       return Response.json({ detail: "Stream is starting" });
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/admin/restream/start" && request.method === "POST") {
@@ -921,16 +930,13 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         detail: "Restream is starting",
         platform: restream.platform,
         quality: restream.quality,
-        title:
-          typeof result.title === "string" && result.title.trim()
-            ? result.title.trim().slice(0, 200)
-            : restream.title,
+        title: result.title?.trim() ? result.title.trim().slice(0, 200) : restream.title,
       });
     } catch (error) {
       if (error instanceof RestreamValidationError) {
         return Response.json({ error: error.message }, { status: 400 });
       }
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (
@@ -949,7 +955,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     try {
       return Response.json(await mutateController(env, { action: "stop" }));
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (
@@ -968,7 +974,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     try {
       return Response.json(await controller(env, "GET"));
     } catch (error) {
-      return apiError(error);
+      return apiError(error instanceof Error ? error : null);
     }
   }
   if (url.pathname === "/api/stream-info" && request.method === "GET") {

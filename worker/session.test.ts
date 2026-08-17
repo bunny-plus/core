@@ -23,6 +23,7 @@ test("signed sessions round-trip and reject tampering", async () => {
 test("signed sessions reject structurally invalid claims", async () => {
   const secret = "a sufficiently long test secret";
   const token = await createSession(
+    // SAFETY: This test deliberately violates the creation contract to exercise boundary rejection.
     { admin: "yes", avatar: null, id: "1", name: "Bunny", permissions: [] } as never,
     secret,
   );
