@@ -21,21 +21,27 @@ export default function App() {
   useEffect(() => {
     const request = new AbortController();
 
-    apiFetch("/api/session", { signal: request.signal })
-      .then(async (response) => {
-        if (response.status === 401 || response.status === 403) return null;
-        if (!response.ok) throw new Error(`The session service returned ${response.status}.`);
-        return response.json() as Promise<Session>;
-      })
-      .then((result) => {
+    async function loadSession() {
+      try {
+        const response = await apiFetch("/api/session", { signal: request.signal });
+        let result: Session | null;
+        if (response.status === 401 || response.status === 403) {
+          result = null;
+        } else {
+          if (!response.ok) throw new Error(`The session service returned ${response.status}.`);
+          // SAFETY: /api/session is produced by the matching server-side Session contract.
+          result = (await response.json()) as Session;
+        }
         if (!request.signal.aborted) setSession(result);
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
         if (request.signal.aborted) return;
         setSessionError(
           error instanceof Error ? error.message : "The session service could not be reached.",
         );
-      });
+      }
+    }
+
+    void loadSession();
 
     return () => request.abort();
   }, [sessionRequest]);

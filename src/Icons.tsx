@@ -20,13 +20,13 @@ type IconName =
   | "volume-off"
   | "wrench";
 
-const assets: Record<AssetName, string> = {
+const assets = {
   blossom: "/cherry_blossom_3d.png",
   bunny: "/rabbit_animated.png",
   "bunny-face": "/rabbit_face_animated.png",
   carrot: "/carrot_3d.png",
   leafy: "/leafy_green_3d.png",
-};
+} satisfies Record<AssetName, string>;
 
 const staticBunnies = {
   bunny: "/rabbit_static.png",
@@ -34,9 +34,7 @@ const staticBunnies = {
 };
 
 function reducedMotionSnapshot() {
-  return (
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+  return globalThis.window?.matchMedia("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
 function subscribeToReducedMotion(update: () => void) {
@@ -74,7 +72,7 @@ export function AssetIcon({
 }
 
 export function UiIcon({ className = "", name }: { className?: string; name: IconName }) {
-  const paths: Record<IconName, ReactNode> = {
+  const paths = {
     broadcast: (
       <>
         <circle cx="12" cy="12" r="2" />
@@ -160,7 +158,7 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     wrench: (
       <path d="M21 6.5a6 6 0 0 1-7.8 5.7L6.4 19a2 2 0 1 1-2.8-2.8l6.8-6.8A6 6 0 0 1 18.5 2L15 5.5l3.5 3.5L21 6.5Z" />
     ),
-  };
+  } satisfies Record<IconName, ReactNode>;
 
   return (
     <svg className={`ui-icon ${className}`} viewBox="0 0 24 24" aria-hidden="true">

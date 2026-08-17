@@ -56,17 +56,20 @@ export default function MovieDiscover({ onAdded }: { onAdded: (detail: string) =
   useEffect(() => {
     const request = new AbortController();
     movieRequestRef.current = request;
-    apiJson<{ movies: Movie[] }>("/api/admin/movies", { signal: request.signal })
-      .then((result) => {
+    async function loadInitialMovies() {
+      try {
+        const result = await apiJson<{ movies: Movie[] }>("/api/admin/movies", {
+          signal: request.signal,
+        });
         if (movieRequestRef.current === request) setMovies(result.movies);
-      })
-      .catch((loadError: unknown) => {
+      } catch (loadError) {
         if (!request.signal.aborted)
           setError(loadError instanceof Error ? loadError.message : "Could not load movies");
-      })
-      .finally(() => {
+      } finally {
         if (movieRequestRef.current === request) setLoading(false);
-      });
+      }
+    }
+    void loadInitialMovies();
     return () => {
       request.abort();
       releaseRequestRef.current?.abort();

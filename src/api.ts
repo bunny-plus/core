@@ -12,6 +12,7 @@ export function apiFetch(path: string, init: RequestInit = {}) {
 
 export async function apiJson<T>(path: string, init?: RequestInit) {
   const response = await apiFetch(path, init);
+  // SAFETY: Callers select the matching contract for a first-party bunny.plus API route.
   const result = (await response.json()) as T & { error?: string };
   if (!response.ok) throw new Error(result.error || "Request failed");
   return result;

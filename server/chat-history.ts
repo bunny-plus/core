@@ -78,6 +78,7 @@ export class ChatHistory {
   }
 
   all(): RoomChat[] {
+    // SAFETY: The query selects these exact columns from the STRICT schema created above.
     const rows = this.selectRecent.all(this.limit) as ChatRow[];
     return rows.reverse().map((row) => ({
       createdAt: row.created_at,

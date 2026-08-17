@@ -2,7 +2,20 @@ import { useEffect, useState } from "react";
 
 import { AssetIcon } from "./Icons";
 
+type JsonObject = { [key: string]: JsonValue };
+type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
+type VersionPayload = { version: string };
+
 const CHECK_INTERVAL = 60_000;
+
+function isVersionPayload(value: JsonValue): value is VersionPayload {
+  return (
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof value === "object" &&
+    typeof value.version === "string"
+  );
+}
 
 export default function UpdatePrompt() {
   const [availableVersion, setAvailableVersion] = useState<string | null>(null);
@@ -19,11 +32,10 @@ export default function UpdatePrompt() {
           signal: request.signal,
         });
         if (!response.ok) return;
-        const result: unknown = await response.json();
-        if (!result || typeof result !== "object" || !("version" in result)) return;
-        const version = (result as { version?: unknown }).version;
-        if (typeof version === "string" && version !== __STATIC_VERSION__) {
-          setAvailableVersion(version);
+        const result: JsonValue = await response.json();
+        if (!isVersionPayload(result)) return;
+        if (result.version && result.version !== __STATIC_VERSION__) {
+          setAvailableVersion(result.version);
         }
       } catch {
         // Update checks are best-effort and should never disrupt the current page.

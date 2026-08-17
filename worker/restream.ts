@@ -1,3 +1,5 @@
+import type { JsonObject, JsonValue } from "../server/upstream";
+
 export const restreamQualities = ["best", "1080p", "720p", "480p"] as const;
 
 export type RestreamPlatform = "twitch" | "youtube";
@@ -12,15 +14,25 @@ export type RestreamRequest = {
 
 export class RestreamValidationError extends Error {}
 
-const platformHosts: Record<RestreamPlatform, Set<string>> = {
+const platformHosts = {
   twitch: new Set(["m.twitch.tv", "twitch.tv", "www.twitch.tv"]),
   youtube: new Set(["m.youtube.com", "www.youtube.com", "youtu.be", "youtube.com"]),
-};
+} satisfies Record<RestreamPlatform, Set<string>>;
+
+const qualities = new Set<string>(restreamQualities);
+
+function isString(value: JsonValue | undefined): value is string {
+  return typeof value === "string";
+}
+
+function isRestreamQuality(value: JsonValue | undefined): value is RestreamQuality {
+  return isString(value) && qualities.has(value);
+}
 
 function platformForHost(hostname: string) {
-  return (Object.entries(platformHosts) as [RestreamPlatform, Set<string>][]).find(([, hosts]) =>
-    hosts.has(hostname),
-  )?.[0];
+  if (platformHosts.twitch.has(hostname)) return "twitch";
+  if (platformHosts.youtube.has(hostname)) return "youtube";
+  return null;
 }
 
 function fallbackTitle(platform: RestreamPlatform, url: URL) {
@@ -38,8 +50,8 @@ function fallbackTitle(platform: RestreamPlatform, url: URL) {
   return `${platform === "youtube" ? "YouTube" : "Twitch"} restream`;
 }
 
-export function parseRestreamRequest(input: Record<string, unknown>): RestreamRequest {
-  if (typeof input.source !== "string" || !input.source.trim()) {
+export function parseRestreamRequest(input: JsonObject): RestreamRequest {
+  if (!isString(input.source) || !input.source.trim()) {
     throw new RestreamValidationError("A YouTube or Twitch URL is required");
   }
   const source = input.source.trim();
@@ -62,15 +74,15 @@ export function parseRestreamRequest(input: Record<string, unknown>): RestreamRe
   }
 
   const quality = input.quality ?? "best";
-  if (typeof quality !== "string" || !restreamQualities.includes(quality as RestreamQuality)) {
+  if (!isRestreamQuality(quality)) {
     throw new RestreamValidationError("Choose a supported stream quality");
   }
 
   url.hash = "";
-  const requestedTitle = typeof input.title === "string" ? input.title.trim().slice(0, 200) : "";
+  const requestedTitle = isString(input.title) ? input.title.trim().slice(0, 200) : "";
   return {
     platform,
-    quality: quality as RestreamQuality,
+    quality,
     source: url.toString(),
     title: requestedTitle || fallbackTitle(platform, url),
   };

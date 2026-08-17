@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
 import { ChatHistory, type RoomChat } from "./chat-history";
+import type { JsonValue } from "./upstream";
 
 export type RoomMember = {
   admin: boolean;
@@ -23,6 +24,20 @@ type MemberActivity = {
   lastChat?: number;
   lastReaction?: number;
 };
+
+type RoomClientMessage =
+  | { clientTime: number; type: "ping" }
+  | { type: "reaction" }
+  | { message: string; type: "chat" };
+
+function isRoomClientMessage(value: JsonValue): value is RoomClientMessage {
+  if (value === null || Array.isArray(value) || typeof value !== "object") return false;
+  if (value.type === "reaction") return true;
+  if (value.type === "ping") {
+    return typeof value.clientTime === "number" && Number.isFinite(value.clientTime);
+  }
+  return value.type === "chat" && typeof value.message === "string";
+}
 
 const presenceTimeout = 2 * 60 * 1_000;
 const presenceSweepInterval = 30 * 1_000;
@@ -104,12 +119,9 @@ export class WatchRoom {
         return;
       }
 
-      const message = JSON.parse(value) as {
-        clientTime?: number;
-        message?: unknown;
-        type?: string;
-      };
-      if (message.type === "ping" && typeof message.clientTime === "number") {
+      const message: JsonValue = JSON.parse(value);
+      if (!isRoomClientMessage(message)) return;
+      if (message.type === "ping") {
         session.lastSeen = now;
         this.send(
           socket,
@@ -135,10 +147,7 @@ export class WatchRoom {
       if (message.type === "chat") {
         const activity = this.memberActivity.get(session.member.id) ?? {};
         if (now - (activity.lastChat ?? 0) < 1_500) return;
-        const text =
-          typeof message.message === "string"
-            ? message.message.replace(/\s+/g, " ").trim().slice(0, 64)
-            : "";
+        const text = message.message.replace(/\s+/g, " ").trim().slice(0, 64);
         if (!text) return;
         activity.lastChat = now;
         this.memberActivity.set(session.member.id, activity);
