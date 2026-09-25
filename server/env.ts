@@ -1,4 +1,5 @@
 import type { Env } from "../worker/index";
+import { jellyfinBaseUrl } from "./jellyfin";
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
@@ -63,6 +64,13 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   validUrl(appUrl, "APP_URL", production);
   validUrl(streamUrl, "STREAM_URL", production);
   if (controllerUrl) validUrl(controllerUrl, "RELAY_CONTROLLER_URL");
+  const jellyfinUrl = source.JELLYFIN_URL?.trim();
+  const jellyfinApiKey = source.JELLYFIN_API_KEY?.trim();
+  if (jellyfinUrl) jellyfinBaseUrl(jellyfinUrl);
+  if (jellyfinApiKey && !/^[a-z\d_-]{16,512}$/i.test(jellyfinApiKey))
+    throw new Error("JELLYFIN_API_KEY must be a valid API token");
+  if (jellyfinApiKey && !jellyfinUrl)
+    throw new Error("JELLYFIN_URL is required when JELLYFIN_API_KEY is set");
   if (production) validUrl(required(source, "API_URL"), "API_URL", true);
   if (production && source.ENABLE_DEV_AUTH === "true") {
     throw new Error("ENABLE_DEV_AUTH cannot be enabled in production");
@@ -93,6 +101,8 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     DISCORD_GUILD_ID: discordGuildId,
     DISCORD_ROLE_PERMISSIONS: rolePermissions,
     ENABLE_DEV_AUTH: source.ENABLE_DEV_AUTH,
+    JELLYFIN_URL: jellyfinUrl,
+    JELLYFIN_API_KEY: jellyfinApiKey,
     NODE_ENV: source.NODE_ENV,
     RELAY_CONTROLLER_SECRET: source.RELAY_CONTROLLER_SECRET,
     RELAY_CONTROLLER_URL: source.RELAY_CONTROLLER_URL,

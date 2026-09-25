@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import MovieDiscover from "./MovieDiscover";
+import JellyfinControl from "./JellyfinControl";
 import RestreamControl from "./RestreamControl";
 import { apiJson } from "./api";
 
@@ -77,7 +78,9 @@ export default function StreamControl() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [jellyfinBusy, setJellyfinBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [torboxError, setTorboxError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ file: TorBoxFile; torrent: TorBoxTorrent } | null>(
     null,
   );
@@ -96,12 +99,14 @@ export default function StreamControl() {
   useEffect(() => {
     Promise.allSettled([
       apiJson<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1"),
-      apiJson<ControllerStatus>("/api/admin/torbox/status"),
+      apiJson<ControllerStatus>("/api/admin/stream/status"),
     ])
       .then(([list, controllerStatus]) => {
         if (list.status === "fulfilled") setTorrents(list.value.torrents);
         else
-          setMessage(list.reason instanceof Error ? list.reason.message : "Could not load TorBox");
+          setTorboxError(
+            list.reason instanceof Error ? list.reason.message : "Could not load TorBox",
+          );
         if (controllerStatus.status === "fulfilled") setStatus(controllerStatus.value);
       })
       .finally(() => setLoading(false));
@@ -176,7 +181,7 @@ export default function StreamControl() {
     setBusy("stop");
     setMessage(null);
     try {
-      await apiJson("/api/admin/torbox/stop", { method: "POST" });
+      await apiJson("/api/admin/stream/stop", { method: "POST" });
       setStatus({ running: false, title: null });
       setMessage("Stream stopped");
     } catch (error) {
@@ -203,9 +208,13 @@ export default function StreamControl() {
           <div>
             <i />
             <span>Now relaying</span>
-            <strong>{status.title || "TorBox stream"}</strong>
+            <strong>{status.title || "Room stream"}</strong>
           </div>
-          <button type="button" disabled={busy !== null} onClick={() => void stop()}>
+          <button
+            type="button"
+            disabled={busy !== null || jellyfinBusy}
+            onClick={() => void stop()}
+          >
             {busy === "stop" ? "Stopping..." : "Stop"}
           </button>
         </div>
@@ -214,6 +223,7 @@ export default function StreamControl() {
       <div className="source-picker" role="group" aria-label="Stream source">
         <button
           className={source === "torbox" ? "active" : ""}
+          disabled={jellyfinBusy}
           type="button"
           aria-pressed={source === "torbox"}
           onClick={() => setSource("torbox")}
@@ -226,6 +236,7 @@ export default function StreamControl() {
         </button>
         <button
           className={source === "discover" ? "active" : ""}
+          disabled={jellyfinBusy}
           type="button"
           aria-pressed={source === "discover"}
           onClick={() => setSource("discover")}
@@ -238,6 +249,7 @@ export default function StreamControl() {
         </button>
         <button
           className={source === "restream" ? "active" : ""}
+          disabled={jellyfinBusy}
           type="button"
           aria-pressed={source === "restream"}
           onClick={() => setSource("restream")}
@@ -250,6 +262,7 @@ export default function StreamControl() {
         </button>
         <button
           className={source === "jellyfin" ? "active" : ""}
+          disabled={jellyfinBusy || busy !== null}
           type="button"
           aria-pressed={source === "jellyfin"}
           onClick={() => setSource("jellyfin")}
@@ -257,12 +270,17 @@ export default function StreamControl() {
           <UiIcon name="server" />
           <span>
             <strong>Jellyfin</strong>
-            <small>Coming soon</small>
+            <small>Movies + shows</small>
           </span>
         </button>
       </div>
 
-      {message && <p className="stream-message">{message}</p>}
+      {message && (
+        <p className="stream-message" role="status">
+          {message}
+        </p>
+      )}
+      {torboxError && source === "torbox" && <p className="stream-message">{torboxError}</p>}
 
       {source === "torbox" && (
         <>
@@ -437,11 +455,13 @@ export default function StreamControl() {
         />
       )}
       {source === "jellyfin" && (
-        <div className="source-coming-soon">
-          <UiIcon name="server" />
-          <strong>Jellyfin is still wiring up</strong>
-          <p>The button has its seat saved. Library browsing and playback come later.</p>
-        </div>
+        <JellyfinControl
+          onBusyChange={setJellyfinBusy}
+          onStarted={(title) => {
+            setStatus({ running: true, title });
+            setMessage(null);
+          }}
+        />
       )}
     </section>
   );

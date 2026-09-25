@@ -72,3 +72,31 @@ test("environment validates Discord role permission values", () => {
     /permission arrays/,
   );
 });
+
+test("environment keeps Jellyfin optional and validates configured connection details", () => {
+  assert.equal(loadEnvironment(validEnvironment).JELLYFIN_URL, undefined);
+  const env = loadEnvironment({
+    ...validEnvironment,
+    JELLYFIN_URL: "https://jellyfin.test/jellyfin",
+    JELLYFIN_API_KEY: "a".repeat(32),
+  });
+  assert.equal(env.JELLYFIN_API_KEY, "a".repeat(32));
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, JELLYFIN_API_KEY: "a".repeat(32) }),
+    /JELLYFIN_URL is required/,
+  );
+  assert.throws(
+    () =>
+      loadEnvironment({ ...validEnvironment, JELLYFIN_URL: "https://jellyfin.test/web/#/home" }),
+    /HTTPS server URL/,
+  );
+  assert.throws(
+    () =>
+      loadEnvironment({
+        ...validEnvironment,
+        JELLYFIN_URL: "https://jellyfin.test",
+        JELLYFIN_API_KEY: "a".repeat(32) + "\r\nInjected: yes",
+      }),
+    /valid API token/,
+  );
+});

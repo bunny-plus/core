@@ -2,6 +2,13 @@ import { createSession, readCookie, readSession, sessionCookie, type Viewer } fr
 import { TtlCache } from "../server/cache";
 import { fetchJson, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
+import {
+  JellyfinError,
+  jellyfinId,
+  jellyfinLibrary,
+  jellyfinOptions,
+  jellyfinRelay,
+} from "../server/jellyfin";
 
 export interface Env {
   ADMIN_DISCORD_IDS: string;
@@ -15,6 +22,8 @@ export interface Env {
   DISCORD_ROLE_PERMISSIONS: string;
   DEV_USER_JSON?: string;
   ENABLE_DEV_AUTH?: string;
+  JELLYFIN_URL?: string;
+  JELLYFIN_API_KEY?: string;
   NODE_ENV?: string;
   SESSION_SECRET: string;
   STREAM_DELAY_SECONDS: string;
@@ -350,7 +359,8 @@ async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
     method,
     maxBytes: 256_000,
     name: "Stream controller",
-    timeoutMs: action === "probe" || action === "restream" ? 30_000 : 10_000,
+    timeoutMs:
+      action === "probe" || action === "restream" || action === "jellyfin" ? 30_000 : 10_000,
   });
   if (!isControllerResponse(result)) throw new Error("Stream controller returned invalid data");
   return result;
@@ -389,7 +399,7 @@ async function mutateController(env: Env, body: JsonObject) {
 function apiError(error: Error | null) {
   return Response.json(
     { error: error?.message ?? "Unexpected request failure" },
-    { status: error instanceof ClientError ? error.status : 502 },
+    { status: error instanceof ClientError || error instanceof JellyfinError ? error.status : 502 },
   );
 }
 
@@ -468,6 +478,8 @@ function mutationGuard(request: Request, env: Env, pathname: string) {
   const jsonRoutes = new Set([
     "/api/admin/movies/add",
     "/api/admin/restream/start",
+    "/api/admin/jellyfin/options",
+    "/api/admin/jellyfin/start",
     "/api/admin/torbox/options",
     "/api/admin/torbox/start",
   ]);
@@ -904,6 +916,34 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           : "TorBox stream",
       });
       return Response.json({ detail: "Stream is starting" });
+    } catch (error) {
+      return apiError(error instanceof Error ? error : null);
+    }
+  }
+  if (
+    (url.pathname === "/api/admin/jellyfin/items" && request.method === "GET") ||
+    (["/api/admin/jellyfin/options", "/api/admin/jellyfin/start"].includes(url.pathname) &&
+      request.method === "POST")
+  ) {
+    const starting = url.pathname.endsWith("/start");
+    const authorization = await authorizeCostly(
+      request,
+      env,
+      metadata,
+      starting ? "controller-mutation" : "jellyfin-read",
+      starting ? 10 : 60,
+      "stream.manage",
+    );
+    if (authorization instanceof Response) return authorization;
+    try {
+      if (request.method === "GET")
+        return Response.json(await jellyfinLibrary(env, url.searchParams));
+      const input = await jsonObject(request);
+      if (!starting) return Response.json(await jellyfinOptions(env, jellyfinId(input.itemId)));
+      const relay = await jellyfinRelay(env, input);
+      const result = await mutateController(env, relay);
+      if (result.running !== true) throw new Error("The Jellyfin relay did not start");
+      return Response.json({ detail: "Jellyfin stream is starting", title: relay.title });
     } catch (error) {
       return apiError(error instanceof Error ? error : null);
     }

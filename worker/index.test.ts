@@ -154,3 +154,107 @@ test("stream info coalesces concurrent upstream probes", async (context) => {
   );
   assert.equal(requests, 2);
 });
+
+test("Jellyfin routes require stream management permission and protect mutations", async () => {
+  const token = await createSession(
+    { admin: false, avatar: null, id: "viewer", name: "Viewer", permissions: [] },
+    env.SESSION_SECRET,
+  );
+  const headers = {
+    Cookie: `bp_session=${token}`,
+    Origin: env.APP_URL,
+    "Content-Type": "application/json",
+  };
+  for (const route of ["items", "options", "start"]) {
+    const response = await handleRequest(
+      new Request(`https://api.bunny.plus/api/admin/jellyfin/${route}`, {
+        headers,
+        method: route === "items" ? "GET" : "POST",
+        body: route === "items" ? undefined : "{}",
+      }),
+      env,
+    );
+    assert.equal(response.status, 403);
+  }
+  const cookie = await adminCookie();
+  const unsupported = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/jellyfin/start", {
+      method: "POST",
+      headers: { Cookie: cookie, Origin: env.APP_URL, "Content-Type": "text/plain" },
+      body: "{}",
+    }),
+    env,
+  );
+  assert.equal(unsupported.status, 415);
+  const foreign = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/jellyfin/start", {
+      method: "POST",
+      headers: { Cookie: cookie, Origin: "https://other.test", "Content-Type": "application/json" },
+      body: "{}",
+    }),
+    env,
+  );
+  assert.equal(foreign.status, 403);
+});
+
+test("Jellyfin starts through the shared controller and never returns credentials to the client", async (context) => {
+  const itemId = "f".repeat(32);
+  const jellyfinEnv = {
+    ...env,
+    JELLYFIN_URL: "https://jellyfin.test/jellyfin",
+    JELLYFIN_API_KEY: "api-token-private-for-tests",
+  };
+  const cookie = await adminCookie();
+  let controllerCalls = 0;
+  context.mock.method(
+    globalThis,
+    "fetch",
+    async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).startsWith(jellyfinEnv.JELLYFIN_URL))
+        return Response.json({
+          Items: [
+            {
+              Id: itemId,
+              Name: "Together",
+              Type: "Movie",
+              MediaSources: [
+                {
+                  Id: "version",
+                  Protocol: "File",
+                  MediaStreams: [{ Type: "Video", Index: 0, Height: 1080 }],
+                },
+              ],
+            },
+          ],
+        });
+      assert.equal(String(input), env.RELAY_CONTROLLER_URL);
+      assert.equal(
+        new Headers(init?.headers).get("Authorization"),
+        `Bearer ${env.RELAY_CONTROLLER_SECRET}`,
+      );
+      const sent = JSON.parse(String(init?.body));
+      assert.equal(sent.action, "jellyfin");
+      assert.equal(sent.apiKey, jellyfinEnv.JELLYFIN_API_KEY);
+      assert.equal(sent.audioIndex, null);
+      assert.equal(sent.title, "Together");
+      assert.ok(!sent.source.includes(jellyfinEnv.JELLYFIN_API_KEY));
+      controllerCalls += 1;
+      return Response.json({ running: true, title: "Together" });
+    },
+  );
+  const response = await handleRequest(
+    new Request("https://api.bunny.plus/api/admin/jellyfin/start", {
+      method: "POST",
+      headers: { Cookie: cookie, Origin: env.APP_URL, "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId, mediaSourceId: "version" }),
+    }),
+    jellyfinEnv,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+  assert.deepEqual(await response.json(), {
+    detail: "Jellyfin stream is starting",
+    title: "Together",
+  });
+  assert.equal(controllerCalls, 1);
+});
