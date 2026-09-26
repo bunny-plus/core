@@ -73,7 +73,10 @@ async function jellyfinGet(env: Env, path: string, query: URLSearchParams) {
   const config = configuration(env);
   try {
     const { data } = await fetchJson<JsonValue>(`${config.url}/${path}?${query}`, {
-      headers: { "X-Emby-Token": config.token, Accept: "application/json" },
+      headers: {
+        Authorization: `MediaBrowser Token="${config.token}"`,
+        Accept: "application/json",
+      },
       name: "Jellyfin",
       timeoutMs: 15_000,
       maxBytes: 2_000_000,

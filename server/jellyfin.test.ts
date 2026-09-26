@@ -55,7 +55,10 @@ test("Jellyfin library preserves the server base path, searches and paginates wi
       assert.equal(url.searchParams.get("StartIndex"), "40");
       assert.equal(url.searchParams.get("Limit"), "40");
       assert.equal(url.searchParams.get("IncludeItemTypes"), "Movie,Series,Episode");
-      assert.equal(new Headers(init?.headers).get("X-Emby-Token"), env.JELLYFIN_API_KEY);
+      assert.equal(
+        new Headers(init?.headers).get("Authorization"),
+        `MediaBrowser Token="${env.JELLYFIN_API_KEY}"`,
+      );
       assert.equal(init?.redirect, "error");
       assert.ok(!String(input).includes(env.JELLYFIN_API_KEY!));
       return Response.json({ Items: [movie], TotalRecordCount: 41 });
