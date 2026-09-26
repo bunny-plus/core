@@ -35,7 +35,7 @@ function isIndex(value: JsonValue | undefined): value is number {
 export function jellyfinBaseUrl(value: string) {
   const url = new URL(value);
   if (
-    url.protocol !== "https:" ||
+    !["https:", "http:"].includes(url.protocol) ||
     url.username ||
     url.password ||
     url.search ||
@@ -43,7 +43,7 @@ export function jellyfinBaseUrl(value: string) {
     /\/web(?:\/|$)/i.test(url.pathname)
   ) {
     throw new Error(
-      "JELLYFIN_URL must be an HTTPS server URL including its base path, without /web, credentials, a query, or a fragment",
+      "JELLYFIN_URL must be an HTTP or HTTPS server URL including its base path, without /web, credentials, a query, or a fragment",
     );
   }
   return url.toString().replace(/\/$/, "");
@@ -244,7 +244,7 @@ export async function jellyfinRelay(env: Env, input: JsonObject) {
   const params = new URLSearchParams({ Static: "true", MediaSourceId: source.id });
   return {
     action: "jellyfin",
-    source: `${config.url}/Videos/${itemId}/stream?${params}`,
+    source: `${env.JELLYFIN_STREAM_URL ? jellyfinBaseUrl(env.JELLYFIN_STREAM_URL) : config.url}/Videos/${itemId}/stream?${params}`,
     apiKey: config.token,
     audioIndex: audioIndex ?? source.defaultAudioIndex,
     resolutionIndex,

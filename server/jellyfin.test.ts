@@ -187,16 +187,34 @@ test("Jellyfin reports unavailable items and token failures without leaking upst
   await assert.rejects(jellyfinOptions(env, itemId), /rejected the configured API key/);
 });
 
-test("Jellyfin accepts only a clean HTTPS API base URL", () => {
+test("Jellyfin accepts clean HTTP and HTTPS API base URLs", () => {
   assert.equal(
     jellyfinBaseUrl("https://jellyfin.test/jellyfin/"),
     "https://jellyfin.test/jellyfin",
   );
   for (const url of [
-    "http://jellyfin.test",
+    "ftp://jellyfin.test",
     "https://user:password@jellyfin.test",
     "https://jellyfin.test/jellyfin/web/#/home",
     "https://jellyfin.test/?api_key=secret",
   ])
     assert.throws(() => jellyfinBaseUrl(url));
+});
+
+test("Jellyfin uses cluster HTTP for browsing and a separate controller URL for streaming", async (context) => {
+  const local = {
+    ...env,
+    JELLYFIN_URL: "http://jellyfin.default.svc.cluster.local:8096/jellyfin",
+    JELLYFIN_STREAM_URL: "http://192.168.1.240:8096/jellyfin",
+  };
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    assert.ok(String(input).startsWith(`${local.JELLYFIN_URL}/Items?`));
+    return Response.json({ Items: [movie], TotalRecordCount: 1 });
+  });
+  await jellyfinLibrary(local, new URLSearchParams());
+  const relay = await jellyfinRelay(local, { itemId, mediaSourceId: sourceId });
+  assert.equal(
+    relay.source,
+    `${local.JELLYFIN_STREAM_URL}/Videos/${itemId}/stream?Static=true&MediaSourceId=version-1`,
+  );
 });

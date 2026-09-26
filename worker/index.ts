@@ -23,6 +23,7 @@ export interface Env {
   DEV_USER_JSON?: string;
   ENABLE_DEV_AUTH?: string;
   JELLYFIN_URL?: string;
+  JELLYFIN_STREAM_URL?: string;
   JELLYFIN_API_KEY?: string;
   NODE_ENV?: string;
   SESSION_SECRET: string;
