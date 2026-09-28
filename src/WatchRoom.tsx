@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { parseChatEffects } from "./chat-effects";
-import { playbackCorrection } from "./playback";
+import { PlaybackSynchronizer } from "./playback";
 
 export type User = {
   admin: boolean;
@@ -35,6 +35,7 @@ type RelayStatus = {
 };
 
 type RoomReaction = {
+  expiresAt: number;
   id: string;
   member: { id: string; name: string };
   variant: "blossom" | "carrot";
@@ -50,7 +51,7 @@ type RoomChat = {
 };
 
 type ChatDisplayMode = "bubbles" | "scrolling";
-type OverlayChat = RoomChat & { lane: number };
+type OverlayChat = RoomChat & { lane: number; expiresAt: number };
 type ParticleVariant = "blossom" | "bunny-face" | "carrot" | "leafy";
 type RoomStyle = CSSProperties & {
   "--character-index"?: number;
@@ -205,6 +206,7 @@ function ViewerParticleEmitter({ active }: { active: boolean }) {
   useEffect(
     () => () => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
     },
     [],
   );
@@ -395,6 +397,43 @@ export default function WatchRoom({
   }, [chatHistory, showChatHistory]);
 
   useEffect(() => {
+    const screen = screenRef.current;
+    if (!screen || playerStatus !== "ready" || isBuffering || chatComposer || showChatHistory)
+      return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reveal = () => {
+      screen.classList.remove("cursor-idle");
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const focused = document.activeElement;
+        if (
+          screen.matches(":hover") &&
+          !(
+            focused?.matches("input, textarea, button, a, [contenteditable='true']") &&
+            screen.contains(focused)
+          )
+        )
+          screen.classList.add("cursor-idle");
+      }, 3_000);
+    };
+    const leave = () => {
+      clearTimeout(timer);
+      screen.classList.remove("cursor-idle");
+    };
+    const events = ["pointermove", "pointerdown", "pointerenter", "keydown", "focusin", "focusout"];
+    for (const event of events) screen.addEventListener(event, reveal);
+    screen.addEventListener("pointerleave", leave);
+    document.addEventListener("fullscreenchange", reveal);
+    reveal();
+    return () => {
+      leave();
+      for (const event of events) screen.removeEventListener(event, reveal);
+      screen.removeEventListener("pointerleave", leave);
+      document.removeEventListener("fullscreenchange", reveal);
+    };
+  }, [playerStatus, isBuffering, chatComposer, showChatHistory]);
+
+  useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const request = new AbortController();
@@ -403,13 +442,19 @@ export default function WatchRoom({
       try {
         const response = await apiFetch("/api/stream-info", {
           cache: "no-store",
-          signal: request.signal,
+          signal: AbortSignal.any([request.signal, AbortSignal.timeout(8_000)]),
         });
         if (!response.ok) return;
         // SAFETY: /api/stream-info is produced by the matching RelayStatus server contract.
         const status = (await response.json()) as RelayStatus;
         if (stopped) return;
         setRelayStatus(status);
+        // A failed availability probe must not interrupt media that is still buffered.
+        if (
+          !status.online &&
+          (videoRef.current?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA
+        )
+          return;
         setStreamOnline(status.online);
         if (!status.online) {
           setPlayerStatus("error");
@@ -421,7 +466,6 @@ export default function WatchRoom({
       } catch {
         if (!stopped && !request.signal.aborted) {
           setRelayStatus(null);
-          setStreamOnline(false);
         }
       } finally {
         if (!stopped) timer = setTimeout(checkStreamInfo, 10_000);
@@ -442,18 +486,39 @@ export default function WatchRoom({
     let retry: ReturnType<typeof setTimeout> | undefined;
     let retryDelay = 2_000;
     let stopped = false;
+    // One timer expires the bounded overlays, including while browser timers are throttled.
+    const expiry = setInterval(() => {
+      const now = performance.now();
+      setReactions((current) =>
+        current.some((entry) => entry.expiresAt <= now)
+          ? current.filter((entry) => entry.expiresAt > now)
+          : current,
+      );
+      setChats((current) =>
+        current.some((entry) => entry.expiresAt <= now)
+          ? current.filter((entry) => entry.expiresAt > now)
+          : current,
+      );
+    }, 500);
 
     function connect() {
-      socket = new WebSocket(apiWebSocketUrl("/api/room"));
+      const connection = new WebSocket(apiWebSocketUrl("/api/room"));
+      socket = connection;
       socketRef.current = socket;
-      socket.addEventListener("open", () => {
+      connection.addEventListener("open", () => {
+        if (stopped) {
+          connection.close();
+          return;
+        }
         retryDelay = 2_000;
-        socket?.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+        connection.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
         clockPing = setInterval(() => {
-          socket?.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+          if (connection.readyState === WebSocket.OPEN)
+            connection.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
         }, 30_000);
       });
-      socket.addEventListener("message", (event) => {
+      connection.addEventListener("message", (event) => {
+        if (stopped) return;
         try {
           // SAFETY: This listener receives text frames from the first-party room protocol.
           const message = JSON.parse(event.data as string) as {
@@ -470,7 +535,7 @@ export default function WatchRoom({
             x?: number;
           };
           if (message.members) setMembers(message.members);
-          if (message.chats) setChatHistory(message.chats);
+          if (message.chats) setChatHistory(message.chats.slice(-200));
           if (message.type === "pong" && message.clientTime && message.serverTime) {
             clockOffsetRef.current = message.serverTime - (message.clientTime + Date.now()) / 2;
           }
@@ -483,16 +548,13 @@ export default function WatchRoom({
             Number.isFinite(message.x)
           ) {
             const reaction = {
+              expiresAt: performance.now() + 4_000,
               id: message.id,
               member: message.member,
               variant: message.variant,
               x: message.x,
             };
             setReactions((current) => [...current.slice(-7), reaction]);
-            setTimeout(
-              () => setReactions((current) => current.filter(({ id }) => id !== reaction.id)),
-              4_000,
-            );
           }
           if (
             message.type === "chat" &&
@@ -515,24 +577,21 @@ export default function WatchRoom({
                 ...current.slice(-5),
                 {
                   ...chat,
+                  expiresAt: performance.now() + 10_500,
                   lane:
                     previousLane === undefined ? Math.floor(chat.x) % 6 : (previousLane + 1) % 6,
                 },
               ];
             });
             setChatHistory((current) => [...current.slice(-199), chat]);
-            setTimeout(
-              () => setChats((current) => current.filter(({ id }) => id !== chat.id)),
-              10_500,
-            );
           }
         } catch {
           // Ignore malformed server messages and keep the current room state.
         }
       });
-      socket.addEventListener("close", (event) => {
+      connection.addEventListener("close", (event) => {
         clearInterval(clockPing);
-        if (socketRef.current === socket) socketRef.current = null;
+        if (socketRef.current === connection) socketRef.current = null;
         if (stopped) return;
         if (event.code === 4001) {
           location.reload();
@@ -541,12 +600,13 @@ export default function WatchRoom({
         retry = setTimeout(connect, retryDelay);
         retryDelay = Math.min(retryDelay * 2, 30_000);
       });
-      socket.addEventListener("error", () => socket?.close());
+      connection.addEventListener("error", () => connection.close());
     }
 
     connect();
     return () => {
       stopped = true;
+      clearInterval(expiry);
       clearInterval(clockPing);
       clearTimeout(retry);
       socket?.close();
@@ -569,6 +629,8 @@ export default function WatchRoom({
       if (disposed) return;
       if (HlsPlayer.isSupported()) {
         const hls = new HlsPlayer({
+          lowLatencyMode: false,
+          maxLiveSyncPlaybackRate: 1,
           backBufferLength: 10,
           liveSyncDuration: delaySeconds,
           liveMaxLatencyDuration: Math.max(delaySeconds + 15, delaySeconds * 2),
@@ -614,38 +676,32 @@ export default function WatchRoom({
   }, [delaySeconds, streamOnline, streamUrl]);
 
   useEffect(() => {
+    const synchronizer = new PlaybackSynchronizer();
     const timer = setInterval(() => {
       const video = videoRef.current;
       if (!video || playerStatus !== "ready") return;
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        synchronizer.update(video, null, performance.now());
         setIsBuffering(true);
         setSyncLabel("Buffering the live stream...");
         return;
       }
-      if (video.seeking) return;
-      const hlsDate = hlsRef.current?.playingDate;
-      let drift: number | null = null;
-      if (hlsDate) {
-        drift =
-          (Date.now() + clockOffsetRef.current - delaySeconds * 1_000 - hlsDate.getTime()) / 1_000;
-      } else if (video.seekable.length > 0) {
-        drift = video.seekable.end(video.seekable.length - 1) - delaySeconds - video.currentTime;
-      }
-      if (drift !== null) {
-        const correction = playbackCorrection(drift);
-        if (correction.seek && video.seekable.length > 0) {
-          const minimum = video.seekable.start(0) + 0.1;
-          const maximum = video.seekable.end(video.seekable.length - 1) - 0.1;
-          if (maximum > minimum)
-            video.currentTime = Math.min(maximum, Math.max(minimum, video.currentTime + drift));
-        }
-        video.playbackRate = correction.rate;
+      // Use the same media timeline as HLS. Program dates can lag the encoder's
+      // wall clock and previously caused a second synchronization loop to keep seeking.
+      const target = hlsRef.current
+        ? hlsRef.current.liveSyncPosition
+        : video.seekable.length > 0
+          ? video.seekable.end(video.seekable.length - 1) - delaySeconds
+          : null;
+      const correction = synchronizer.update(video, target, performance.now());
+      if (correction.position !== null) video.currentTime = correction.position;
+      video.playbackRate = correction.rate;
+      if (!video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
         setSyncLabel(correction.label);
-      }
       if (video.paused) void video.play().catch(() => undefined);
     }, 1_000);
     return () => clearInterval(timer);
-  }, [delaySeconds, playerStatus]);
+  }, [delaySeconds, playerStatus, streamUrl]);
 
   useEffect(() => {
     if (!showStats) return;
@@ -785,8 +841,10 @@ export default function WatchRoom({
               onLoadedData={() => setPlayerStatus("ready")}
               onPlaying={() => setIsBuffering(false)}
               onStalled={() => {
-                setIsBuffering(true);
-                setSyncLabel("Buffering the live stream...");
+                if ((videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA) {
+                  setIsBuffering(true);
+                  setSyncLabel("Buffering the live stream...");
+                }
               }}
               onWaiting={() => {
                 setIsBuffering(true);

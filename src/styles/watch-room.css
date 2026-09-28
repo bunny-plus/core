@@ -133,6 +133,10 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   height: 100%;
   object-fit: contain;
 }
+.screen-frame.cursor-idle,
+.screen-frame.cursor-idle * {
+  cursor: none;
+}
 .screen-frame:fullscreen {
   width: 100vw;
   height: 100vh;

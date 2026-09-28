@@ -135,14 +135,48 @@ export async function jellyfinLibrary(env: Env, query: URLSearchParams): Promise
     throw new JellyfinError("Invalid Jellyfin search or page", 400);
   }
   const limit = 40;
+  if (parentId) {
+    const parent = await jellyfinItem(env, jellyfinId(parentId, "parentId"));
+    if (parent.Type !== "Series" && parent.Type !== "Season")
+      throw new JellyfinError("Choose a Jellyfin show or season", 400);
+    const seriesId = jellyfinId(parent.Type === "Series" ? parent.Id : parent.SeriesId);
+    const seasons = parent.Type === "Series" && !search;
+    const params = new URLSearchParams({
+      EnableImages: "false",
+      EnableUserData: "false",
+      IsMissing: "false",
+    });
+    if (parent.Type === "Season") params.set("SeasonId", parentId);
+    if (!seasons && !search) {
+      params.set("StartIndex", String(startIndex));
+      params.set("Limit", String(limit));
+    }
+    const data = await jellyfinGet(
+      env,
+      `Shows/${seriesId}/${seasons ? "Seasons" : "Episodes"}`,
+      params,
+    );
+    if (!Array.isArray(data.Items) || !isIndex(data.TotalRecordCount))
+      throw new Error("Jellyfin returned an invalid library");
+    let items = data.Items.map(itemFromJson);
+    if (seasons || search) {
+      if (search) {
+        const term = search.toLocaleLowerCase();
+        items = items.filter((item) => item.title.toLocaleLowerCase().includes(term));
+      }
+      return {
+        items: items.slice(startIndex, startIndex + limit),
+        total: items.length,
+        startIndex,
+        limit,
+      };
+    }
+    return { items, total: data.TotalRecordCount, startIndex, limit };
+  }
   const params = new URLSearchParams({
-    IncludeItemTypes: parentId
-      ? "Season,Episode"
-      : search
-        ? "Movie,Series,Episode"
-        : "Movie,Series",
-    Recursive: parentId && !search ? "false" : "true",
-    SortBy: parentId ? "ParentIndexNumber,IndexNumber,SortName" : "SortName",
+    IncludeItemTypes: search ? "Movie,Series,Episode" : "Movie,Series",
+    Recursive: "true",
+    SortBy: "SortName",
     SortOrder: "Ascending",
     StartIndex: String(startIndex),
     Limit: String(limit),
@@ -150,12 +184,27 @@ export async function jellyfinLibrary(env: Env, query: URLSearchParams): Promise
     EnableUserData: "false",
     IsMissing: "false",
   });
-  if (parentId) params.set("ParentId", jellyfinId(parentId, "parentId"));
   if (search) params.set("SearchTerm", search);
   const data = await jellyfinGet(env, "Items", params);
   if (!Array.isArray(data.Items) || !isIndex(data.TotalRecordCount))
     throw new Error("Jellyfin returned an invalid library");
   return { items: data.Items.map(itemFromJson), total: data.TotalRecordCount, startIndex, limit };
+}
+
+async function jellyfinItem(env: Env, itemId: string, fields = "") {
+  const data = await jellyfinGet(
+    env,
+    "Items",
+    new URLSearchParams({
+      Ids: itemId,
+      Fields: fields,
+      EnableImages: "false",
+      EnableUserData: "false",
+    }),
+  );
+  if (!Array.isArray(data.Items) || data.Items.length !== 1 || !isObject(data.Items[0]))
+    throw new JellyfinError("This Jellyfin item is no longer available", 404);
+  return data.Items[0];
 }
 
 function sourceFromJson(source: JsonValue): JellyfinSource | null {
@@ -197,19 +246,7 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
 
 export async function jellyfinOptions(env: Env, id: string): Promise<JellyfinOptions> {
   const itemId = jellyfinId(id);
-  const data = await jellyfinGet(
-    env,
-    "Items",
-    new URLSearchParams({
-      Ids: itemId,
-      Fields: "MediaSources,MediaStreams",
-      EnableImages: "false",
-      EnableUserData: "false",
-    }),
-  );
-  if (!Array.isArray(data.Items) || data.Items.length !== 1)
-    throw new JellyfinError("This Jellyfin item is no longer available", 404);
-  const raw = data.Items[0];
+  const raw = await jellyfinItem(env, itemId, "MediaSources,MediaStreams");
   const item = itemFromJson(raw);
   if (item.kind !== "Movie" && item.kind !== "Episode")
     throw new JellyfinError("Choose a movie or episode to stream", 400);

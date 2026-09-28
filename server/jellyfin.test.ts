@@ -74,12 +74,29 @@ test("Jellyfin library preserves the server base path, searches and paginates wi
   assert.ok(!JSON.stringify(library).includes(env.JELLYFIN_API_KEY!));
 });
 
-test("Jellyfin show browsing lists seasons and episodes in episode order", async (context) => {
+test("Jellyfin virtual seasons use the TV episode endpoint instead of folder children", async (context) => {
+  const seriesId = "b".repeat(32);
   context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
     const url = new URL(String(input));
-    assert.equal(url.searchParams.get("ParentId"), itemId);
-    assert.equal(url.searchParams.get("Recursive"), "false");
-    assert.equal(url.searchParams.get("SortBy"), "ParentIndexNumber,IndexNumber,SortName");
+    if (url.pathname === "/jellyfin/Items") {
+      assert.equal(url.searchParams.get("Ids"), itemId);
+      return Response.json({
+        Items: [
+          {
+            Id: itemId,
+            Name: "Season 1",
+            Type: "Season",
+            SeriesId: seriesId,
+            LocationType: "Virtual",
+          },
+        ],
+      });
+    }
+    assert.equal(url.pathname, `/jellyfin/Shows/${seriesId}/Episodes`);
+    assert.equal(url.searchParams.get("SeasonId"), itemId);
+    assert.equal(url.searchParams.get("IsMissing"), "false");
+    assert.equal(url.searchParams.get("StartIndex"), "40");
+    assert.equal(url.searchParams.get("Limit"), "40");
     return Response.json({
       Items: [
         {
@@ -91,11 +108,81 @@ test("Jellyfin show browsing lists seasons and episodes in episode order", async
           IndexNumber: 2,
         },
       ],
-      TotalRecordCount: 1,
+      TotalRecordCount: 41,
     });
   });
-  const library = await jellyfinLibrary(env, new URLSearchParams({ parentId: itemId }));
+  const library = await jellyfinLibrary(
+    env,
+    new URLSearchParams({ parentId: itemId, startIndex: "40" }),
+  );
   assert.equal(library.items[0].title, "Bunnies · S01E02 · Pilot");
+  assert.equal(library.total, 41);
+  assert.equal(library.startIndex, 40);
+});
+
+test("Jellyfin seasons are paginated locally because the seasons endpoint ignores page parameters", async (context) => {
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/jellyfin/Items")
+      return Response.json({ Items: [{ Id: itemId, Name: "Bunnies", Type: "Series" }] });
+    assert.equal(url.pathname, `/jellyfin/Shows/${itemId}/Seasons`);
+    assert.equal(url.searchParams.has("Limit"), false);
+    return Response.json({
+      Items: Array.from({ length: 41 }, (_, index) => ({
+        Id: index.toString(16).padStart(32, "0"),
+        Name: `Season ${index + 1}`,
+        Type: "Season",
+      })),
+      TotalRecordCount: 41,
+    });
+  });
+  const library = await jellyfinLibrary(
+    env,
+    new URLSearchParams({ parentId: itemId, startIndex: "40" }),
+  );
+  assert.equal(library.items.length, 1);
+  assert.equal(library.items[0].name, "Season 41");
+  assert.equal(library.total, 41);
+});
+
+test("episode searches remain inside the selected virtual season and count matches before paging", async (context) => {
+  const seriesId = "b".repeat(32);
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/jellyfin/Items")
+      return Response.json({ Items: [{ Id: itemId, Type: "Season", SeriesId: seriesId }] });
+    assert.equal(url.pathname, `/jellyfin/Shows/${seriesId}/Episodes`);
+    assert.equal(url.searchParams.get("SeasonId"), itemId);
+    assert.equal(url.searchParams.has("Limit"), false);
+    assert.equal(url.searchParams.has("SearchTerm"), false);
+    return Response.json({
+      Items: [
+        { Id: itemId, Name: "Countdown", Type: "Episode" },
+        { Id: seriesId, Name: "Red Coast", Type: "Episode" },
+      ],
+      TotalRecordCount: 2,
+    });
+  });
+  const library = await jellyfinLibrary(
+    env,
+    new URLSearchParams({ parentId: itemId, query: "COUNT" }),
+  );
+  assert.equal(library.total, 1);
+  assert.equal(library.items[0].name, "Countdown");
+});
+
+test("deleted or non-container parents fail without browsing unrelated episodes", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", async () => Response.json({ Items: [] }));
+  await assert.rejects(
+    jellyfinLibrary(env, new URLSearchParams({ parentId: itemId })),
+    /no longer available/,
+  );
+  fetch.mock.mockImplementation(async () => Response.json({ Items: [movie] }));
+  await assert.rejects(
+    jellyfinLibrary(env, new URLSearchParams({ parentId: itemId })),
+    /show or season/,
+  );
+  assert.equal(fetch.mock.callCount(), 2);
 });
 
 test("Jellyfin playback options preserve stream indexes, media versions and preferred audio", async (context) => {
