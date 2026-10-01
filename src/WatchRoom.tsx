@@ -6,6 +6,8 @@ import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { parseChatEffects } from "./chat-effects";
 import { PlaybackSynchronizer } from "./playback";
+import { CinemaTicketCard } from "./CinemaDiary";
+import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
 
 export type User = {
   admin: boolean;
@@ -318,6 +320,10 @@ export default function WatchRoom({
   const hlsRef = useRef<Hls | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const clockOffsetRef = useRef(0);
+  const screeningIdRef = useRef("");
+  const seenTicketIdsRef = useRef(new Set<string>());
+  const [cinemaProgress, setCinemaProgress] = useState<CinemaProgress | null>(null);
+  const [earnedTicket, setEarnedTicket] = useState<CinemaTicket | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
   const initialVolumeRef = useRef(volume);
@@ -483,9 +489,44 @@ export default function WatchRoom({
   useEffect(() => {
     let socket: WebSocket | undefined;
     let clockPing: ReturnType<typeof setInterval> | undefined;
+    let watchPing: ReturnType<typeof setInterval> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let retryDelay = 2_000;
     let stopped = false;
+    let lastPlaybackTime: number | null = null;
+    let lastReportedPlaying: boolean | undefined;
+    let lastWatchingReportAt = 0;
+    const video = videoRef.current;
+
+    function reportWatching(event?: Event) {
+      const connection = socketRef.current;
+      if (connection?.readyState !== WebSocket.OPEN) return;
+      const interrupted =
+        event !== undefined &&
+        ["waiting", "pause", "seeking", "ended", "emptied"].includes(event.type);
+      const playing =
+        !interrupted &&
+        video !== null &&
+        !video.paused &&
+        !video.ended &&
+        !video.seeking &&
+        video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA &&
+        (event?.type === "playing" ||
+          lastPlaybackTime === null ||
+          video.currentTime > lastPlaybackTime + 0.1);
+      lastPlaybackTime = video?.currentTime ?? null;
+      const reportAt = performance.now();
+      if (event && !playing && lastReportedPlaying === false) return;
+      if (event && playing && reportAt - lastWatchingReportAt < 5_000) return;
+      lastReportedPlaying = playing;
+      lastWatchingReportAt = reportAt;
+      connection.send(
+        JSON.stringify({ type: "watching", screeningId: screeningIdRef.current, playing }),
+      );
+    }
+
+    const playbackEvents = ["playing", "waiting", "pause", "seeking", "ended", "emptied"];
+    for (const event of playbackEvents) video?.addEventListener(event, reportWatching);
     // One timer expires the bounded overlays, including while browser timers are throttled.
     const expiry = setInterval(() => {
       const now = performance.now();
@@ -502,6 +543,7 @@ export default function WatchRoom({
     }, 500);
 
     function connect() {
+      let receivedProgress = false;
       const connection = new WebSocket(apiWebSocketUrl("/api/room"));
       socket = connection;
       socketRef.current = socket;
@@ -511,7 +553,11 @@ export default function WatchRoom({
           return;
         }
         retryDelay = 2_000;
+        lastPlaybackTime = null;
+        lastReportedPlaying = undefined;
         connection.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
+        reportWatching();
+        watchPing = setInterval(reportWatching, 10_000);
         clockPing = setInterval(() => {
           if (connection.readyState === WebSocket.OPEN)
             connection.send(JSON.stringify({ type: "ping", clientTime: Date.now() }));
@@ -533,9 +579,20 @@ export default function WatchRoom({
             message?: string | null;
             variant?: "blossom" | "carrot";
             x?: number;
+            progress?: CinemaProgress;
           };
           if (message.members) setMembers(message.members);
           if (message.chats) setChatHistory(message.chats.slice(-200));
+          if (message.type === "cinema-progress" && message.progress) {
+            const progress = message.progress;
+            screeningIdRef.current = progress.screening?.id ?? "";
+            setCinemaProgress(progress);
+            if (progress.ticket && !seenTicketIdsRef.current.has(progress.ticket.id)) {
+              seenTicketIdsRef.current.add(progress.ticket.id);
+              if (receivedProgress) setEarnedTicket(progress.ticket);
+            }
+            receivedProgress = true;
+          }
           if (message.type === "pong" && message.clientTime && message.serverTime) {
             clockOffsetRef.current = message.serverTime - (message.clientTime + Date.now()) / 2;
           }
@@ -591,8 +648,11 @@ export default function WatchRoom({
       });
       connection.addEventListener("close", (event) => {
         clearInterval(clockPing);
+        clearInterval(watchPing);
         if (socketRef.current === connection) socketRef.current = null;
         if (stopped) return;
+        setCinemaProgress(null);
+        screeningIdRef.current = "";
         if (event.code === 4001) {
           location.reload();
           return;
@@ -608,7 +668,13 @@ export default function WatchRoom({
       stopped = true;
       clearInterval(expiry);
       clearInterval(clockPing);
+      clearInterval(watchPing);
       clearTimeout(retry);
+      for (const event of playbackEvents) video?.removeEventListener(event, reportWatching);
+      if (socket?.readyState === WebSocket.OPEN)
+        socket.send(
+          JSON.stringify({ type: "watching", screeningId: screeningIdRef.current, playing: false }),
+        );
       socket?.close();
       socketRef.current = null;
     };
@@ -1138,6 +1204,46 @@ export default function WatchRoom({
               </details>
             </div>
           </div>
+          {cinemaProgress?.screening &&
+            (cinemaProgress.screening.ticketDesign || cinemaProgress.ticket) && (
+              <div className="cinema-ticket-progress">
+                <UiIcon name="ticket" />
+                <div>
+                  <strong className="cinema-ticket-progress-title">
+                    {cinemaProgress.screening.ticketDesign?.title || cinemaProgress.ticket?.title}
+                  </strong>
+                  <span>
+                    {cinemaProgress.ticket
+                      ? "Ticket collected"
+                      : `${formatTime(cinemaProgress.watchedSeconds)} / ${formatTime(cinemaProgress.requiredSeconds)} watched`}
+                  </span>
+                  {!cinemaProgress.ticket && (
+                    <progress
+                      aria-label="Watch time toward your cinema ticket"
+                      max={cinemaProgress.requiredSeconds}
+                      value={cinemaProgress.watchedSeconds}
+                    />
+                  )}
+                </div>
+                <a href="/diary">My tickets ↗</a>
+              </div>
+            )}
+          {earnedTicket && (
+            <aside className="cinema-ticket-award" aria-label="New cinema ticket">
+              <div className="cinema-ticket-award-heading">
+                <p role="status">Ticket collected</p>
+                <button
+                  type="button"
+                  aria-label="Dismiss ticket"
+                  onClick={() => setEarnedTicket(null)}
+                >
+                  ×
+                </button>
+              </div>
+              <CinemaTicketCard ticket={earnedTicket} compact />
+              <a href="/diary">See your collection ↗</a>
+            </aside>
+          )}
           {showStats && stats && (
             <div className="player-stats" role="group" aria-label="Playback statistics">
               <div>

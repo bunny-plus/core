@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import WatchRoom, { type User } from "./WatchRoom";
 import StreamControl from "./StreamControl";
+import CinemaDiary from "./CinemaDiary";
+import CinemaTicketAdmin from "./CinemaTicketAdmin";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiUrl } from "./api";
 
@@ -98,6 +100,8 @@ export default function App() {
       <AdminPage />
     ) : path === "/chloe" && canChatChloe ? (
       <ChloePage />
+    ) : path === "/diary" ? (
+      <CinemaDiary currentUser={session.user} />
     ) : (
       <HomePage canChatChloe={canChatChloe} canManageStream={canManageStream} />
     );
@@ -129,6 +133,9 @@ export default function App() {
                   <UiIcon name="wrench" /> Admin burrow
                 </a>
               )}
+              <a href="/diary">
+                <UiIcon name="ticket" /> My cinema tickets
+              </a>
               <button type="button" disabled={loggingOut} onClick={() => void logout()}>
                 <AssetIcon animate={false} name="bunny" />{" "}
                 {loggingOut ? "Hopping out..." : "Hop out"}
@@ -242,12 +249,13 @@ function HomePage({
             <b>can't go there</b>
           </div>
         )}
-        <div className="future-patch">
-          <AssetIcon name="leafy" />
-          <AssetIcon name="carrot" />
-          <AssetIcon name="leafy" />
-          <small>something is growing here...</small>
-        </div>
+        <a className="diary-home-link" href="/diary">
+          <UiIcon name="ticket" />
+          <span>
+            <strong>cinema diary</strong>
+          </span>
+          <AssetIcon animate={false} name="carrot" />
+        </a>
         <span className="burrow-hole hole-one" aria-hidden="true" />
         <span className="burrow-hole hole-two" aria-hidden="true" />
       </div>
@@ -287,10 +295,10 @@ function AdminPage() {
         <div>
           <p>ADMIN BURROW</p>
           <h1>Stream control</h1>
-          <small>Pick what plays in carrot cinema. More controls can live here later.</small>
         </div>
       </div>
       <StreamControl />
+      <CinemaTicketAdmin />
     </section>
   );
 }

@@ -1,18 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { TLSSocket } from "node:tls";
+import { dirname, join } from "node:path";
 
 import { WebSocketServer } from "ws";
 
 import { authenticateRoomMember, handleRequest, type Env } from "../worker/index";
 import { ChatHistory } from "./chat-history";
+import { CinemaDiary } from "./cinema";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
 
 const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
-const room = new WatchRoom(new ChatHistory(env.CHAT_DB_PATH || "data/chat.sqlite", 200));
+const chatDatabasePath = env.CHAT_DB_PATH || "data/chat.sqlite";
+try {
+  env.CINEMA_DIARY = new CinemaDiary(join(dirname(chatDatabasePath), "cinema.sqlite"));
+} catch (error) {
+  console.error("Cinema diary is unavailable", error);
+}
+const room = new WatchRoom(new ChatHistory(chatDatabasePath, 200), env.CINEMA_DIARY);
 const webSockets = new WebSocketServer({
   maxPayload: 16 * 1_024,
   noServer: true,
@@ -50,14 +58,19 @@ function requestMetadata(request: IncomingMessage) {
 }
 
 async function readBody(request: IncomingMessage) {
+  const limit =
+    request.method === "POST" &&
+    new URL(requestUrl(request)).pathname === "/api/cinema/screening/ticket"
+      ? 3 * 1024 * 1024
+      : 1_000_000;
   const declaredLength = Number(request.headers["content-length"]);
-  if (Number.isFinite(declaredLength) && declaredLength > 1_000_000) throw new RequestBodyError();
+  if (Number.isFinite(declaredLength) && declaredLength > limit) throw new RequestBodyError();
   const chunks: Buffer[] = [];
   let length = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     length += buffer.length;
-    if (length > 1_000_000) throw new RequestBodyError();
+    if (length > limit) throw new RequestBodyError();
     chunks.push(buffer);
   }
   const body = Buffer.concat(chunks);

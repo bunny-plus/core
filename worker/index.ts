@@ -1,5 +1,7 @@
 import { createSession, readCookie, readSession, sessionCookie, type Viewer } from "./session";
 import { TtlCache } from "../server/cache";
+import type { CinemaDiary, CinemaImage } from "../server/cinema";
+import { cinemaImageMaxBytes } from "../shared/cinema";
 import { fetchJson, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
 import {
@@ -16,6 +18,7 @@ export interface Env {
   APP_URL: string;
   API_URL?: string;
   CHAT_DB_PATH?: string;
+  CINEMA_DIARY?: CinemaDiary;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   DISCORD_GUILD_ID: string;
@@ -125,6 +128,44 @@ function isStringList(value: JsonValue | undefined): value is string[] {
 
 function isInteger(value: JsonValue | undefined): value is number {
   return Number.isInteger(value);
+}
+
+function hasSignature(bytes: Uint8Array, signature: number[], offset = 0) {
+  return signature.every((byte, index) => bytes[offset + index] === byte);
+}
+
+function ticketImage(input: JsonValue | undefined): CinemaImage | null {
+  if (input === undefined) return null;
+  if (!isJsonObject(input) || !isString(input.mimeType) || !isString(input.data))
+    throw new ClientError("A valid uploaded image is required", 400);
+  if (!["image/png", "image/jpeg", "image/webp"].includes(input.mimeType))
+    throw new ClientError("Upload a PNG, JPEG, or WebP image", 400);
+  if (input.data.length > Math.ceil(cinemaImageMaxBytes / 3) * 4)
+    throw new ClientError("Ticket images must be 2 MiB or smaller", 413);
+  if (!input.data || input.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.data))
+    throw new ClientError("The uploaded image is not valid base64", 400);
+  let decoded: string;
+  try {
+    decoded = atob(input.data);
+  } catch {
+    throw new ClientError("The uploaded image is not valid base64", 400);
+  }
+  if (btoa(decoded) !== input.data)
+    throw new ClientError("The uploaded image is not valid base64", 400);
+  if (decoded.length > cinemaImageMaxBytes)
+    throw new ClientError("Ticket images must be 2 MiB or smaller", 413);
+  const data = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  const validImage =
+    (input.mimeType === "image/png" && hasSignature(data, [137, 80, 78, 71, 13, 10, 26, 10])) ||
+    (input.mimeType === "image/jpeg" && hasSignature(data, [255, 216, 255])) ||
+    (input.mimeType === "image/webp" &&
+      data.length >= 16 &&
+      hasSignature(data, [82, 73, 70, 70]) &&
+      hasSignature(data, [87, 69, 66, 80], 8) &&
+      hasSignature(data, [86, 80, 56], 12) &&
+      [32, 76, 88].includes(data[15]));
+  if (!validImage) throw new ClientError("The uploaded image does not match its file type", 400);
+  return { mimeType: input.mimeType, data };
 }
 
 function isDevViewer(value: JsonValue): value is DevViewer {
@@ -372,9 +413,17 @@ function streamInfoCacheKey(env: Env) {
 }
 
 async function streamInfo(env: Env) {
-  return cachedData(streamInfoCacheKey(env), 5, async () => {
+  const info = await cachedData(streamInfoCacheKey(env), 5, async () => {
     const [relay, upstream] = await Promise.all([
-      controller(env, "GET")
+      serializedController(async () => {
+        const status = await controller(env, "GET");
+        try {
+          if (!status.error) env.CINEMA_DIARY?.observe(status.running === true, status.title);
+        } catch (error) {
+          console.error("Could not update cinema screening", error);
+        }
+        return status;
+      })
         .then((status) => ({ running: status.running === true, title: status.title ?? null }))
         .catch(() => ({ running: false, title: null })),
       fetch(env.STREAM_URL, {
@@ -389,12 +438,35 @@ async function streamInfo(env: Env) {
     ]);
     return { ...relay, ...upstream };
   });
+  if (!env.CINEMA_DIARY) return info;
+  try {
+    return { ...info, screening: env.CINEMA_DIARY.current() };
+  } catch (error) {
+    console.error("Could not read cinema screening", error);
+    return info;
+  }
 }
 
 async function mutateController(env: Env, body: JsonObject) {
-  const result = await serializedController(() => controller(env, "POST", body));
-  cache.invalidate(streamInfoCacheKey(env));
-  return result;
+  return serializedController(async () => {
+    const result = await controller(env, "POST", body);
+    try {
+      if (!result.error) {
+        if (
+          ["start", "restream", "jellyfin"].includes(String(body.action)) &&
+          result.running === true
+        )
+          env.CINEMA_DIARY?.start(
+            result.title?.trim() || (isString(body.title) ? body.title : null),
+          );
+        if (body.action === "stop" && result.running === false) env.CINEMA_DIARY?.stop();
+      }
+    } catch (error) {
+      console.error("Could not update cinema screening", error);
+    }
+    cache.invalidate(streamInfoCacheKey(env));
+    return result;
+  });
 }
 
 function apiError(error: Error | null) {
@@ -477,6 +549,7 @@ function mutationGuard(request: Request, env: Env, pathname: string) {
     return Response.json({ error: "Forbidden origin" }, { status: 403 });
   }
   const jsonRoutes = new Set([
+    "/api/cinema/screening/ticket",
     "/api/admin/movies/add",
     "/api/admin/restream/start",
     "/api/admin/jellyfin/options",
@@ -662,6 +735,91 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       headers: { "Set-Cookie": sessionCookie("", 0, isSecure(request)) },
       status: 204,
     });
+  }
+  if (url.pathname === "/api/cinema/tickets" && request.method === "GET") {
+    const authorization = await authorizeCostly(request, env, metadata, "cinema-collection", 60);
+    if (authorization instanceof Response) return authorization;
+    if (!env.CINEMA_DIARY)
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    try {
+      return Response.json(env.CINEMA_DIARY.collection(authorization.id));
+    } catch (error) {
+      console.error("Could not read cinema tickets", error);
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    }
+  }
+  if (url.pathname === "/api/cinema/screening" && request.method === "GET") {
+    const authorization = await authorizeCostly(
+      request,
+      env,
+      metadata,
+      "cinema-admin-read",
+      60,
+      "stream.manage",
+    );
+    if (authorization instanceof Response) return authorization;
+    if (!env.CINEMA_DIARY)
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    try {
+      await streamInfo(env);
+      return Response.json({ screening: env.CINEMA_DIARY.current() });
+    } catch (error) {
+      console.error("Could not read cinema screening", error);
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    }
+  }
+  if (url.pathname === "/api/cinema/screening/ticket" && request.method === "POST") {
+    const authorization = await authorizeCostly(
+      request,
+      env,
+      metadata,
+      "cinema-design",
+      10,
+      "stream.manage",
+    );
+    if (authorization instanceof Response) return authorization;
+    const diary = env.CINEMA_DIARY;
+    if (!diary) return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    try {
+      const input = await jsonObject(request);
+      if (!isString(input.screeningId) || !input.screeningId || input.screeningId.length > 100)
+        throw new ClientError("A current screening is required", 400);
+      if (!isString(input.title) || !input.title.trim() || input.title.length > 200)
+        throw new ClientError("A ticket title of 1 to 200 characters is required", 400);
+      const screeningId = input.screeningId;
+      const title = input.title.trim();
+      const image = ticketImage(input.image);
+      const screening = await serializedController(async () =>
+        diary.createTicket(screeningId, title, image),
+      );
+      if (!screening)
+        return Response.json(
+          { error: "The screening changed or its ticket was already created" },
+          { status: 409 },
+        );
+      return Response.json({ screening }, { status: 201 });
+    } catch (error) {
+      if (error instanceof ClientError) return apiError(error);
+      console.error("Could not create cinema ticket", error);
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    }
+  }
+  const cinemaImageMatch = url.pathname.match(/^\/api\/cinema\/screenings\/([^/]{1,100})\/image$/);
+  if (cinemaImageMatch && request.method === "GET") {
+    const authorization = await authorizeCostly(request, env, metadata, "cinema-image", 240);
+    if (authorization instanceof Response) return authorization;
+    if (!env.CINEMA_DIARY)
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    try {
+      const image = env.CINEMA_DIARY.image(cinemaImageMatch[1]);
+      if (!image) return Response.json({ error: "Ticket image not found" }, { status: 404 });
+      return new Response(Uint8Array.from(image.data).buffer, {
+        headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" },
+      });
+    } catch (error) {
+      console.error("Could not read cinema ticket image", error);
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    }
   }
   if (url.pathname === "/api/admin/movies" && request.method === "GET") {
     const authorization = await authorizeCostly(

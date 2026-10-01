@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 
 import { ChatHistory, type RoomChat } from "./chat-history";
+import type { CinemaDiary } from "./cinema";
 import type { JsonValue } from "./upstream";
 
 export type RoomMember = {
@@ -13,6 +14,7 @@ export type RoomMember = {
 };
 
 type RoomSession = {
+  connectionId: string;
   expiry: NodeJS.Timeout;
   lastSeen: number;
   messageCount: number;
@@ -28,11 +30,18 @@ type MemberActivity = {
 type RoomClientMessage =
   | { clientTime: number; type: "ping" }
   | { type: "reaction" }
+  | { type: "watching"; screeningId: string; playing: boolean }
   | { message: string; type: "chat" };
 
 function isRoomClientMessage(value: JsonValue): value is RoomClientMessage {
   if (value === null || Array.isArray(value) || typeof value !== "object") return false;
   if (value.type === "reaction") return true;
+  if (value.type === "watching")
+    return (
+      typeof value.screeningId === "string" &&
+      value.screeningId.length <= 100 &&
+      typeof value.playing === "boolean"
+    );
   if (value.type === "ping") {
     return typeof value.clientTime === "number" && Number.isFinite(value.clientTime);
   }
@@ -52,7 +61,10 @@ export class WatchRoom {
   private readonly sessions = new Map<WebSocket, RoomSession>();
   private readonly sweep: NodeJS.Timeout;
 
-  constructor(private readonly chatHistory: ChatHistory) {
+  constructor(
+    private readonly chatHistory: ChatHistory,
+    private readonly cinema?: CinemaDiary,
+  ) {
     this.sweep = setInterval(() => this.sweepPresence(), presenceSweepInterval);
     this.sweep.unref();
   }
@@ -77,6 +89,7 @@ export class WatchRoom {
     );
     expiry.unref();
     this.sessions.set(socket, {
+      connectionId: randomUUID(),
       expiry,
       lastSeen: now,
       member,
@@ -101,6 +114,7 @@ export class WatchRoom {
         type: "welcome",
       }),
     );
+    this.sendCinemaProgress(socket, member.id);
     this.broadcastPresence();
   }
 
@@ -127,6 +141,21 @@ export class WatchRoom {
           socket,
           JSON.stringify({ clientTime: message.clientTime, serverTime: now, type: "pong" }),
         );
+      }
+      if (message.type === "watching") {
+        session.lastSeen = now;
+        try {
+          const progress = this.cinema?.watching(
+            session.member.id,
+            session.connectionId,
+            message.screeningId,
+            message.playing,
+            now,
+          );
+          if (progress) this.send(socket, JSON.stringify({ type: "cinema-progress", progress }));
+        } catch (error) {
+          console.error("Could not save cinema watch progress", error);
+        }
       }
       if (message.type === "reaction") {
         const activity = this.memberActivity.get(session.member.id) ?? {};
@@ -177,6 +206,7 @@ export class WatchRoom {
     const session = this.sessions.get(socket);
     if (!session) return;
     clearTimeout(session.expiry);
+    this.cinema?.disconnect(session.connectionId);
     this.sessions.delete(socket);
     this.broadcastPresence();
   }
@@ -188,6 +218,7 @@ export class WatchRoom {
       if (session.lastSeen >= cutoff) continue;
       socket.close(4000, "Activity timeout");
       clearTimeout(session.expiry);
+      this.cinema?.disconnect(session.connectionId);
       this.sessions.delete(socket);
       changed = true;
     }
@@ -204,6 +235,15 @@ export class WatchRoom {
     return [
       ...new Map([...this.sessions.values()].map(({ member }) => [member.id, member])).values(),
     ];
+  }
+
+  private sendCinemaProgress(socket: WebSocket, memberId: string) {
+    try {
+      const progress = this.cinema?.progress(memberId);
+      if (progress) this.send(socket, JSON.stringify({ type: "cinema-progress", progress }));
+    } catch (error) {
+      console.error("Could not read cinema watch progress", error);
+    }
   }
 
   private broadcastPresence() {

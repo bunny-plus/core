@@ -1,0 +1,603 @@
+.cinema-diary {
+  position: relative;
+  z-index: 2;
+  width: min(1060px, 92vw);
+  margin: 0 auto;
+  padding: 24px 0 64px;
+}
+
+.cinema-diary-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 34px;
+}
+
+.cinema-diary-navigation a {
+  color: #9d4165;
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.cinema-diary-navigation a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.cinema-diary-watch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cinema-diary-watch-link .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.cinema-diary-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.cinema-diary-intro {
+  min-width: 0;
+}
+
+.cinema-diary-heading h1 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 5px 0 7px;
+  color: #be3b73;
+  font-size: clamp(32px, 5vw, 48px);
+  font-weight: 850;
+  letter-spacing: -0.055em;
+}
+
+.cinema-diary-heading h1 .ui-icon {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  color: #e16c98;
+  rotate: 13deg;
+}
+
+.cinema-diary-count {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 15px 22px 15px 46px;
+  border: 2px solid var(--pink-200);
+  border-radius: 11px 18px 11px 18px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 4px 5px 0 rgba(249, 168, 198, 0.18);
+  rotate: 2deg;
+}
+
+.cinema-diary-count > .ui-icon {
+  position: absolute;
+  top: 24px;
+  left: 15px;
+  width: 22px;
+  height: 22px;
+  color: #c24577;
+}
+
+.cinema-diary-count strong,
+.cinema-diary-count span {
+  display: block;
+}
+
+.cinema-diary-count strong {
+  color: #aa3a67;
+  font-size: 29px;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.cinema-diary-count span {
+  margin-top: 4px;
+  color: #7c5c68;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cinema-diary-tickets {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(154px, 1fr));
+  gap: 20px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cinema-diary-tickets > li {
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+}
+
+.cinema-ticket {
+  --ticket-paper: #fff7ee;
+  --ticket-wash: #ffe4ed;
+  --ticket-accent: #a63c63;
+  --ticket-edge: #e9aabe;
+  position: relative;
+  display: flex;
+  width: 176px;
+  max-width: 100%;
+  height: 224px;
+  flex-direction: column;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1.5px solid var(--ticket-edge);
+  border-radius: 9px;
+  background: var(--ticket-paper);
+  box-shadow:
+    2px 4px 0 rgba(134, 92, 101, 0.08),
+    0 5px 14px rgba(134, 92, 101, 0.06);
+  color: #684a53;
+}
+
+.cinema-ticket::before,
+.cinema-ticket::after {
+  position: absolute;
+  z-index: 2;
+  bottom: 50px;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--ticket-edge);
+  border-radius: 50%;
+  background: #fff5ef;
+  content: "";
+}
+
+.cinema-ticket::before {
+  left: -9px;
+}
+
+.cinema-ticket::after {
+  right: -9px;
+}
+
+.cinema-ticket--apricot {
+  --ticket-wash: #ffecd1;
+  --ticket-accent: #965326;
+  --ticket-edge: #deb48a;
+}
+
+.cinema-ticket--sage {
+  --ticket-wash: #e6edda;
+  --ticket-accent: #536c3c;
+  --ticket-edge: #b4c5a2;
+}
+
+.cinema-ticket--lilac {
+  --ticket-wash: #ece3f5;
+  --ticket-accent: #775083;
+  --ticket-edge: #c6acce;
+}
+
+.cinema-ticket-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  padding: 12px 10px 10px;
+  background: radial-gradient(circle, var(--ticket-edge) 0.65px, transparent 0.9px) 0 0 / 7px 7px;
+  background-blend-mode: soft-light;
+}
+
+.cinema-ticket-brand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ticket-accent);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+
+.cinema-ticket-brand > .ui-icon {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.cinema-ticket-brand > .cinema-ticket-sparkle {
+  width: 10px;
+  height: 10px;
+  margin-left: auto;
+}
+
+.cinema-ticket h3 {
+  display: -webkit-box;
+  min-height: 36px;
+  max-height: 36px;
+  margin: 10px 0 7px;
+  overflow: hidden;
+  color: #573942;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cinema-ticket--with-artwork {
+  height: 282px;
+}
+
+.cinema-ticket-artwork {
+  width: calc(100% + 20px);
+  height: 92px;
+  flex: 0 0 auto;
+  margin: -12px -10px 10px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--ticket-edge);
+  background: var(--ticket-wash);
+}
+
+.cinema-ticket-artwork > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cinema-ticket-artwork-fallback {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: var(--ticket-accent);
+  font-size: 8px;
+}
+
+.cinema-ticket-artwork-fallback .ui-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.cinema-ticket-screening {
+  margin-top: auto;
+}
+
+.cinema-ticket-screening > span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--ticket-accent);
+  font-size: 6px;
+  font-weight: 850;
+  letter-spacing: 0.15em;
+}
+
+.cinema-ticket-screening > time {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  color: #684a53;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.cinema-ticket-time {
+  font-weight: 500;
+}
+
+.cinema-ticket-earned {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: #785a62;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.cinema-ticket-earned .ui-icon {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  color: var(--ticket-accent);
+}
+
+.cinema-ticket-stub {
+  display: flex;
+  width: 100%;
+  height: 58px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border-top: 1.5px dashed var(--ticket-edge);
+  background: var(--ticket-wash);
+  color: var(--ticket-accent);
+}
+
+.cinema-ticket-stub-mark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cinema-ticket-stub-code {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.cinema-ticket-admit {
+  font-size: 6px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.cinema-ticket-stub .asset-icon {
+  width: 25px;
+  height: 25px;
+  rotate: -8deg;
+}
+
+.cinema-ticket-barcode {
+  display: block;
+  width: 64px;
+  height: 16px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ticket-accent) 0 1px,
+    transparent 1px 3px,
+    var(--ticket-accent) 3px 5px,
+    transparent 5px 6px,
+    var(--ticket-accent) 6px 7px,
+    transparent 7px 11px
+  );
+  opacity: 0.8;
+}
+
+.cinema-ticket-number {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cinema-ticket--compact {
+  width: 152px;
+  height: 208px;
+}
+
+.cinema-ticket--compact h3 {
+  min-height: 34px;
+  max-height: 34px;
+  margin: 8px 0 6px;
+  font-size: 14px;
+}
+
+.cinema-ticket--compact .cinema-ticket-stub {
+  height: 52px;
+  padding: 7px 9px;
+}
+
+.cinema-ticket--compact::before,
+.cinema-ticket--compact::after {
+  bottom: 44px;
+}
+
+.cinema-ticket--compact .cinema-ticket-stub .asset-icon {
+  width: 23px;
+  height: 23px;
+}
+
+.cinema-ticket--compact .cinema-ticket-barcode {
+  width: 56px;
+  height: 14px;
+}
+
+.cinema-ticket--compact.cinema-ticket--with-artwork {
+  height: 248px;
+}
+
+.cinema-ticket--compact .cinema-ticket-artwork {
+  height: 72px;
+  margin-bottom: 8px;
+}
+
+.cinema-diary-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px;
+  border: 2px dashed #e7c7d1;
+  border-radius: 23px;
+  background: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.cinema-diary-state > .asset-icon {
+  width: 62px;
+  height: 62px;
+}
+
+.cinema-diary-state h2 {
+  margin: 16px 0 5px;
+  color: #a63c63;
+  font-size: 23px;
+  letter-spacing: -0.025em;
+}
+
+.cinema-diary-state p {
+  max-width: 400px;
+  margin: 8px 0 20px;
+  color: #7c5c68;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.cinema-diary-loading p {
+  margin-bottom: 0;
+}
+
+.cinema-diary-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 1px solid #c54b7b;
+  border-radius: 10px;
+  background: #c54b7b;
+  box-shadow: 3px 4px 0 rgba(197, 75, 123, 0.13);
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cinema-diary-button:hover {
+  background: #ab3865;
+}
+
+.cinema-diary a:focus-visible,
+.cinema-diary button:focus-visible {
+  outline: 3px solid #b33b70;
+  outline-offset: 4px;
+}
+
+.cinema-diary-empty {
+  padding-top: 40px;
+  padding-bottom: 40px;
+}
+
+.cinema-diary-empty-pocket {
+  position: relative;
+  display: grid;
+  width: 112px;
+  height: 90px;
+  place-items: center;
+  margin-bottom: 22px;
+  border: 2px dashed var(--pink-300);
+  border-radius: 10px 10px 25px 25px;
+  background: linear-gradient(160deg, #fff7ee, #ffe6ef);
+  rotate: -5deg;
+}
+
+.cinema-diary-empty-pocket .asset-icon {
+  width: 64px;
+  height: 64px;
+}
+
+.cinema-diary-empty-pocket .ui-icon {
+  position: absolute;
+  right: -10px;
+  bottom: 1px;
+  width: 30px;
+  height: 30px;
+  fill: #fff1f7;
+  color: #c54b7b;
+  rotate: 15deg;
+}
+
+.cinema-diary-limit {
+  margin: -6px 0 22px;
+  color: #7c5c68;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .cinema-diary {
+    width: min(560px, 92vw);
+  }
+
+  .cinema-diary-heading {
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .cinema-diary-count {
+    padding: 12px 14px;
+    text-align: center;
+  }
+
+  .cinema-diary-count > .ui-icon {
+    display: none;
+  }
+
+  .cinema-diary-count strong {
+    font-size: 26px;
+  }
+
+  .cinema-diary-heading h1 {
+    font-size: 34px;
+  }
+
+  .cinema-diary-heading h1 .ui-icon {
+    width: 22px;
+    height: 22px;
+  }
+}
+
+@media (max-width: 440px) {
+  .cinema-diary {
+    padding-top: 15px;
+  }
+
+  .cinema-diary-navigation {
+    gap: 8px;
+    margin-bottom: 26px;
+  }
+
+  .cinema-diary-navigation a {
+    font-size: 10px;
+  }
+
+  .cinema-diary-heading h1 {
+    gap: 8px;
+    font-size: 28px;
+  }
+
+  .cinema-diary-count {
+    max-width: 110px;
+    padding: 12px 10px;
+  }
+
+  .cinema-diary-count span {
+    font-size: 9px;
+  }
+
+  .cinema-diary-state {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}
+
+@media (max-width: 340px) {
+  .cinema-diary-tickets {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-diary-button {
+    transition: none;
+  }
+}

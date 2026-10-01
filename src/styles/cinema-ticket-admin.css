@@ -1,0 +1,426 @@
+.cinema-ticket-admin {
+  margin-top: 30px;
+  padding: 23px;
+  border: 3px solid var(--pink-200);
+  border-radius: 22px;
+  background: rgba(255, 251, 246, 0.95);
+  box-shadow: 5px 7px 0 rgba(249, 168, 198, 0.13);
+  color: #674552;
+}
+
+.cinema-ticket-admin-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.cinema-ticket-admin-heading > .asset-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  rotate: -12deg;
+}
+
+.cinema-ticket-admin-heading span {
+  color: #95694c;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.cinema-ticket-admin-heading h2 {
+  margin: 3px 0;
+  color: #be3b73;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.cinema-ticket-admin-heading p {
+  margin: 0;
+  color: #80616c;
+  font-size: 12px;
+}
+
+.cinema-ticket-admin-form,
+.cinema-ticket-admin-created {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.65fr);
+  align-items: start;
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.cinema-ticket-admin-fields,
+.cinema-ticket-admin-preview {
+  min-width: 0;
+}
+
+.cinema-ticket-admin-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 4px;
+  text-align: center;
+}
+
+.cinema-ticket-admin-current {
+  margin-bottom: 19px;
+  padding: 11px 13px;
+  border: 1px dashed #e7bb97;
+  border-radius: 10px;
+  background: #fff6e9;
+}
+
+.cinema-ticket-admin-current span,
+.cinema-ticket-admin-current strong {
+  display: block;
+}
+
+.cinema-ticket-admin-current span {
+  color: #986445;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+}
+
+.cinema-ticket-admin-current strong {
+  margin-top: 5px;
+  color: #71503e;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.cinema-ticket-admin-fields > label {
+  display: block;
+  margin: 18px 0 7px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.cinema-ticket-admin-fields > label span {
+  margin-left: 4px;
+  color: #8a6b76;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.cinema-ticket-admin-fields > input {
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 12px;
+  border: 1.5px solid #e6c1ce;
+  border-radius: 10px;
+  background: white;
+  color: #674552;
+  font: inherit;
+  font-size: 12px;
+}
+
+.cinema-ticket-admin-fields > .cinema-ticket-admin-file {
+  padding: 7px;
+  font-size: 10px;
+}
+
+.cinema-ticket-admin-file::file-selector-button {
+  min-height: 30px;
+  margin-right: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #ffedf3;
+  color: #a63c63;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.cinema-ticket-admin-image-help {
+  margin: -3px 0 9px;
+  color: #80616c;
+  font-size: 10px;
+}
+
+.cinema-ticket-admin-selected-image {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cinema-ticket-admin-selected-image > span {
+  min-width: 0;
+  color: #80616c;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.cinema-ticket-admin-selected-image > button {
+  min-height: 36px;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid #e6c1ce;
+  border-radius: 7px;
+  background: #fff;
+  color: #a63c63;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cinema-ticket-admin-image-status,
+.cinema-ticket-admin-image-error {
+  margin: 8px 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.cinema-ticket-admin-image-status {
+  color: #80616c;
+}
+
+.cinema-ticket-admin-image-error {
+  color: #a43d35;
+}
+
+.cinema-ticket-admin-final-note {
+  margin: 19px 0 13px;
+  color: #80616c;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.cinema-ticket-admin-submit,
+.cinema-ticket-admin-secondary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border: 1px solid #c54b7b;
+  border-radius: 10px;
+  background: #c54b7b;
+  color: white;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.cinema-ticket-admin-submit {
+  width: 100%;
+}
+
+.cinema-ticket-admin-submit .ui-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.cinema-ticket-admin-submit:hover:not(:disabled) {
+  background: #ab3865;
+}
+
+.cinema-ticket-admin-secondary {
+  border-color: #e6c1ce;
+  background: #fff;
+  color: #a63c63;
+}
+
+.cinema-ticket-admin button:disabled,
+.cinema-ticket-admin input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.cinema-ticket-admin button:focus-visible,
+.cinema-ticket-admin input:focus-visible {
+  outline: 3px solid #b33b70;
+  outline-offset: 4px;
+}
+
+.cinema-ticket-admin-preview > span {
+  display: block;
+  margin: 0 0 11px;
+  color: #9d4165;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.cinema-ticket-admin-preview > p {
+  max-width: 200px;
+  margin: 12px 0 0;
+  color: #80616c;
+  font-size: 10px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.cinema-ticket-admin-created-copy {
+  min-width: 0;
+  padding-top: 7px;
+}
+
+.cinema-ticket-admin-created-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border: 1px solid #bdcba5;
+  border-radius: 7px;
+  background: #eef4e3;
+  color: #5b723e;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+}
+
+.cinema-ticket-admin-created-badge .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.cinema-ticket-admin-created-copy h3 {
+  margin: 14px 0 9px;
+  color: #a63c63;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 23px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.cinema-ticket-admin-created-copy p {
+  margin: 0 0 13px;
+  color: #80616c;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.cinema-ticket-admin-created-copy small {
+  color: #80616c;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.cinema-ticket-admin-error,
+.cinema-ticket-admin-notice {
+  margin: 17px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #e6c1b5;
+  border-radius: 10px;
+  background: #fff1e9;
+  color: #914635;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.cinema-ticket-admin-error > p {
+  margin: 0 0 8px;
+}
+
+.cinema-ticket-admin-error > button {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #d7b0a0;
+  border-radius: 7px;
+  background: #fff;
+  color: #914635;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.cinema-ticket-admin-notice {
+  border-color: #bdcba5;
+  background: #eef4e3;
+  color: #536c3c;
+}
+
+.cinema-ticket-admin-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  margin: 0;
+  color: #80616c;
+  font-size: 12px;
+}
+
+.cinema-ticket-admin-state .asset-icon {
+  width: 33px;
+  height: 33px;
+}
+
+.cinema-ticket-admin-offline {
+  margin-top: 23px;
+  padding: 23px 16px;
+  border: 2px dashed #e6c1ce;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+.cinema-ticket-admin-offline > .ui-icon {
+  width: 33px;
+  height: 33px;
+  color: #be5c82;
+}
+
+.cinema-ticket-admin-offline h3 {
+  margin: 10px 0 7px;
+  color: #a63c63;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.cinema-ticket-admin-offline p {
+  margin: 0 auto 16px;
+  max-width: 350px;
+  color: #80616c;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 680px) {
+  .cinema-ticket-admin-form,
+  .cinema-ticket-admin-created {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .cinema-ticket-admin-preview {
+    max-width: 240px;
+    width: 100%;
+    justify-self: center;
+  }
+
+  .cinema-ticket-admin-created-copy {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 440px) {
+  .cinema-ticket-admin {
+    padding: 17px 13px;
+  }
+
+  .cinema-ticket-admin-heading {
+    gap: 9px;
+  }
+
+  .cinema-ticket-admin-heading > .asset-icon {
+    width: 31px;
+    height: 31px;
+  }
+
+  .cinema-ticket-admin-heading h2 {
+    font-size: 23px;
+  }
+
+  .cinema-ticket-admin-heading p {
+    font-size: 11px;
+  }
+}

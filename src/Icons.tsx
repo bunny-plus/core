@@ -16,6 +16,7 @@ type IconName =
   | "paw"
   | "server"
   | "sparkle"
+  | "ticket"
   | "volume"
   | "volume-off"
   | "wrench";
@@ -142,6 +143,12 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     ),
     sparkle: (
       <path d="M12 2c.8 5.2 2.8 8 8 10-5.2 2-7.2 4.8-8 10-.8-5.2-2.8-8-8-10 5.2-2 7.2-4.8 8-10Z" />
+    ),
+    ticket: (
+      <>
+        <path d="M3 6h18v4a2 2 0 0 0 0 4v4H3v-4a2 2 0 0 0 0-4V6Z" />
+        <path d="M15 6v2m0 3v2m0 3v2M7 10h4m-4 4h4" />
+      </>
     ),
     volume: (
       <>
