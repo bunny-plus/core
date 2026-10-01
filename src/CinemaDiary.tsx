@@ -200,9 +200,6 @@ export default function CinemaDiary({ currentUser }: { currentUser: { name: stri
     <section className="cinema-diary" aria-labelledby="cinema-diary-title">
       <nav className="cinema-diary-navigation" aria-label="Cinema diary navigation">
         <a href="/">← Back</a>
-        <a className="cinema-diary-watch-link" href="/stream">
-          <UiIcon name="film" /> Watch
-        </a>
       </nav>
       <header className="cinema-diary-heading">
         <div className="cinema-diary-intro">
