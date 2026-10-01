@@ -24,8 +24,31 @@ export type JellyfinSource = {
   id: string;
   name: string;
   audio: JellyfinAudio[];
+  subtitles: JellyfinSubtitle[];
+  fonts: number[];
   defaultAudioIndex: number | null;
   height: number | null;
+};
+
+export type JellyfinSubtitle = {
+  index: number;
+  label: string;
+  language: string | null;
+  supported: boolean;
+};
+
+export type JellyfinPlayback = {
+  sessionId: string;
+  itemId: string;
+  mediaSourceId: string;
+  // Estimated program date of episode time zero, measured from FFmpeg output.
+  // This is independent of a viewer's HLS buffer and local computer clock.
+  startedAt: number | null;
+};
+
+export type JellyfinSubtitles = {
+  tracks: JellyfinSubtitle[];
+  fonts: number[];
 };
 
 export type JellyfinOptions = {

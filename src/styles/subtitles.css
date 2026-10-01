@@ -1,0 +1,76 @@
+.jellyfin-subtitles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.subtitle-canvas {
+  position: absolute;
+  pointer-events: none;
+}
+.subtitle-menu {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 8;
+  pointer-events: auto;
+  color: #fff1f7;
+  font-size: 13px;
+}
+.subtitle-menu summary {
+  list-style: none;
+  cursor: pointer;
+  border: 1px solid #8b6c80;
+  border-radius: 7px;
+  background: #201720e6;
+  padding: 5px 8px;
+  font-weight: 800;
+}
+.subtitle-menu summary::-webkit-details-marker {
+  display: none;
+}
+.subtitle-menu[open] summary {
+  width: fit-content;
+  margin-bottom: 6px;
+}
+.subtitle-panel {
+  display: grid;
+  gap: 10px;
+  width: min(320px, calc(100vw - 70px));
+  padding: 14px;
+  border: 1px solid #8b6c80;
+  border-radius: 10px;
+  background: #201720f5;
+  box-shadow: 0 8px 25px #0006;
+}
+.subtitle-panel select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 5px;
+  background: #30212c;
+  color: inherit;
+}
+.subtitle-panel p {
+  margin: 0;
+  color: #dcc5d3;
+  font-size: 12px;
+}
+.subtitle-delay {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.subtitle-delay span {
+  margin-right: auto;
+}
+.subtitle-panel button {
+  border: 1px solid #8b6c80;
+  border-radius: 5px;
+  background: #382332;
+  color: inherit;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.screen-frame.cursor-idle .subtitle-menu:not([open]):not(:focus-within) {
+  opacity: 0;
+  pointer-events: none;
+}

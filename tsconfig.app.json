@@ -13,6 +13,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
+    // JASSUB 2.5.16 omits an internal WASM declaration; application types remain checked.
+    "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

@@ -272,7 +272,7 @@ export default function JellyfinControl({
               </select>
             </label>
           </div>
-          <p>Subtitles are not available for Jellyfin relays yet.</p>
+          <p>Choose subtitles with CC in the player. Each viewer controls their own.</p>
           <button
             className="start-relay"
             type="button"

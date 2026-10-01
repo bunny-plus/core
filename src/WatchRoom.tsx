@@ -6,6 +6,8 @@ import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { parseChatEffects } from "./chat-effects";
 import { PlaybackSynchronizer } from "./playback";
+import { JellyfinSubtitles } from "./JellyfinSubtitles";
+import type { JellyfinPlayback } from "../shared/jellyfin";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
 
@@ -34,6 +36,7 @@ type RelayStatus = {
   running: boolean;
   title: string | null;
   upstreamStatus: number | null;
+  jellyfin?: JellyfinPlayback;
 };
 
 type RoomReaction = {
@@ -415,8 +418,9 @@ export default function WatchRoom({
         if (
           screen.matches(":hover") &&
           !(
-            focused?.matches("input, textarea, button, a, [contenteditable='true']") &&
-            screen.contains(focused)
+            focused?.matches(
+              "input, textarea, select, summary, button, a, [contenteditable='true']",
+            ) && screen.contains(focused)
           )
         )
           screen.classList.add("cursor-idle");
@@ -920,6 +924,14 @@ export default function WatchRoom({
                 if (videoRef.current?.paused) void videoRef.current.play();
               }}
             />
+            {relayStatus?.running && relayStatus.jellyfin && (
+              <JellyfinSubtitles
+                key={relayStatus.jellyfin.sessionId}
+                playback={relayStatus.jellyfin}
+                videoRef={videoRef}
+                hlsRef={hlsRef}
+              />
+            )}
             {(streamOnline === null || playerStatus === "loading") && streamUrl && (
               <div className="stream-loading" role="status">
                 <AssetIcon name="carrot" />

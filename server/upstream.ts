@@ -19,7 +19,7 @@ export class UpstreamError extends Error {
   }
 }
 
-async function readBounded(response: Response, maxBytes: number, name: string) {
+export async function readBoundedBytes(response: Response, maxBytes: number, name: string) {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
     await response.body?.cancel();
@@ -48,7 +48,7 @@ async function readBounded(response: Response, maxBytes: number, name: string) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }
 
 export async function fetchJson<T>(
@@ -87,7 +87,12 @@ export async function fetchJson<T>(
 
   try {
     // SAFETY: Callers provide the expected response contract and validate required fields before use.
-    return { data: JSON.parse(await readBounded(response, maxBytes, name)) as T, response };
+    return {
+      data: JSON.parse(
+        new TextDecoder().decode(await readBoundedBytes(response, maxBytes, name)),
+      ) as T,
+      response,
+    };
   } catch (error) {
     if (error instanceof UpstreamError) throw error;
     throw new UpstreamError(`${name} returned invalid JSON`, response.status);

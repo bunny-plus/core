@@ -10,7 +10,11 @@ import {
   jellyfinLibrary,
   jellyfinOptions,
   jellyfinRelay,
+  isJellyfinPlayback,
+  jellyfinSubtitleSource,
+  jellyfinSubtitleFile,
 } from "../server/jellyfin";
+import type { JellyfinPlayback } from "../shared/jellyfin";
 
 export interface Env {
   ADMIN_DISCORD_IDS: string;
@@ -57,6 +61,7 @@ type ControllerResponse = {
   error?: string;
   running?: boolean;
   title?: string | null;
+  jellyfin?: JellyfinPlayback | null;
 };
 
 type DevViewer = Partial<Omit<Viewer, "expires">>;
@@ -203,7 +208,8 @@ function isControllerResponse(value: JsonValue): value is ControllerResponse {
     (value.detail === undefined || isString(value.detail)) &&
     (value.error === undefined || isString(value.error)) &&
     (value.running === undefined || typeof value.running === "boolean") &&
-    (value.title === undefined || value.title === null || isString(value.title))
+    (value.title === undefined || value.title === null || isString(value.title)) &&
+    (value.jellyfin == null || isJellyfinPlayback(value.jellyfin))
   );
 }
 
@@ -424,7 +430,11 @@ async function streamInfo(env: Env) {
         }
         return status;
       })
-        .then((status) => ({ running: status.running === true, title: status.title ?? null }))
+        .then((status) => ({
+          running: status.running === true,
+          title: status.title ?? null,
+          jellyfin: status.running ? status.jellyfin : undefined,
+        }))
         .catch(() => ({ running: false, title: null })),
       fetch(env.STREAM_URL, {
         headers: { Accept: "application/vnd.apple.mpegurl" },
@@ -1172,6 +1182,42 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       return Response.json(await controller(env, "GET"));
+    } catch (error) {
+      return apiError(error instanceof Error ? error : null);
+    }
+  }
+  if (url.pathname.startsWith("/api/jellyfin/subtitles/") && request.method === "GET") {
+    const authorization = await authorizeCostly(request, env, metadata, "jellyfin-subtitles", 90);
+    if (authorization instanceof Response) return authorization;
+    try {
+      const match =
+        /^\/api\/jellyfin\/subtitles\/([a-f\d]{32})(?:\/(track|font)\/(\d{1,5}))?$/.exec(
+          url.pathname,
+        );
+      if (!match) throw new JellyfinError("Subtitle not found", 404);
+      // Read current controller state, not the stream-info cache: never serve a previous relay's files.
+      const status = await serializedController(() => controller(env, "GET"));
+      const playback = status.running ? status.jellyfin : null;
+      if (!playback || playback.sessionId !== match[1])
+        throw new JellyfinError("The stream has changed. Choose subtitles again.", 409);
+      const source = await cachedData(
+        `jellyfin-subtitles:${env.JELLYFIN_URL}:${playback.sessionId}`,
+        60,
+        () => jellyfinSubtitleSource(env, playback),
+      );
+      if (!match[2]) return Response.json({ tracks: source.subtitles, fonts: source.fonts });
+      const result = await jellyfinSubtitleFile(
+        env,
+        playback,
+        source,
+        match[2] === "font" ? "font" : "track",
+        Number(match[3]),
+      );
+      // Extraction can take time. Do not release an old episode after a concurrent stream change.
+      const current = await serializedController(() => controller(env, "GET"));
+      if (!current.running || current.jellyfin?.sessionId !== playback.sessionId)
+        throw new JellyfinError("The stream has changed. Choose subtitles again.", 409);
+      return result;
     } catch (error) {
       return apiError(error instanceof Error ? error : null);
     }

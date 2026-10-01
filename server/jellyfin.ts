@@ -4,8 +4,15 @@ import type {
   JellyfinLibrary,
   JellyfinOptions,
   JellyfinSource,
+  JellyfinPlayback,
 } from "../shared/jellyfin";
-import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "./upstream";
+import {
+  fetchJson,
+  readBoundedBytes,
+  UpstreamError,
+  type JsonObject,
+  type JsonValue,
+} from "./upstream";
 
 export class JellyfinError extends Error {
   constructor(
@@ -239,9 +246,111 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
     id: source.Id,
     name: isString(source.Name) ? source.Name : "Original file",
     audio,
+    subtitles: streams
+      .filter((stream) => stream.Type === "Subtitle" && isIndex(stream.Index))
+      .map((stream) => ({
+        // SAFETY: The filter requires a non-negative integer stream index.
+        index: stream.Index as number,
+        label: isString(stream.DisplayTitle) ? stream.DisplayTitle : `Subtitle ${stream.Index}`,
+        language: isString(stream.Language) ? stream.Language : null,
+        supported:
+          isString(stream.Codec) &&
+          ["ass", "ssa", "srt", "subrip", "webvtt", "vtt", "mov_text", "text", "ttml"].includes(
+            stream.Codec.toLowerCase(),
+          ),
+      })),
+    fonts: Array.isArray(source.MediaAttachments)
+      ? source.MediaAttachments.filter(isObject)
+          .filter(
+            (attachment) =>
+              isIndex(attachment.Index) &&
+              isString(attachment.FileName) &&
+              /\.(ttf|otf|woff2?)$/i.test(attachment.FileName),
+          )
+          .slice(0, 16)
+          .map((attachment) => {
+            // SAFETY: The filter requires a non-negative integer attachment index.
+            return attachment.Index as number;
+          })
+      : [],
     defaultAudioIndex: preferred?.index ?? null,
     height: isNumber(video.Height) ? video.Height : null,
   };
+}
+
+export function isJellyfinPlayback(value: JsonValue | undefined): value is JellyfinPlayback {
+  return (
+    isObject(value) &&
+    isString(value.sessionId) &&
+    /^[a-f\d]{32}$/.test(value.sessionId) &&
+    isString(value.itemId) &&
+    /^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i.test(value.itemId) &&
+    isString(value.mediaSourceId) &&
+    /^[\w-]{1,200}$/.test(value.mediaSourceId) &&
+    (value.startedAt === null || (isNumber(value.startedAt) && value.startedAt > 0))
+  );
+}
+
+export async function jellyfinSubtitleSource(env: Env, playback: JellyfinPlayback) {
+  const options = await jellyfinOptions(env, playback.itemId);
+  const source = options.sources.find((entry) => entry.id === playback.mediaSourceId);
+  if (!source) throw new JellyfinError("The playing media version is no longer available", 404);
+  return source;
+}
+
+export async function jellyfinSubtitleFile(
+  env: Env,
+  playback: JellyfinPlayback,
+  source: JellyfinSource,
+  kind: "track" | "font",
+  index: number,
+) {
+  if (
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    (kind === "font"
+      ? !source.fonts.includes(index)
+      : !source.subtitles.some((track) => track.index === index && track.supported))
+  ) {
+    throw new JellyfinError("This subtitle or font is not available", 404);
+  }
+  const config = configuration(env);
+  const suffix =
+    kind === "font" ? `Attachments/${index}` : `Subtitles/${index}/Stream.ass?copyTimestamps=true`;
+  try {
+    const response = await fetch(
+      `${config.url}/Videos/${playback.itemId}/${encodeURIComponent(source.id)}/${suffix}`,
+      {
+        headers: { Authorization: `MediaBrowser Token="${config.token}"` },
+        redirect: "error",
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("upstream status");
+    }
+    const bytes = await readBoundedBytes(
+      response,
+      kind === "font" ? 5_000_000 : 8_000_000,
+      "Jellyfin subtitle",
+    );
+    if (kind === "track" && !new TextDecoder().decode(bytes).includes("[Events]"))
+      throw new Error("invalid subtitle");
+    return new Response(bytes, {
+      headers: {
+        "Content-Type": kind === "font" ? "application/octet-stream" : "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch {
+    throw new JellyfinError(
+      kind === "font"
+        ? "Could not load the subtitle font"
+        : "Could not extract this subtitle track from Jellyfin",
+      502,
+    );
+  }
 }
 
 export async function jellyfinOptions(env: Env, id: string): Promise<JellyfinOptions> {

@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { Env } from "../worker/index";
-import { jellyfinBaseUrl, jellyfinLibrary, jellyfinOptions, jellyfinRelay } from "./jellyfin";
+import {
+  jellyfinBaseUrl,
+  jellyfinLibrary,
+  jellyfinOptions,
+  jellyfinRelay,
+  jellyfinSubtitleFile,
+} from "./jellyfin";
 
 const itemId = "a".repeat(32);
 const sourceId = "version-1";
@@ -37,7 +43,7 @@ const movie = {
       MediaStreams: [
         { Index: 0, Type: "Video", Height: 2160 },
         { Index: 1, Type: "Audio", DisplayTitle: "English · AAC stereo", IsDefault: true },
-        { Index: 2, Type: "Subtitle", DisplayTitle: "English" },
+        { Index: 2, Type: "Subtitle", DisplayTitle: "English", Codec: "subrip" },
         { Index: 3, Type: "Audio", DisplayTitle: "Japanese · 5.1" },
       ],
     },
@@ -72,6 +78,33 @@ test("Jellyfin library preserves the server base path, searches and paginates wi
   assert.equal(library.items[0].minutes, 90);
   assert.ok(!JSON.stringify(library).includes("/private"));
   assert.ok(!JSON.stringify(library).includes(env.JELLYFIN_API_KEY!));
+});
+
+test("subtitle extraction rejects oversized data and upstream errors without exposing tokens", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => Response.json({ Items: [movie] }));
+  const source = (await jellyfinOptions(env, itemId)).sources[0];
+  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  const upstream = context.mock.method(
+    globalThis,
+    "fetch",
+    async () => new Response("secret upstream details", { status: 401 }),
+  );
+  await assert.rejects(
+    jellyfinSubtitleFile(env, playback, source, "track", 2),
+    /Could not extract/,
+  );
+  upstream.mock.mockImplementation(
+    async () => new Response("[Events]", { headers: { "Content-Length": "9000000" } }),
+  );
+  await assert.rejects(
+    jellyfinSubtitleFile(env, playback, source, "track", 2),
+    /Could not extract/,
+  );
+  upstream.mock.mockImplementation(async () => new Response("<html>Login</html>"));
+  await assert.rejects(
+    jellyfinSubtitleFile(env, playback, source, "track", 2),
+    /Could not extract/,
+  );
 });
 
 test("Jellyfin virtual seasons use the TV episode endpoint instead of folder children", async (context) => {
