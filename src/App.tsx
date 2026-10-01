@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router";
 
 import WatchRoom, { type User } from "./WatchRoom";
 import StreamControl from "./StreamControl";
@@ -14,11 +15,24 @@ type Session = {
 };
 
 export default function App() {
+  const route = useLocation();
+  const path = route.pathname.replace(/\/$/, "") || "/";
+  const previousLocation = useRef(route.key);
+  const mainRef = useRef<HTMLElement>(null);
+  const profileRef = useRef<HTMLDetailsElement>(null);
   const [session, setSession] = useState<Session | null | undefined>();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionRequest, setSessionRequest] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (previousLocation.current === route.key) return;
+    previousLocation.current = route.key;
+    profileRef.current?.removeAttribute("open");
+    mainRef.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [route.key]);
 
   useEffect(() => {
     const request = new AbortController();
@@ -88,7 +102,6 @@ export default function App() {
     }
   }
 
-  const path = location.pathname.replace(/\/$/, "") || "/";
   const canManageStream =
     session.user.admin || session.user.permissions?.includes("stream.manage") === true;
   const canChatChloe =
@@ -107,14 +120,18 @@ export default function App() {
     );
 
   return (
-    <main className={`room-shell${path === "/stream" ? " stream-page" : ""}`}>
+    <main
+      ref={mainRef}
+      tabIndex={-1}
+      className={`room-shell${path === "/stream" ? " stream-page" : ""}`}
+    >
       <FloatingDecorations />
       <header className="room-header">
-        <a className="wordmark" href="/">
+        <Link className="wordmark" to="/">
           <AssetIcon animate={false} name="bunny-face" /> bunny<span>+</span>
-        </a>
+        </Link>
         <div className="account">
-          <details className="profile-menu">
+          <details className="profile-menu" ref={profileRef}>
             <summary aria-label="Open profile menu" title={session.user.name}>
               {session.user.avatar ? (
                 <img src={session.user.avatar} alt="" />
@@ -129,13 +146,13 @@ export default function App() {
                 <strong>{session.user.name}</strong>
               </div>
               {canManageStream && (
-                <a href="/admin">
+                <Link to="/admin">
                   <UiIcon name="wrench" /> Admin burrow
-                </a>
+                </Link>
               )}
-              <a href="/diary">
+              <Link to="/diary">
                 <UiIcon name="ticket" /> My cinema tickets
-              </a>
+              </Link>
               <button type="button" disabled={loggingOut} onClick={() => void logout()}>
                 <AssetIcon animate={false} name="bunny" />{" "}
                 {loggingOut ? "Hopping out..." : "Hop out"}
@@ -201,7 +218,7 @@ function HomePage({
         <AssetIcon className="trail-carrot carrot-one" name="carrot" />
         <AssetIcon className="trail-carrot carrot-two" name="carrot" />
         <AssetIcon className="trail-carrot carrot-three" name="carrot" />
-        <a className="activity-spot cinema" href="/stream">
+        <Link className="activity-spot cinema" to="/stream">
           <UiIcon className="spot-icon" name="film" />
           <small>NOW SHOWING</small>
           <h2>carrot cinema</h2>
@@ -211,14 +228,14 @@ function HomePage({
             <strong>ONE</strong>
             <AssetIcon name="carrot" />
           </span>
-        </a>
+        </Link>
         {canManageStream ? (
-          <a className="activity-spot admin" href="/admin">
+          <Link className="activity-spot admin" to="/admin">
             <UiIcon className="spot-icon" name="wrench" />
             <small>KEEP OUT, BUNS</small>
             <h2>admin burrow</h2>
             <p>break stuff</p>
-          </a>
+          </Link>
         ) : (
           <div className="activity-spot admin locked" aria-label="Admin burrow requires permission">
             <UiIcon className="spot-icon" name="lock" />
@@ -229,14 +246,14 @@ function HomePage({
           </div>
         )}
         {canChatChloe ? (
-          <a className="activity-spot chloe" href="/chloe">
+          <Link className="activity-spot chloe" to="/chloe">
             <UiIcon className="chloe-sparkle sparkle-one" name="sparkle" />
             <UiIcon className="spot-icon" name="nail" />
             <UiIcon className="chloe-sparkle sparkle-two" name="sparkle" />
             <small>GIRL TALK</small>
             <h2>chat with chloe</h2>
             <p>gloss, gossip &amp; good advice</p>
-          </a>
+          </Link>
         ) : (
           <div
             className="activity-spot chloe locked chloe-locked"
@@ -249,13 +266,13 @@ function HomePage({
             <b>can't go there</b>
           </div>
         )}
-        <a className="diary-home-link" href="/diary">
+        <Link className="diary-home-link" to="/diary">
           <UiIcon name="ticket" />
           <span>
             <strong>cinema diary</strong>
           </span>
           <AssetIcon animate={false} name="carrot" />
-        </a>
+        </Link>
         <span className="burrow-hole hole-one" aria-hidden="true" />
         <span className="burrow-hole hole-two" aria-hidden="true" />
       </div>
@@ -281,7 +298,7 @@ function ChloePage() {
           </div>
         </div>
         <p className="chloe-coming-soon">chat is getting a gyaru makeover. check back soon ♡</p>
-        <a href="/">back to the burrow</a>
+        <Link to="/">back to the burrow</Link>
       </div>
     </section>
   );
@@ -304,7 +321,8 @@ function AdminPage() {
 }
 
 function Login() {
-  const error = new URLSearchParams(location.search).get("error");
+  const { search } = useLocation();
+  const error = new URLSearchParams(search).get("error");
   return (
     <main className="login-shell">
       <FloatingDecorations />

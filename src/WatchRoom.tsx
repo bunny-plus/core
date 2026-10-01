@@ -1,6 +1,7 @@
 import type Hls from "hls.js";
 import type { CSSProperties } from "react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
@@ -1237,7 +1238,7 @@ export default function WatchRoom({
                     />
                   )}
                 </div>
-                <a href="/diary">My tickets ↗</a>
+                <Link to="/diary">My tickets ↗</Link>
               </div>
             )}
           {earnedTicket && (
@@ -1253,7 +1254,7 @@ export default function WatchRoom({
                 </button>
               </div>
               <CinemaTicketCard ticket={earnedTicket} compact />
-              <a href="/diary">See your collection ↗</a>
+              <Link to="/diary">See your collection ↗</Link>
             </aside>
           )}
           {showStats && stats && (

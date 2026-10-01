@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
 import type { CinemaCollection, CinemaScreening, CinemaTicket } from "../shared/cinema";
 import { apiJson, apiUrl } from "./api";
@@ -199,7 +200,7 @@ export default function CinemaDiary({ currentUser }: { currentUser: { name: stri
   return (
     <section className="cinema-diary" aria-labelledby="cinema-diary-title">
       <nav className="cinema-diary-navigation" aria-label="Cinema diary navigation">
-        <a href="/">← Back</a>
+        <Link to="/">← Back</Link>
       </nav>
       <header className="cinema-diary-heading">
         <div className="cinema-diary-intro">
@@ -244,9 +245,9 @@ export default function CinemaDiary({ currentUser }: { currentUser: { name: stri
           </div>
           <h2>No tickets yet</h2>
           <p>Watch a screening with a ticket for 10 minutes to collect it.</p>
-          <a className="cinema-diary-button" href="/stream">
+          <Link className="cinema-diary-button" to="/stream">
             <UiIcon name="film" /> Watch
-          </a>
+          </Link>
         </div>
       ) : (
         <>
