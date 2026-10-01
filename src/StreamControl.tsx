@@ -72,7 +72,7 @@ function trackLabel(track: MediaTrack, fallback: string) {
 }
 
 export default function StreamControl() {
-  const [source, setSource] = useState<"discover" | "jellyfin" | "restream" | "torbox">("torbox");
+  const [source, setSource] = useState<"discover" | "jellyfin" | "restream" | "torbox">("jellyfin");
   const [torrents, setTorrents] = useState<TorBoxTorrent[]>([]);
   const [status, setStatus] = useState<ControllerStatus | null>(null);
   const [query, setQuery] = useState("");
@@ -221,6 +221,7 @@ export default function StreamControl() {
       )}
 
       <div className="source-picker" role="group" aria-label="Stream source">
+        {/*
         <button
           className={source === "torbox" ? "active" : ""}
           disabled={jellyfinBusy}
@@ -247,6 +248,7 @@ export default function StreamControl() {
             <small>Movies + cached releases</small>
           </span>
         </button>
+        */}
         <button
           className={source === "restream" ? "active" : ""}
           disabled={jellyfinBusy}
