@@ -28,6 +28,7 @@ export type JellyfinSource = {
   fonts: number[];
   defaultAudioIndex: number | null;
   height: number | null;
+  hdrTransfer: "smpte2084" | "arib-std-b67" | null;
 };
 
 export type JellyfinSubtitle = {

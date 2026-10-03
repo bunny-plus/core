@@ -275,6 +275,10 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
       : [],
     defaultAudioIndex: preferred?.index ?? null,
     height: isNumber(video.Height) ? video.Height : null,
+    hdrTransfer:
+      video.ColorTransfer === "smpte2084" || video.ColorTransfer === "arib-std-b67"
+        ? video.ColorTransfer
+        : null,
   };
 }
 
@@ -397,6 +401,7 @@ export async function jellyfinRelay(env: Env, input: JsonObject) {
     apiKey: config.token,
     audioIndex: audioIndex ?? source.defaultAudioIndex,
     resolutionIndex,
+    hdrTransfer: source.hdrTransfer,
     title: options.item.title.slice(0, 200),
   };
 }

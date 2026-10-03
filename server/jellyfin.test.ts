@@ -246,6 +246,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     apiKey: env.JELLYFIN_API_KEY,
     audioIndex: 3,
     resolutionIndex: 5,
+    hdrTransfer: null,
     title: "Movie night",
     source: `https://jellyfin.test/jellyfin/Videos/${itemId}/stream?Static=true&MediaSourceId=version-1`,
   });
@@ -269,6 +270,32 @@ test("Jellyfin rejects missing media versions, wrong track indexes and unsupport
     }),
   );
   await assert.rejects(jellyfinOptions(env, itemId), /no available video file/);
+});
+
+test("Jellyfin derives HDR conversion from the selected server media, ignoring client overrides", async (context) => {
+  for (const transfer of [undefined, "bt709", "smpte2084", "arib-std-b67"]) {
+    const hdrMovie = {
+      ...movie,
+      MediaSources: [
+        {
+          ...movie.MediaSources[0],
+          MediaStreams: movie.MediaSources[0].MediaStreams.map((stream) =>
+            stream.Type === "Video" ? { ...stream, ColorTransfer: transfer } : stream,
+          ),
+        },
+      ],
+    };
+    context.mock.method(globalThis, "fetch", async () => Response.json({ Items: [hdrMovie] }));
+    const relay = await jellyfinRelay(env, {
+      itemId,
+      mediaSourceId: sourceId,
+      hdrTransfer: "injected",
+    });
+    assert.equal(
+      relay.hdrTransfer,
+      transfer === "smpte2084" || transfer === "arib-std-b67" ? transfer : null,
+    );
+  }
 });
 
 test("Jellyfin rejects invalid input before contacting upstreams", async (context) => {

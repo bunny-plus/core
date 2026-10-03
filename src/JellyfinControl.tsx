@@ -75,7 +75,7 @@ export default function JellyfinControl({
   function chooseSource(next: JellyfinSource) {
     setMediaSourceId(next.id);
     setAudioIndex(next.defaultAudioIndex);
-    setResolutionIndex(next.height && next.height > 1080 ? 5 : null);
+    setResolutionIndex(next.height && next.height > 1440 ? 6 : null);
   }
 
   function closeOptions() {
