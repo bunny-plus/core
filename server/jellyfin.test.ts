@@ -8,6 +8,7 @@ import {
   jellyfinOptions,
   jellyfinRelay,
   jellyfinSubtitleFile,
+  isJellyfinPlayback,
 } from "./jellyfin";
 
 const itemId = "a".repeat(32);
@@ -83,7 +84,13 @@ test("Jellyfin library preserves the server base path, searches and paginates wi
 test("subtitle extraction rejects oversized data and upstream errors without exposing tokens", async (context) => {
   context.mock.method(globalThis, "fetch", async () => Response.json({ Items: [movie] }));
   const source = (await jellyfinOptions(env, itemId)).sources[0];
-  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  const playback = {
+    sessionId: "b".repeat(32),
+    itemId,
+    mediaSourceId: sourceId,
+    startedAt: null,
+    subtitleIndex: 2,
+  };
   const upstream = context.mock.method(
     globalThis,
     "fetch",
@@ -224,6 +231,7 @@ test("Jellyfin playback options preserve stream indexes, media versions and pref
   assert.equal(options.sources[0].id, sourceId);
   assert.equal(options.sources[0].height, 2160);
   assert.equal(options.sources[0].defaultAudioIndex, 3);
+  assert.equal(options.sources[0].defaultSubtitleIndex, 2);
   assert.deepEqual(
     options.sources[0].audio.map((track) => track.index),
     [1, 3],
@@ -237,6 +245,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     itemId,
     mediaSourceId: sourceId,
     audioIndex: 3,
+    subtitleIndex: 2,
     resolutionIndex: 5,
     source: "https://attacker.test/video",
     title: "Client title",
@@ -245,6 +254,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     action: "jellyfin",
     apiKey: env.JELLYFIN_API_KEY,
     audioIndex: 3,
+    subtitleIndex: 2,
     resolutionIndex: 5,
     hdrTransfer: null,
     title: "Movie night",
@@ -252,6 +262,49 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
   });
   const defaults = await jellyfinRelay(env, { itemId, mediaSourceId: sourceId });
   assert.equal(defaults.audioIndex, 3);
+  assert.equal(defaults.subtitleIndex, 2);
+  const disabled = await jellyfinRelay(env, {
+    itemId,
+    mediaSourceId: sourceId,
+    subtitleIndex: null,
+  });
+  assert.equal(disabled.subtitleIndex, null);
+});
+
+test("subtitle defaults follow the selected media version and reject unavailable formats", async (context) => {
+  const version = {
+    ...movie.MediaSources[0],
+    DefaultSubtitleStreamIndex: 4,
+    MediaStreams: [
+      ...movie.MediaSources[0].MediaStreams,
+      { Index: 4, Type: "Subtitle", DisplayTitle: "Japanese", Codec: "ass" },
+      { Index: 5, Type: "Subtitle", DisplayTitle: "PGS", Codec: "hdmv_pgs_subtitle" },
+    ],
+  };
+  context.mock.method(globalThis, "fetch", async () =>
+    Response.json({ Items: [{ ...movie, MediaSources: [version] }] }),
+  );
+  assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, 4);
+  assert.equal((await jellyfinRelay(env, { itemId, mediaSourceId: sourceId })).subtitleIndex, 4);
+  for (const subtitleIndex of [0, 1, 5, 99])
+    await assert.rejects(
+      jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex }),
+      /subtitle track is unavailable or unsupported/,
+    );
+  version.DefaultSubtitleStreamIndex = 5;
+  assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, 2);
+  version.MediaStreams = version.MediaStreams.filter((stream) => stream.Type !== "Subtitle");
+  assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, null);
+  assert.equal((await jellyfinRelay(env, { itemId, mediaSourceId: sourceId })).subtitleIndex, null);
+});
+
+test("playback metadata accepts an admin subtitle index or no selection, including older sessions", () => {
+  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  assert.equal(isJellyfinPlayback(playback), true);
+  for (const subtitleIndex of [null, 0, 3])
+    assert.equal(isJellyfinPlayback({ ...playback, subtitleIndex }), true);
+  for (const subtitleIndex of [-1, 1.5, "3", true])
+    assert.equal(isJellyfinPlayback({ ...playback, subtitleIndex }), false);
 });
 
 test("Jellyfin rejects missing media versions, wrong track indexes and unsupported sources", async (context) => {
@@ -315,10 +368,11 @@ test("Jellyfin rejects invalid input before contacting upstreams", async (contex
     jellyfinRelay(env, { itemId, mediaSourceId: sourceId, audioIndex: true }),
     /Invalid audio track or resolution/,
   );
-  await assert.rejects(
-    jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex: 1 }),
-    /subtitles are not supported/,
-  );
+  for (const subtitleIndex of [-1, true, "2", 1.5])
+    await assert.rejects(
+      jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex }),
+      /Invalid subtitle track/,
+    );
   await assert.rejects(
     jellyfinLibrary({ ...env, JELLYFIN_API_KEY: undefined }, new URLSearchParams()),
     /not connected yet/,

@@ -15,12 +15,32 @@ type Props = {
 export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Props) {
   const timingRef = useRef({ startedAt: playback.startedAt, delay: 0 });
   const [options, setOptions] = useState<SubtitleOptions | null>(null);
-  const [track, setTrack] = useState<number | null>(null);
+  const [enabled, setEnabled] = useState(() => {
+    try {
+      return sessionStorage.getItem("bunny-subtitles-disabled-session") !== playback.sessionId;
+    } catch {
+      return true;
+    }
+  });
   const [delay, setDelay] = useState(0);
-  const [status, setStatus] = useState("Loading subtitle tracks…");
+  const [status, setStatus] = useState("Loading subtitles…");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const base = `/api/jellyfin/subtitles/${playback.sessionId}`;
+  const selected = options?.tracks[0];
+  const track = enabled ? (selected?.index ?? null) : null;
+
+  function toggleSubtitles(next: boolean) {
+    setEnabled(next);
+    setError("");
+    setStatus(next ? "Loading subtitles…" : "Subtitles are off");
+    try {
+      if (next) sessionStorage.removeItem("bunny-subtitles-disabled-session");
+      else sessionStorage.setItem("bunny-subtitles-disabled-session", playback.sessionId);
+    } catch {
+      // The toggle still works when browser storage is unavailable.
+    }
+  }
 
   useEffect(() => {
     timingRef.current = { startedAt: playback.startedAt, delay };
@@ -35,7 +55,7 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
       .then((result) => {
         if (abort.signal.aborted) return;
         setOptions(result);
-        setStatus(result.tracks.length ? "Subtitles are off" : "No subtitle tracks in this file");
+        if (!result.tracks.length) setStatus("No subtitles were selected for this stream");
       })
       .catch((reason: Error) => {
         if (!abort.signal.aborted) setError(reason.message);
@@ -187,29 +207,21 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
   }, [base, track, options, videoRef, hlsRef, overlayRef, retry]);
 
   return (
-    <details className="subtitle-menu">
-      <summary aria-label="Subtitles" title="Subtitles">
+    <details className={`subtitle-menu${track !== null ? " subtitle-menu--enabled" : ""}`}>
+      <summary aria-label="Subtitles" title={track !== null ? "Subtitles on" : "Subtitles off"}>
         CC
       </summary>
       <div className="subtitle-panel">
-        <label htmlFor="subtitle-track">Subtitles</label>
-        <select
-          id="subtitle-track"
-          value={track ?? "off"}
-          onChange={(event) => {
-            setTrack(event.target.value === "off" ? null : Number(event.target.value));
-            setError("");
-            setStatus(event.target.value === "off" ? "Subtitles are off" : "Loading subtitles…");
-          }}
-        >
-          <option value="off">Off</option>
-          {options?.tracks.map((entry) => (
-            <option key={entry.index} value={entry.index} disabled={!entry.supported}>
-              {entry.label}
-              {entry.supported ? "" : " (unsupported format)"}
-            </option>
-          ))}
-        </select>
+        <label className="subtitle-toggle">
+          <span>Enable subtitles</span>
+          <input
+            type="checkbox"
+            checked={enabled && Boolean(selected)}
+            disabled={!selected}
+            onChange={(event) => toggleSubtitles(event.target.checked)}
+          />
+        </label>
+        {selected && <p>{selected.label}</p>}
         {track !== null && (
           <div className="subtitle-delay">
             <span>
@@ -235,7 +247,7 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
             </button>
           </div>
         )}
-        <p role="status">{error || status}</p>
+        <p role="status">{error || (!enabled && selected ? "Subtitles are off" : status)}</p>
         {error && (
           <button type="button" onClick={() => setRetry((value) => value + 1)}>
             Reload subtitles

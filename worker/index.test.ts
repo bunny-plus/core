@@ -221,7 +221,10 @@ test("Jellyfin starts through the shared controller and never returns credential
                 {
                   Id: "version",
                   Protocol: "File",
-                  MediaStreams: [{ Type: "Video", Index: 0, Height: 1080 }],
+                  MediaStreams: [
+                    { Type: "Video", Index: 0, Height: 1080 },
+                    { Type: "Subtitle", Index: 3, Codec: "ass", DisplayTitle: "English" },
+                  ],
                 },
               ],
             },
@@ -236,6 +239,7 @@ test("Jellyfin starts through the shared controller and never returns credential
       assert.equal(sent.action, "jellyfin");
       assert.equal(sent.apiKey, jellyfinEnv.JELLYFIN_API_KEY);
       assert.equal(sent.audioIndex, null);
+      assert.equal(sent.subtitleIndex, 3);
       assert.equal(sent.title, "Together");
       assert.ok(!sent.source.includes(jellyfinEnv.JELLYFIN_API_KEY));
       controllerCalls += 1;
@@ -246,7 +250,7 @@ test("Jellyfin starts through the shared controller and never returns credential
     new Request("https://api.bunny.plus/api/admin/jellyfin/start", {
       method: "POST",
       headers: { Cookie: cookie, Origin: env.APP_URL, "Content-Type": "application/json" },
-      body: JSON.stringify({ itemId, mediaSourceId: "version" }),
+      body: JSON.stringify({ itemId, mediaSourceId: "version", subtitleIndex: 3 }),
     }),
     jellyfinEnv,
   );

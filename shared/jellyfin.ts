@@ -27,6 +27,7 @@ export type JellyfinSource = {
   subtitles: JellyfinSubtitle[];
   fonts: number[];
   defaultAudioIndex: number | null;
+  defaultSubtitleIndex: number | null;
   height: number | null;
   hdrTransfer: "smpte2084" | "arib-std-b67" | null;
 };
@@ -42,6 +43,8 @@ export type JellyfinPlayback = {
   sessionId: string;
   itemId: string;
   mediaSourceId: string;
+  // Older relay sessions have no admin-selected subtitle track.
+  subtitleIndex?: number | null;
   // Estimated program date of episode time zero, measured from FFmpeg output.
   // This is independent of a viewer's HLS buffer and local computer clock.
   startedAt: number | null;

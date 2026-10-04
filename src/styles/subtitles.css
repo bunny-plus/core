@@ -25,6 +25,11 @@
 .subtitle-menu summary::-webkit-details-marker {
   display: none;
 }
+.subtitle-menu--enabled summary {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
+}
 .subtitle-menu[open] summary,
 .subtitle-menu summary:hover {
   background: var(--pink-100);
@@ -46,12 +51,18 @@
   max-height: min(360px, calc(100dvh - 120px));
   overflow-y: auto;
 }
-.subtitle-panel select {
-  width: 100%;
-  padding: 8px;
-  border-radius: 5px;
-  background: #30212c;
-  color: inherit;
+.subtitle-toggle {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.subtitle-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: #f472a6;
 }
 .subtitle-panel p {
   margin: 0;

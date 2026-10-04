@@ -1234,13 +1234,21 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       const status = await serializedController(() => controller(env, "GET"));
       const playback = status.running ? status.jellyfin : null;
       if (!playback || playback.sessionId !== match[1])
-        throw new JellyfinError("The stream has changed. Choose subtitles again.", 409);
+        throw new JellyfinError("The stream has changed. Reload subtitles.", 409);
+      if (playback.subtitleIndex == null) {
+        if (match[2]) throw new JellyfinError("No subtitles were selected for this stream", 404);
+        return Response.json({ tracks: [], fonts: [] });
+      }
       const source = await cachedData(
         `jellyfin-subtitles:${env.JELLYFIN_URL}:${playback.sessionId}`,
         60,
         () => jellyfinSubtitleSource(env, playback),
       );
-      if (!match[2]) return Response.json({ tracks: source.subtitles, fonts: source.fonts });
+      const selected = source.subtitles.find(
+        (track) => track.index === playback.subtitleIndex && track.supported,
+      );
+      if (!selected) throw new JellyfinError("The selected subtitles are no longer available", 404);
+      if (!match[2]) return Response.json({ tracks: [selected], fonts: source.fonts });
       const result = await jellyfinSubtitleFile(
         env,
         playback,
@@ -1251,7 +1259,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       // Extraction can take time. Do not release an old episode after a concurrent stream change.
       const current = await serializedController(() => controller(env, "GET"));
       if (!current.running || current.jellyfin?.sessionId !== playback.sessionId)
-        throw new JellyfinError("The stream has changed. Choose subtitles again.", 409);
+        throw new JellyfinError("The stream has changed. Reload subtitles.", 409);
       return result;
     } catch (error) {
       return apiError(error instanceof Error ? error : null);

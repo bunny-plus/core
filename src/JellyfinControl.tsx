@@ -31,6 +31,7 @@ export default function JellyfinControl({
   const [options, setOptions] = useState<JellyfinOptions | null>(null);
   const [mediaSourceId, setMediaSourceId] = useState("");
   const [audioIndex, setAudioIndex] = useState<number | null>(null);
+  const [subtitleIndex, setSubtitleIndex] = useState<number | null>(null);
   const [resolutionIndex, setResolutionIndex] = useState<number | null>(null);
   const selectionRequest = useRef(0);
   const parentId = trail.at(-1)?.id;
@@ -75,6 +76,7 @@ export default function JellyfinControl({
   function chooseSource(next: JellyfinSource) {
     setMediaSourceId(next.id);
     setAudioIndex(next.defaultAudioIndex);
+    setSubtitleIndex(next.defaultSubtitleIndex);
     setResolutionIndex(next.height && next.height > 1440 ? 6 : null);
   }
 
@@ -132,6 +134,7 @@ export default function JellyfinControl({
           itemId: options.item.id,
           mediaSourceId,
           audioIndex,
+          subtitleIndex,
           resolutionIndex,
         }),
       });
@@ -201,7 +204,7 @@ export default function JellyfinControl({
       )}
       {reading && (
         <p className="torrent-empty" role="status">
-          Reading media versions and audio tracks…
+          Reading media versions, audio, and subtitles…
         </p>
       )}
       {options && source && (
@@ -255,6 +258,24 @@ export default function JellyfinControl({
               </select>
             </label>
             <label>
+              <span>Subtitles</span>
+              <select
+                value={subtitleIndex ?? ""}
+                disabled={starting || !source.subtitles.some((track) => track.supported)}
+                onChange={(event) =>
+                  setSubtitleIndex(event.target.value === "" ? null : Number(event.target.value))
+                }
+              >
+                <option value="">None</option>
+                {source.subtitles.map((track) => (
+                  <option key={track.index} value={track.index} disabled={!track.supported}>
+                    {track.label}
+                    {track.supported ? "" : " (unsupported format)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span>Resolution</span>
               <select
                 value={resolutionIndex ?? ""}
@@ -272,7 +293,7 @@ export default function JellyfinControl({
               </select>
             </label>
           </div>
-          <p>Choose subtitles with CC in the player. Each viewer controls their own.</p>
+          <p>The selected subtitles are on by default. Viewers can turn them off with CC.</p>
           <button
             className="start-relay"
             type="button"

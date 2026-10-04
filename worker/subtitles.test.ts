@@ -26,6 +26,7 @@ const playback = {
   itemId: "a".repeat(32),
   mediaSourceId: "version-1",
   startedAt: 1_800_000_000_000,
+  subtitleIndex: 3,
 };
 const source = {
   Id: playback.mediaSourceId,
@@ -34,6 +35,7 @@ const source = {
   MediaStreams: [
     { Type: "Video", Index: 0 },
     { Type: "Subtitle", Index: 3, Codec: "ass", DisplayTitle: "English", Language: "eng" },
+    { Type: "Subtitle", Index: 4, Codec: "srt", DisplayTitle: "Spanish", Language: "spa" },
     { Type: "Subtitle", Index: 7, Codec: "hdmv_pgs_subtitle", DisplayTitle: "PGS" },
   ],
   MediaAttachments: [
@@ -47,7 +49,7 @@ async function viewerCookie() {
   return `bp_session=${await createSession({ admin: false, avatar: null, id: "subtitle-viewer", name: "Viewer", permissions: [] }, env.SESSION_SECRET)}`;
 }
 
-test("room viewers can list current tracks and load ASS/fonts without Jellyfin credentials", async (context) => {
+test("room viewers can load only the admin-selected subtitles and fonts without Jellyfin credentials", async (context) => {
   const cookie = await viewerCookie();
   const calls: string[] = [];
   context.mock.method(
@@ -84,7 +86,8 @@ test("room viewers can list current tracks and load ASS/fonts without Jellyfin c
   assert.equal(listing.status, 200);
   const json = await listing.text();
   assert.ok(json.includes('"index":3'));
-  assert.ok(json.includes('"supported":false'));
+  assert.ok(!json.includes('"index":4'));
+  assert.ok(!json.includes('"index":7'));
   assert.ok(json.includes('"fonts":[9]'));
   assert.ok(!json.includes("/private"));
   assert.ok(!json.includes(env.JELLYFIN_API_KEY!));
@@ -95,10 +98,37 @@ test("room viewers can list current tracks and load ASS/fonts without Jellyfin c
   assert.equal(font.status, 200);
   assert.equal((await font.arrayBuffer()).byteLength, 5);
   const before = calls.filter((url) => url.includes("/Videos/")).length;
+  assert.equal((await request("/track/4")).status, 404);
   assert.equal((await request("/track/7")).status, 404);
   assert.equal((await request("/track/99")).status, 404);
   assert.equal((await request("/font/10")).status, 404);
   assert.equal(calls.filter((url) => url.includes("/Videos/")).length, before);
+});
+
+test("no selected subtitles and legacy streams expose no viewer track choices or files", async (context) => {
+  const cookie = await viewerCookie();
+  for (const subtitleIndex of [null, undefined]) {
+    const network = context.mock.method(
+      globalThis,
+      "fetch",
+      async (input: string | URL | Request) => {
+        assert.equal(String(input), env.RELAY_CONTROLLER_URL);
+        return Response.json({ running: true, jellyfin: { ...playback, subtitleIndex } });
+      },
+    );
+    const request = (suffix = "") =>
+      handleRequest(
+        new Request(
+          "https://api.bunny.plus/api/jellyfin/subtitles/" + playback.sessionId + suffix,
+          { headers: { Cookie: cookie } },
+        ),
+        env,
+      );
+    assert.deepEqual(await (await request()).json(), { tracks: [], fonts: [] });
+    assert.equal((await request("/track/3")).status, 404);
+    assert.equal((await request("/font/9")).status, 404);
+    assert.equal(network.mock.callCount(), 3);
+  }
 });
 
 test("subtitles reject unauthenticated requests and stale stream identities before reading Jellyfin", async (context) => {
