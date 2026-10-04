@@ -422,18 +422,18 @@ async function streamInfo(env: Env) {
   const info = await cachedData(streamInfoCacheKey(env), 5, async () => {
     const [relay, upstream] = await Promise.all([
       serializedController(async () => {
-        const status = await controller(env, "GET");
+        const status = await controller(env, "GET").catch(() => null);
         try {
-          if (!status.error) env.CINEMA_DIARY?.observe(status.running === true, status.title);
+          env.CINEMA_DIARY?.observe(status?.running === true && !status.error, status?.title);
         } catch (error) {
           console.error("Could not update cinema screening", error);
         }
-        return status;
+        return status ?? { running: false, title: null };
       })
         .then((status) => ({
-          running: status.running === true,
+          running: status.running === true && !status.error,
           title: status.title ?? null,
-          jellyfin: status.running ? status.jellyfin : undefined,
+          jellyfin: status.running && !status.error ? status.jellyfin : undefined,
         }))
         .catch(() => ({ running: false, title: null })),
       fetch(env.STREAM_URL, {
@@ -560,6 +560,7 @@ function mutationGuard(request: Request, env: Env, pathname: string) {
   }
   const jsonRoutes = new Set([
     "/api/cinema/screening/ticket",
+    "/api/cinema/screening/counting",
     "/api/admin/movies/add",
     "/api/admin/restream/start",
     "/api/admin/jellyfin/options",
@@ -775,6 +776,40 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       return Response.json({ screening: env.CINEMA_DIARY.current() });
     } catch (error) {
       console.error("Could not read cinema screening", error);
+      return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    }
+  }
+  if (url.pathname === "/api/cinema/screening/counting" && request.method === "POST") {
+    const authorization = await authorizeCostly(
+      request,
+      env,
+      metadata,
+      "cinema-counting",
+      20,
+      "stream.manage",
+    );
+    if (authorization instanceof Response) return authorization;
+    const diary = env.CINEMA_DIARY;
+    if (!diary) return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
+    try {
+      const input = await jsonObject(request);
+      if (!isString(input.screeningId) || !input.screeningId || input.screeningId.length > 100)
+        throw new ClientError("A current screening is required", 400);
+      if (input.enabled !== true && input.enabled !== false)
+        throw new ClientError("enabled must be a boolean", 400);
+      const { screeningId, enabled } = input;
+      const screening = await serializedController(async () =>
+        diary.setTicketCounting(screeningId, enabled),
+      );
+      if (!screening)
+        return Response.json(
+          { error: "The screening changed. Refresh and try again." },
+          { status: 409 },
+        );
+      return Response.json({ screening });
+    } catch (error) {
+      if (error instanceof ClientError) return apiError(error);
+      console.error("Could not change cinema ticket counting", error);
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
     }
   }

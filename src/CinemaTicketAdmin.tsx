@@ -244,6 +244,48 @@ export default function CinemaTicketAdmin() {
     }
   }
 
+  async function toggleTicketCounting() {
+    if (!screening || submissionPending.current) return;
+    submissionPending.current = true;
+    currentRequest.current?.abort();
+    const request = new AbortController();
+    submissionRequest.current = request;
+    setSubmitting(true);
+    setSubmitError(null);
+    setNotice(null);
+    const enabled = !screening.ticketCountingEnabled;
+    try {
+      const result = await apiJson<{ screening: CinemaScreening }>(
+        "/api/cinema/screening/counting",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: request.signal,
+          body: JSON.stringify({ screeningId: screening.id, enabled }),
+        },
+      );
+      if (!request.signal.aborted && active.current) {
+        applyScreening(result.screening);
+        setNotice(
+          enabled
+            ? "Ticket counting resumed."
+            : "Ticket counting stopped. Collected tickets are kept.",
+        );
+      }
+    } catch (error) {
+      if (!request.signal.aborted && active.current)
+        setSubmitError(
+          error instanceof Error ? error.message : "Could not change ticket counting.",
+        );
+    } finally {
+      submissionPending.current = false;
+      if (!request.signal.aborted && active.current) {
+        setSubmitting(false);
+        void loadCurrentScreening();
+      }
+    }
+  }
+
   const design = screening?.ticketDesign;
   const canCreate =
     !submitting &&
@@ -320,7 +362,11 @@ export default function CinemaTicketAdmin() {
               <UiIcon name="heart" /> TICKET CREATED
             </span>
             <h3>{design.title}</h3>
-            <p>Viewers collect this ticket after 10 minutes.</p>
+            <p>
+              {screening.ticketCountingEnabled
+                ? "Viewers collect this ticket after 10 minutes."
+                : "Counting is stopped. Collected tickets stay in viewers’ diaries."}
+            </p>
             <small>Title and artwork are final.</small>
           </div>
           <div className="cinema-ticket-admin-preview">
@@ -406,6 +452,34 @@ export default function CinemaTicketAdmin() {
           </div>
         </form>
       ) : null}
+      {screening && (
+        <div className="cinema-ticket-admin-counting">
+          <div>
+            <strong>
+              {screening.ticketCountingEnabled
+                ? "Ticket counting enabled"
+                : "Ticket counting stopped"}
+            </strong>
+            <p>
+              {screening.ticketCountingEnabled
+                ? "Watch time counts while a stream is live. You can stop it here without stopping the stream."
+                : "Watch time is stopped. Existing progress and collected tickets are saved."}
+            </p>
+          </div>
+          <button
+            className="cinema-ticket-admin-secondary"
+            type="button"
+            disabled={submitting}
+            onClick={() => void toggleTicketCounting()}
+          >
+            {submitting
+              ? "Saving…"
+              : screening.ticketCountingEnabled
+                ? "Stop counting"
+                : "Resume counting"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

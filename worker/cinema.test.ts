@@ -140,6 +140,9 @@ test("controller status adopts an existing stream but failed polls do not split 
     const info = await response.json();
     assert.deepEqual(info.screening, current);
     assert.equal(current.title, "Already playing");
+    diary.watching("viewer", "tab", current.id, true, 0);
+    diary.watching("viewer", "tab", current.id, true, 10_000);
+    assert.equal(diary.progress("viewer").watchedSeconds, 10);
     const failureEnv = {
       ...env,
       RELAY_CONTROLLER_URL: "http://failed-controller.test",
@@ -155,6 +158,9 @@ test("controller status adopts an existing stream but failed polls do not split 
     assert.equal(failedInfo.online, false);
     assert.deepEqual(failedInfo.screening, current);
     assert.deepEqual(diary.current(), current);
+    diary.watching("viewer", "tab", current.id, true, 20_000);
+    diary.watching("viewer", "tab", current.id, true, 30_000);
+    assert.equal(diary.progress("viewer").watchedSeconds, 10);
   } finally {
     diary.close();
   }
@@ -221,6 +227,95 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
 
 const pngData =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jfYQAAAAASUVORK5CYII=";
+
+test("ticket counting requires management permission, same-origin JSON, and a current screening", async () => {
+  const diary = new CinemaDiary(":memory:");
+  try {
+    const env = cinemaEnv("counting-permissions", diary);
+    const screening = diary.start("Together");
+    const path = "/api/cinema/screening/counting";
+    const body = JSON.stringify({ screeningId: screening.id, enabled: false });
+    const viewer = await viewerCookie(env, "counting-viewer");
+    const admin = await viewerCookie(env, "counting-admin", true);
+    assert.equal((await handleRequest(request(env, path, "", body), env)).status, 403);
+    assert.equal((await handleRequest(request(env, path, viewer, body), env)).status, 403);
+    for (const [origin, contentType, expected] of [
+      ["https://foreign.test", "application/json", 403],
+      [env.APP_URL, "text/plain", 415],
+    ] as const) {
+      const response = await handleRequest(
+        new Request(`${env.API_URL}${path}`, {
+          method: "POST",
+          body,
+          headers: { Cookie: admin, Origin: origin, "Content-Type": contentType },
+        }),
+        env,
+      );
+      assert.equal(response.status, expected);
+    }
+    for (const invalid of [
+      "{",
+      "{}",
+      JSON.stringify({ screeningId: screening.id, enabled: "false" }),
+    ])
+      assert.equal((await handleRequest(request(env, path, admin, invalid), env)).status, 400);
+    assert.deepEqual(diary.current(), screening);
+    const stopped = await handleRequest(request(env, path, admin, body), env);
+    assert.equal(stopped.status, 200);
+    assert.equal(stopped.headers.get("Cache-Control"), "private, no-store");
+    assert.deepEqual(await stopped.json(), {
+      screening: { ...screening, ticketCountingEnabled: false },
+    });
+    assert.equal(diary.observe(true, "Together")?.ticketCountingEnabled, false);
+    const resumed = await handleRequest(
+      request(env, path, admin, JSON.stringify({ screeningId: screening.id, enabled: true })),
+      env,
+    );
+    assert.equal(resumed.status, 200);
+    assert.deepEqual(diary.current(), screening);
+    const next = diary.start("Next screening");
+    assert.equal((await handleRequest(request(env, path, admin, body), env)).status, 409);
+    assert.deepEqual(diary.current(), next);
+    const unavailable = cinemaEnv("counting-unavailable");
+    assert.equal(
+      (await handleRequest(request(unavailable, path, admin, body), unavailable)).status,
+      503,
+    );
+  } finally {
+    diary.close();
+  }
+});
+
+test("idle and failed controller status cannot count idle-video playback", async (context) => {
+  for (const [id, status] of [
+    ["idle", { running: false }],
+    ["failed", { running: true, title: "Together", error: "Relay failed" }],
+  ] as const) {
+    const diary = new CinemaDiary(":memory:");
+    try {
+      const env = cinemaEnv(`counting-${id}`, diary);
+      const cookie = await viewerCookie(env, `counting-${id}-viewer`);
+      const screening = diary.start("Together");
+      diary.watching("viewer", "tab", screening.id, true, 0);
+      diary.watching("viewer", "tab", screening.id, true, 10_000);
+      context.mock.method(globalThis, "fetch", async (input: string | URL | Request) =>
+        String(input) === env.RELAY_CONTROLLER_URL
+          ? Response.json(status)
+          : new Response("#EXTM3U"),
+      );
+      assert.equal(
+        (await handleRequest(request(env, "/api/stream-info", cookie), env)).status,
+        200,
+      );
+      diary.watching("viewer", "tab", screening.id, true, 20_000);
+      diary.watching("viewer", "tab", screening.id, true, 30_000);
+      assert.equal(diary.progress("viewer").watchedSeconds, 10);
+      assert.equal(diary.current()?.id, screening.id);
+    } finally {
+      diary.close();
+    }
+  }
+});
 
 test("screening ticket creation requires management permission, same-origin JSON, and current screening", async (context) => {
   const diary = new CinemaDiary(":memory:");

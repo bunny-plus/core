@@ -212,6 +212,33 @@
   width: 100%;
 }
 
+.cinema-ticket-admin-counting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed #e6c1ce;
+}
+
+.cinema-ticket-admin-counting > div {
+  flex: 1 1 240px;
+}
+
+.cinema-ticket-admin-counting strong {
+  color: #a63c63;
+  font-size: 12px;
+}
+
+.cinema-ticket-admin-counting p {
+  margin: 6px 0 0;
+  color: #80616c;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .cinema-ticket-admin-submit .ui-icon {
   width: 19px;
   height: 19px;

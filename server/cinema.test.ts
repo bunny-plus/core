@@ -103,6 +103,68 @@ test("overlapping tabs count the union of playback intervals", () => {
   }
 });
 
+test("idle relay pulses cannot earn tickets and recovery excludes the outage", () => {
+  const diary = new CinemaDiary(":memory:");
+  try {
+    const screening = diary.start("Together", startTime);
+    diary.createTicket(screening.id, "Together", null, startTime);
+    watchFor(diary, "viewer", screening.id, 590);
+    assert.deepEqual(diary.observe(false, null), diary.current());
+    watchFor(diary, "viewer", screening.id, 60, startTime + 590_000);
+    assert.equal(diary.progress("viewer").watchedSeconds, 590);
+    assert.equal(diary.collection("viewer").total, 0);
+    diary.observe(true, "Together");
+    diary.watching("viewer", "viewer", screening.id, true, startTime + 660_000);
+    assert.equal(diary.progress("viewer").watchedSeconds, 590);
+    diary.watching("viewer", "viewer", screening.id, true, startTime + 670_000);
+    assert.equal(diary.progress("viewer").ticket?.number, 1);
+  } finally {
+    diary.close();
+  }
+});
+
+test("stopping ticket counting survives restarts and preserves progress, tickets, and artwork", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "bunny-cinema-counting-"));
+  const file = join(directory, "cinema.sqlite");
+  const diary = new CinemaDiary(file);
+  const screening = diary.start("Together", startTime);
+  const image = { mimeType: "image/png", data: new Uint8Array([1, 2, 3]) };
+  diary.createTicket(screening.id, "Collectible", image, startTime);
+  watchFor(diary, "collector", screening.id, 600);
+  watchFor(diary, "viewer", screening.id, 590);
+  const collected = diary.collection("collector");
+  const stopped = diary.setTicketCounting(screening.id, false);
+  assert.equal(stopped?.ticketCountingEnabled, false);
+  // Even a stop/resume entirely between pulses must exclude that interval.
+  diary.setTicketCounting(screening.id, true);
+  diary.watching("viewer", "viewer", screening.id, true, startTime + 600_000);
+  assert.equal(diary.progress("viewer").watchedSeconds, 590);
+  diary.setTicketCounting(screening.id, false);
+  diary.close();
+  const restored = new CinemaDiary(file);
+  try {
+    assert.equal(restored.current()?.ticketCountingEnabled, false);
+    restored.observe(true, "Together");
+    watchFor(restored, "viewer", screening.id, 60, startTime + 610_000);
+    assert.equal(restored.progress("viewer").watchedSeconds, 590);
+    assert.equal(restored.progress("viewer").ticket, null);
+    assert.deepEqual(restored.collection("collector"), collected);
+    assert.deepEqual(restored.image(screening.id), image);
+    restored.setTicketCounting(screening.id, true);
+    restored.watching("viewer", "viewer", screening.id, true, startTime + 680_000);
+    assert.equal(restored.progress("viewer").watchedSeconds, 590);
+    restored.watching("viewer", "viewer", screening.id, true, startTime + 690_000);
+    assert.equal(restored.progress("viewer").ticket?.title, "Collectible");
+    restored.setTicketCounting(screening.id, false);
+    const next = restored.start("Next screening", startTime + 700_000);
+    assert.equal(next.ticketCountingEnabled, true);
+    assert.equal(restored.setTicketCounting(screening.id, false), null);
+    assert.deepEqual(restored.current(), next);
+  } finally {
+    restored.close();
+  }
+});
+
 test("a later tab can fill a gap without counting already covered time twice", () => {
   const diary = new CinemaDiary(":memory:");
   try {
@@ -140,6 +202,8 @@ test("reconnect and process restart retain totals without counting disconnected 
   const restored = new CinemaDiary(file);
   try {
     assert.deepEqual(restored.current(), screening);
+    watchFor(restored, "viewer", screening.id, 10, startTime + 320_000);
+    assert.equal(restored.progress("viewer").watchedSeconds, 310);
     assert.deepEqual(restored.observe(true, "Perfect Blue"), screening);
     assert.equal(restored.progress("viewer").watchedSeconds, 310);
     restored.watching("viewer", "new-tab", screening.id, true, startTime + 330_000);

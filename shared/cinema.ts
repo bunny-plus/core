@@ -17,6 +17,7 @@ export type CinemaScreening = {
   id: string;
   title: string;
   startedAt: string;
+  ticketCountingEnabled: boolean;
   ticketDesign: CinemaTicketDesign | null;
 };
 

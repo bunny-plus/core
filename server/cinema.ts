@@ -15,6 +15,7 @@ type ScreeningRow = {
   id: string;
   title: string;
   started_at: string;
+  counting_paused: number;
   design_title: string | null;
   design_created_at: string | null;
   image_present: number;
@@ -49,6 +50,7 @@ function screeningFromRow(row: ScreeningRow): CinemaScreening {
     id: row.id,
     title: row.title,
     startedAt: row.started_at,
+    ticketCountingEnabled: !row.counting_paused,
     ticketDesign:
       row.design_title !== null && row.design_created_at !== null
         ? {
@@ -84,6 +86,7 @@ export class CinemaDiary {
   private readonly database: DatabaseSync;
   private readonly pulses = new Map<string, WatchingPulse>();
   private readonly intervals = new Map<string, WatchInterval[]>();
+  private playbackAvailable = false;
 
   constructor(file: string) {
     if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
@@ -129,6 +132,9 @@ export class CinemaDiary {
         ticket_id TEXT PRIMARY KEY REFERENCES cinema_tickets(id),
         screening_id TEXT NOT NULL REFERENCES cinema_ticket_designs(screening_id)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS cinema_counting_pauses (
+        screening_id TEXT PRIMARY KEY REFERENCES cinema_screenings(id)
+      ) STRICT;
     `);
   }
 
@@ -137,8 +143,10 @@ export class CinemaDiary {
     const row = this.database
       .prepare(`
         SELECT s.id, s.title, s.started_at, d.title AS design_title,
-          d.created_at AS design_created_at, d.image_data IS NOT NULL AS image_present
+          d.created_at AS design_created_at, d.image_data IS NOT NULL AS image_present,
+          p.screening_id IS NOT NULL AS counting_paused
         FROM cinema_screenings s LEFT JOIN cinema_ticket_designs d ON d.screening_id = s.id
+        LEFT JOIN cinema_counting_pauses p ON p.screening_id = s.id
         WHERE s.ended_at IS NULL
       `)
       .get() as ScreeningRow | undefined;
@@ -150,6 +158,7 @@ export class CinemaDiary {
       id: randomUUID(),
       title: screeningTitle(title),
       startedAt: new Date(now).toISOString(),
+      ticketCountingEnabled: true,
       ticketDesign: null,
     };
     this.database.exec("BEGIN IMMEDIATE");
@@ -167,10 +176,13 @@ export class CinemaDiary {
     }
     this.pulses.clear();
     this.intervals.clear();
+    this.playbackAvailable = true;
     return screening;
   }
 
   observe(running: boolean, title: string | null | undefined): CinemaScreening | null {
+    this.playbackAvailable = running;
+    if (!running) this.pulses.clear();
     const current = this.current();
     // A failed controller poll or a temporary relay outage must not divide a screening.
     // Only a successful explicit stop ends it; a known new title starts the next one.
@@ -186,6 +198,23 @@ export class CinemaDiary {
       .run(new Date(now).toISOString());
     this.pulses.clear();
     this.intervals.clear();
+    this.playbackAvailable = false;
+  }
+
+  setTicketCounting(screeningId: string, enabled: boolean): CinemaScreening | null {
+    const screening = this.current();
+    if (!screening || screening.id !== screeningId) return null;
+    if (enabled)
+      this.database
+        .prepare("DELETE FROM cinema_counting_pauses WHERE screening_id = ?")
+        .run(screeningId);
+    else
+      this.database
+        .prepare("INSERT OR IGNORE INTO cinema_counting_pauses (screening_id) VALUES (?)")
+        .run(screeningId);
+    // Neither a stopped interval nor time before resuming can bridge two watching pulses.
+    if (screening.ticketCountingEnabled !== enabled) this.pulses.clear();
+    return { ...screening, ticketCountingEnabled: enabled };
   }
 
   createTicket(
@@ -264,7 +293,12 @@ export class CinemaDiary {
   ): CinemaProgress {
     const screening = this.current();
     const previous = this.pulses.get(connectionId);
-    if (!screening || screening.id !== screeningId) {
+    if (
+      !screening ||
+      screening.id !== screeningId ||
+      !screening.ticketCountingEnabled ||
+      !this.playbackAvailable
+    ) {
       this.pulses.delete(connectionId);
       return this.progress(memberId);
     }

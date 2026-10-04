@@ -9,10 +9,10 @@ type Props = {
   playback: JellyfinPlayback;
   videoRef: RefObject<HTMLVideoElement | null>;
   hlsRef: RefObject<Hls | null>;
+  overlayRef: RefObject<HTMLDivElement | null>;
 };
 
-export function JellyfinSubtitles({ playback, videoRef, hlsRef }: Props) {
-  const rootRef = useRef<HTMLDivElement>(null);
+export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Props) {
   const timingRef = useRef({ startedAt: playback.startedAt, delay: 0 });
   const [options, setOptions] = useState<SubtitleOptions | null>(null);
   const [track, setTrack] = useState<number | null>(null);
@@ -45,7 +45,7 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef }: Props) {
 
   useEffect(() => {
     const video = videoRef.current;
-    const root = rootRef.current;
+    const root = overlayRef.current;
     if (track === null || !video || !root || !options) return;
     const abort = new AbortController();
     const canvas = document.createElement("canvas");
@@ -184,66 +184,64 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef }: Props) {
     }
     void load().catch((reason: Error) => fail(reason.message));
     return dispose;
-  }, [base, track, options, videoRef, hlsRef, retry]);
+  }, [base, track, options, videoRef, hlsRef, overlayRef, retry]);
 
   return (
-    <div className="jellyfin-subtitles" ref={rootRef}>
-      <details className="subtitle-menu">
-        <summary aria-label="Subtitles" title="Subtitles">
-          CC
-        </summary>
-        <div className="subtitle-panel">
-          <label htmlFor="subtitle-track">Subtitles</label>
-          <select
-            id="subtitle-track"
-            value={track ?? "off"}
-            onChange={(event) => {
-              setTrack(event.target.value === "off" ? null : Number(event.target.value));
-              setError("");
-              setStatus(event.target.value === "off" ? "Subtitles are off" : "Loading subtitles…");
-            }}
-          >
-            <option value="off">Off</option>
-            {options?.tracks.map((entry) => (
-              <option key={entry.index} value={entry.index} disabled={!entry.supported}>
-                {entry.label}
-                {entry.supported ? "" : " (unsupported format)"}
-              </option>
-            ))}
-          </select>
-          {track !== null && (
-            <div className="subtitle-delay">
-              <span>
-                Delay: {delay > 0 ? "+" : ""}
-                {delay.toFixed(1)}s
-              </span>
-              <button
-                type="button"
-                aria-label="Show subtitles 0.5 seconds earlier"
-                onClick={() => setDelay((value) => Math.max(-30, value - 0.5))}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                aria-label="Show subtitles 0.5 seconds later"
-                onClick={() => setDelay((value) => Math.min(30, value + 0.5))}
-              >
-                +
-              </button>
-              <button type="button" onClick={() => setDelay(0)}>
-                Reset
-              </button>
-            </div>
-          )}
-          <p role="status">{error || status}</p>
-          {error && (
-            <button type="button" onClick={() => setRetry((value) => value + 1)}>
-              Reload subtitles
+    <details className="subtitle-menu">
+      <summary aria-label="Subtitles" title="Subtitles">
+        CC
+      </summary>
+      <div className="subtitle-panel">
+        <label htmlFor="subtitle-track">Subtitles</label>
+        <select
+          id="subtitle-track"
+          value={track ?? "off"}
+          onChange={(event) => {
+            setTrack(event.target.value === "off" ? null : Number(event.target.value));
+            setError("");
+            setStatus(event.target.value === "off" ? "Subtitles are off" : "Loading subtitles…");
+          }}
+        >
+          <option value="off">Off</option>
+          {options?.tracks.map((entry) => (
+            <option key={entry.index} value={entry.index} disabled={!entry.supported}>
+              {entry.label}
+              {entry.supported ? "" : " (unsupported format)"}
+            </option>
+          ))}
+        </select>
+        {track !== null && (
+          <div className="subtitle-delay">
+            <span>
+              Delay: {delay > 0 ? "+" : ""}
+              {delay.toFixed(1)}s
+            </span>
+            <button
+              type="button"
+              aria-label="Show subtitles 0.5 seconds earlier"
+              onClick={() => setDelay((value) => Math.max(-30, value - 0.5))}
+            >
+              −
             </button>
-          )}
-        </div>
-      </details>
-    </div>
+            <button
+              type="button"
+              aria-label="Show subtitles 0.5 seconds later"
+              onClick={() => setDelay((value) => Math.min(30, value + 0.5))}
+            >
+              +
+            </button>
+            <button type="button" onClick={() => setDelay(0)}>
+              Reset
+            </button>
+          </div>
+        )}
+        <p role="status">{error || status}</p>
+        {error && (
+          <button type="button" onClick={() => setRetry((value) => value + 1)}>
+            Reload subtitles
+          </button>
+        )}
+      </div>
+    </details>
   );
 }

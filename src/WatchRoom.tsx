@@ -319,17 +319,21 @@ export default function WatchRoom({
   streamUrl: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const screenRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
+  const subtitleOverlayRef = useRef<HTMLDivElement>(null);
+  const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const clockOffsetRef = useRef(0);
   const screeningIdRef = useRef("");
+  const ticketPlaybackRef = useRef(false);
   const seenTicketIdsRef = useRef(new Set<string>());
   const [cinemaProgress, setCinemaProgress] = useState<CinemaProgress | null>(null);
   const [earnedTicket, setEarnedTicket] = useState<CinemaTicket | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
+  const [fullscreen, setFullscreen] = useState(false);
   const initialVolumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
@@ -407,39 +411,77 @@ export default function WatchRoom({
   }, [chatHistory, showChatHistory]);
 
   useEffect(() => {
-    const screen = screenRef.current;
+    const player = playerRef.current;
+    let wasFullscreen = false;
+    const update = () => {
+      const active = document.fullscreenElement === player;
+      setFullscreen(active);
+      if (active) player?.focus({ preventScroll: true });
+      else if (wasFullscreen) fullscreenButtonRef.current?.focus({ preventScroll: true });
+      wasFullscreen = active;
+    };
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+
+  useEffect(() => {
+    const screen = playerRef.current;
     if (!screen || playerStatus !== "ready" || isBuffering || chatComposer || showChatHistory)
       return;
     let timer: ReturnType<typeof setTimeout>;
-    const reveal = () => {
+    let keyboardInteraction = false;
+    let pointerDown = false;
+    const reveal = (event?: Event) => {
+      if (event?.type === "keydown") keyboardInteraction = true;
+      else if (event?.type.startsWith("pointer")) keyboardInteraction = false;
+      if (event?.type === "pointerdown") pointerDown = true;
       screen.classList.remove("cursor-idle");
       clearTimeout(timer);
       timer = setTimeout(() => {
         const focused = document.activeElement;
         if (
-          screen.matches(":hover") &&
+          (document.fullscreenElement === screen || screen.matches(":hover")) &&
+          !pointerDown &&
+          !screen.querySelector("details[open]") &&
           !(
+            keyboardInteraction &&
             focused?.matches(
               "input, textarea, select, summary, button, a, [contenteditable='true']",
-            ) && screen.contains(focused)
+            ) &&
+            screen.contains(focused)
           )
         )
           screen.classList.add("cursor-idle");
       }, 3_000);
     };
     const leave = () => {
-      clearTimeout(timer);
-      screen.classList.remove("cursor-idle");
+      if (document.fullscreenElement === screen) reveal();
+      else {
+        clearTimeout(timer);
+        screen.classList.remove("cursor-idle");
+      }
+    };
+    const release = (event: Event) => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      reveal(event);
     };
     const events = ["pointermove", "pointerdown", "pointerenter", "keydown", "focusin", "focusout"];
     for (const event of events) screen.addEventListener(event, reveal);
     screen.addEventListener("pointerleave", leave);
+    screen.addEventListener("toggle", reveal, true);
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
     document.addEventListener("fullscreenchange", reveal);
     reveal();
     return () => {
-      leave();
+      clearTimeout(timer);
+      screen.classList.remove("cursor-idle");
       for (const event of events) screen.removeEventListener(event, reveal);
       screen.removeEventListener("pointerleave", leave);
+      screen.removeEventListener("toggle", reveal, true);
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
       document.removeEventListener("fullscreenchange", reveal);
     };
   }, [playerStatus, isBuffering, chatComposer, showChatHistory]);
@@ -455,10 +497,15 @@ export default function WatchRoom({
           cache: "no-store",
           signal: AbortSignal.any([request.signal, AbortSignal.timeout(8_000)]),
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          ticketPlaybackRef.current = false;
+          setRelayStatus(null);
+          return;
+        }
         // SAFETY: /api/stream-info is produced by the matching RelayStatus server contract.
         const status = (await response.json()) as RelayStatus;
         if (stopped) return;
+        ticketPlaybackRef.current = status.running && status.online;
         setRelayStatus(status);
         // A failed availability probe must not interrupt media that is still buffered.
         if (
@@ -476,6 +523,7 @@ export default function WatchRoom({
         }
       } catch {
         if (!stopped && !request.signal.aborted) {
+          ticketPlaybackRef.current = false;
           setRelayStatus(null);
         }
       } finally {
@@ -510,6 +558,8 @@ export default function WatchRoom({
         event !== undefined &&
         ["waiting", "pause", "seeking", "ended", "emptied"].includes(event.type);
       const playing =
+        ticketPlaybackRef.current &&
+        Boolean(screeningIdRef.current) &&
         !interrupted &&
         video !== null &&
         !video.paused &&
@@ -590,7 +640,9 @@ export default function WatchRoom({
           if (message.chats) setChatHistory(message.chats.slice(-200));
           if (message.type === "cinema-progress" && message.progress) {
             const progress = message.progress;
-            screeningIdRef.current = progress.screening?.id ?? "";
+            screeningIdRef.current = progress.screening?.ticketCountingEnabled
+              ? progress.screening.id
+              : "";
             setCinemaProgress(progress);
             if (progress.ticket && !seenTicketIdsRef.current.has(progress.ticket.id)) {
               seenTicketIdsRef.current.add(progress.ticket.id);
@@ -846,6 +898,15 @@ export default function WatchRoom({
     changeVolume(volume === 0 ? lastAudibleVolumeRef.current : 0);
   }
 
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement === playerRef.current) await document.exitFullscreen();
+      else await playerRef.current?.requestFullscreen();
+    } catch {
+      setSyncLabel("Fullscreen is unavailable in this browser");
+    }
+  }
+
   function toggleLightsOut() {
     const next = !lightsOut;
     setLightsOut(next);
@@ -895,329 +956,336 @@ export default function WatchRoom({
     <div className="watch-content">
       <div className="room-grid">
         <section className="screen-column">
-          <div className="screen-frame" ref={screenRef}>
-            <video
-              ref={videoRef}
-              autoPlay
-              muted={volume === 0}
-              playsInline
-              onCanPlay={() => {
-                setPlayerStatus("ready");
-                setIsBuffering(false);
-                void videoRef.current
-                  ?.play()
-                  .catch(() => setSyncLabel("Tap the video to resume audio"));
-              }}
-              onError={() => setPlayerStatus("error")}
-              onLoadedData={() => setPlayerStatus("ready")}
-              onPlaying={() => setIsBuffering(false)}
-              onStalled={() => {
-                if ((videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA) {
+          <div className="screen-player" ref={playerRef} tabIndex={-1}>
+            <div className="screen-frame">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted={volume === 0}
+                playsInline
+                onCanPlay={() => {
+                  setPlayerStatus("ready");
+                  setIsBuffering(false);
+                  void videoRef.current
+                    ?.play()
+                    .catch(() => setSyncLabel("Tap the video to resume audio"));
+                }}
+                onError={() => setPlayerStatus("error")}
+                onLoadedData={() => setPlayerStatus("ready")}
+                onPlaying={() => setIsBuffering(false)}
+                onStalled={() => {
+                  if ((videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA) {
+                    setIsBuffering(true);
+                    setSyncLabel("Buffering the live stream...");
+                  }
+                }}
+                onWaiting={() => {
                   setIsBuffering(true);
                   setSyncLabel("Buffering the live stream...");
-                }
-              }}
-              onWaiting={() => {
-                setIsBuffering(true);
-                setSyncLabel("Buffering the live stream...");
-              }}
-              onClick={() => {
-                if (videoRef.current?.paused) void videoRef.current.play();
-              }}
-            />
-            {relayStatus?.running && relayStatus.jellyfin && (
-              <JellyfinSubtitles
-                key={relayStatus.jellyfin.sessionId}
-                playback={relayStatus.jellyfin}
-                videoRef={videoRef}
-                hlsRef={hlsRef}
-              />
-            )}
-            {(streamOnline === null || playerStatus === "loading") && streamUrl && (
-              <div className="stream-loading" role="status">
-                <AssetIcon name="carrot" />
-                <strong>Tuning the bunny ears...</strong>
-                <small>Waiting for the live stream</small>
-              </div>
-            )}
-            {playerStatus === "ready" && isBuffering && (
-              <div className="stream-loading buffering-overlay" role="status">
-                <AssetIcon name="carrot" />
-                <strong>Buffering the live stream...</strong>
-                <small>Catching everybun back up</small>
-              </div>
-            )}
-            {playerStatus === "unsupported" && (
-              <div className="stream-error" role="status">
-                This browser does not support HLS playback. Open the stream in an HLS-capable
-                browser or player.
-              </div>
-            )}
-            {playerStatus !== "unsupported" &&
-              (!streamUrl || streamOnline === false || playerStatus === "error") && (
-                <div className="stream-error">
-                  {streamUrl
-                    ? "The stream is offline right now. This screen will reconnect when broadcasting resumes."
-                    : "Set STREAM_URL to connect the screen."}
-                </div>
-              )}
-            <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
-              {reactions.map((reaction) => (
-                <span
-                  className="room-reaction"
-                  style={roomStyle({ "--reaction-x": `${reaction.x}%` })}
-                  key={reaction.id}
-                >
-                  <span className="sr-only">{reaction.member.name} reacted</span>
-                  <AssetIcon name={reaction.variant} />
-                  <strong aria-hidden="true">{reaction.member.name}</strong>
-                </span>
-              ))}
-              {chats.map((chat) =>
-                chatDisplayMode === "scrolling" ? (
-                  <span
-                    className="room-chat-scroll"
-                    style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
-                    key={chat.id}
-                  >
-                    <strong>{chat.member.name}</strong>
-                    <span aria-hidden="true">: </span>
-                    <ChatMessage message={chat.message} scrolling />
-                  </span>
-                ) : (
-                  <span
-                    className="room-chat"
-                    style={roomStyle({ "--chat-x": `${chat.x}%` })}
-                    key={chat.id}
-                  >
-                    <span className="room-chat-avatar" aria-hidden="true">
-                      {chat.member.avatar ? (
-                        <img src={chat.member.avatar} alt="" />
-                      ) : (
-                        <span>{chat.member.name[0]?.toUpperCase()}</span>
-                      )}
-                    </span>
-                    <span className="room-chat-bubble">
-                      <strong aria-hidden="true">{chat.member.name}</strong>
-                      <span className="sr-only">{chat.member.name} says: </span>
-                      <span>
-                        <ChatMessage message={chat.message} />
-                      </span>
-                    </span>
-                  </span>
-                ),
-              )}
-            </div>
-            {shortcutsEnabled && (
-              <span className="reaction-shortcut-hint" aria-hidden="true">
-                Press <kbd>F</kbd> to react
-              </span>
-            )}
-            {chatComposer && (
-              <form
-                className="chat-composer"
-                autoComplete="off"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  chat(chatMessage);
                 }}
-              >
-                <button
-                  className="chat-composer-close"
-                  type="button"
-                  aria-label="Close chat"
-                  onClick={() => {
-                    setChatMessage("");
-                    setChatComposer(false);
-                  }}
-                >
-                  ×
-                </button>
-                <label htmlFor="chat-message">Say something cute</label>
-                <div>
-                  <input
-                    id="chat-message"
-                    autoFocus
-                    autoCapitalize="off"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    maxLength={64}
-                    placeholder="omg..."
-                    value={chatMessage}
-                    onChange={(event) => setChatMessage(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        setChatMessage("");
-                        setChatComposer(false);
-                      }
-                    }}
-                  />
-                  <button type="submit">Send</button>
+                onClick={() => {
+                  if (videoRef.current?.paused) void videoRef.current.play();
+                }}
+              />
+              <div className="jellyfin-subtitles" ref={subtitleOverlayRef} />
+              {(streamOnline === null || playerStatus === "loading") && streamUrl && (
+                <div className="stream-loading" role="status">
+                  <AssetIcon name="carrot" />
+                  <strong>Tuning the bunny ears...</strong>
+                  <small>Waiting for the live stream</small>
                 </div>
-              </form>
-            )}
-            {showChatHistory && (
-              <aside className="chat-history-panel" aria-label="Chat">
-                <button
-                  className="chat-history-close"
-                  type="button"
-                  aria-label="Hide chat"
-                  onClick={() => setShowChatHistory(false)}
-                >
-                  ×
-                </button>
-                <div ref={chatHistoryRef}>
-                  {chatHistory.map((chat) => (
-                    <p className="chat-history-entry" key={chat.id}>
+              )}
+              {playerStatus === "ready" && isBuffering && (
+                <div className="stream-loading buffering-overlay" role="status">
+                  <AssetIcon name="carrot" />
+                  <strong>Buffering the live stream...</strong>
+                  <small>Catching everybun back up</small>
+                </div>
+              )}
+              {playerStatus === "unsupported" && (
+                <div className="stream-error" role="status">
+                  This browser does not support HLS playback. Open the stream in an HLS-capable
+                  browser or player.
+                </div>
+              )}
+              {playerStatus !== "unsupported" &&
+                (!streamUrl || streamOnline === false || playerStatus === "error") && (
+                  <div className="stream-error">
+                    {streamUrl
+                      ? "The stream is offline right now. This screen will reconnect when broadcasting resumes."
+                      : "Set STREAM_URL to connect the screen."}
+                  </div>
+                )}
+              <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
+                {reactions.map((reaction) => (
+                  <span
+                    className="room-reaction"
+                    style={roomStyle({ "--reaction-x": `${reaction.x}%` })}
+                    key={reaction.id}
+                  >
+                    <span className="sr-only">{reaction.member.name} reacted</span>
+                    <AssetIcon name={reaction.variant} />
+                    <strong aria-hidden="true">{reaction.member.name}</strong>
+                  </span>
+                ))}
+                {chats.map((chat) =>
+                  chatDisplayMode === "scrolling" ? (
+                    <span
+                      className="room-chat-scroll"
+                      style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
+                      key={chat.id}
+                    >
                       <strong>{chat.member.name}</strong>
                       <span aria-hidden="true">: </span>
-                      <span>
-                        <ChatMessage message={chat.message} />
+                      <ChatMessage message={chat.message} scrolling />
+                    </span>
+                  ) : (
+                    <span
+                      className="room-chat"
+                      style={roomStyle({ "--chat-x": `${chat.x}%` })}
+                      key={chat.id}
+                    >
+                      <span className="room-chat-avatar" aria-hidden="true">
+                        {chat.member.avatar ? (
+                          <img src={chat.member.avatar} alt="" />
+                        ) : (
+                          <span>{chat.member.name[0]?.toUpperCase()}</span>
+                        )}
                       </span>
-                    </p>
-                  ))}
-                </div>
-              </aside>
-            )}
-          </div>
-          <div className="screen-footer">
-            <div
-              className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}
-            >
-              <i aria-hidden="true" />
-              <span>
-                {streamOnline === null || relayStatus === null
-                  ? "CHECKING"
-                  : !streamOnline
-                    ? "OFFLINE"
-                    : relayStatus.running
-                      ? "LIVE"
-                      : "IDLE"}
-              </span>
-              {relayStatus?.running && (
-                <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
-                  <AssetIcon name="carrot" />
-                  <span>{relayStatus.title ?? "TorBox stream"}</span>
+                      <span className="room-chat-bubble">
+                        <strong aria-hidden="true">{chat.member.name}</strong>
+                        <span className="sr-only">{chat.member.name} says: </span>
+                        <span>
+                          <ChatMessage message={chat.message} />
+                        </span>
+                      </span>
+                    </span>
+                  ),
+                )}
+              </div>
+              {shortcutsEnabled && (
+                <span className="reaction-shortcut-hint" aria-hidden="true">
+                  Press <kbd>F</kbd> to react
                 </span>
               )}
-              <span className="sync-copy">{syncLabel}</span>
-            </div>
-            <div className="player-actions">
-              <div className="volume-control">
-                <button
-                  className="volume-toggle"
-                  type="button"
-                  aria-label={volume === 0 ? "Unmute" : "Mute"}
-                  aria-pressed={volume === 0}
-                  onClick={toggleMute}
+              {chatComposer && (
+                <form
+                  className="chat-composer"
+                  autoComplete="off"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    chat(chatMessage);
+                  }}
                 >
-                  <UiIcon name={volume === 0 ? "volume-off" : "volume"} />
-                </button>
-                <span
-                  className="volume-slider"
-                  style={roomStyle({
-                    "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)`,
-                  })}
-                >
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
-                    aria-label="Volume"
-                    onChange={(event) => changeVolume(Number(event.target.value))}
-                  />
-                  <AssetIcon name="carrot" />
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-label="React"
-                data-tooltip={shortcutsEnabled ? "Press F to react" : undefined}
-                onClick={react}
-              >
-                <UiIcon name="sparkle" />
-                <span>React</span>
-              </button>
-              <button
-                type="button"
-                aria-label="Chat"
-                aria-expanded={chatComposer}
-                data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
-                onClick={() =>
-                  setChatComposer((open) => {
-                    if (open) setChatMessage("");
-                    return !open;
-                  })
-                }
-              >
-                <UiIcon name="chat" />
-                <span>Chat</span>
-              </button>
-              <button
-                className={`chat-history-toggle${showChatHistory ? " active" : ""}`}
-                type="button"
-                aria-label={showChatHistory ? "Hide chat" : "Show chat"}
-                aria-expanded={showChatHistory}
-                onClick={() => setShowChatHistory((visible) => !visible)}
-              >
-                <UiIcon name="history" />
-                <span>{showChatHistory ? "Hide chat" : "Show chat"}</span>
-              </button>
-              <button
-                className={lightsOut ? "active" : ""}
-                type="button"
-                aria-label="Toggle lights"
-                aria-pressed={lightsOut}
-                onClick={toggleLightsOut}
-              >
-                <UiIcon name="moon" />
-                <span>Lights</span>
-              </button>
-              <button
-                type="button"
-                aria-label="Enter fullscreen"
-                onClick={() => screenRef.current?.requestFullscreen()}
-              >
-                <UiIcon name="fullscreen" />
-                <span>Fullscreen</span>
-              </button>
-              <details className="player-menu">
-                <summary aria-label="More player options" title="More player options">
-                  <UiIcon name="gear" />
-                </summary>
-                <div className="player-menu-popover">
                   <button
+                    className="chat-composer-close"
                     type="button"
-                    aria-expanded={showStats}
-                    onClick={(event) => {
-                      setShowStats((visible) => !visible);
-                      event.currentTarget.closest("details")?.removeAttribute("open");
+                    aria-label="Close chat"
+                    onClick={() => {
+                      setChatMessage("");
+                      setChatComposer(false);
                     }}
                   >
-                    {showStats ? "Hide stats" : "Show stats"}
+                    ×
                   </button>
+                  <label htmlFor="chat-message">Say something cute</label>
+                  <div>
+                    <input
+                      id="chat-message"
+                      autoFocus
+                      autoCapitalize="off"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      maxLength={64}
+                      placeholder="omg..."
+                      value={chatMessage}
+                      onChange={(event) => setChatMessage(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          setChatMessage("");
+                          setChatComposer(false);
+                        }
+                      }}
+                    />
+                    <button type="submit">Send</button>
+                  </div>
+                </form>
+              )}
+              {showChatHistory && (
+                <aside className="chat-history-panel" aria-label="Chat">
                   <button
+                    className="chat-history-close"
                     type="button"
-                    aria-pressed={chatDisplayMode === "scrolling"}
-                    onClick={toggleChatDisplayMode}
+                    aria-label="Hide chat"
+                    onClick={() => setShowChatHistory(false)}
                   >
-                    Chat overlay: {chatDisplayMode === "scrolling" ? "scrolling" : "bubbles"}
+                    ×
                   </button>
-                  <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
-                    Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
+                  <div ref={chatHistoryRef}>
+                    {chatHistory.map((chat) => (
+                      <p className="chat-history-entry" key={chat.id}>
+                        <strong>{chat.member.name}</strong>
+                        <span aria-hidden="true">: </span>
+                        <span>
+                          <ChatMessage message={chat.message} />
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                </aside>
+              )}
+            </div>
+            <div className="screen-footer">
+              <div
+                className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}
+              >
+                <i aria-hidden="true" />
+                <span>
+                  {streamOnline === null || relayStatus === null
+                    ? "CHECKING"
+                    : !streamOnline
+                      ? "OFFLINE"
+                      : relayStatus.running
+                        ? "LIVE"
+                        : "IDLE"}
+                </span>
+                {relayStatus?.running && (
+                  <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
+                    <AssetIcon name="carrot" />
+                    <span>{relayStatus.title ?? "TorBox stream"}</span>
+                  </span>
+                )}
+                <span className="sync-copy">{syncLabel}</span>
+              </div>
+              <div className="player-actions">
+                <div className="volume-control">
+                  <button
+                    className="volume-toggle"
+                    type="button"
+                    aria-label={volume === 0 ? "Unmute" : "Mute"}
+                    aria-pressed={volume === 0}
+                    onClick={toggleMute}
+                  >
+                    <UiIcon name={volume === 0 ? "volume-off" : "volume"} />
                   </button>
-                  {streamUrl && (
-                    <a href={streamUrl} target="_blank" rel="noreferrer">
-                      Open in own player ↗<small>May not stay in sync</small>
-                    </a>
-                  )}
+                  <span
+                    className="volume-slider"
+                    style={roomStyle({
+                      "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)`,
+                    })}
+                  >
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      aria-label="Volume"
+                      onChange={(event) => changeVolume(Number(event.target.value))}
+                    />
+                    <AssetIcon name="carrot" />
+                  </span>
                 </div>
-              </details>
+                {relayStatus?.running && relayStatus.jellyfin && (
+                  <JellyfinSubtitles
+                    key={relayStatus.jellyfin.sessionId}
+                    playback={relayStatus.jellyfin}
+                    videoRef={videoRef}
+                    hlsRef={hlsRef}
+                    overlayRef={subtitleOverlayRef}
+                  />
+                )}
+                <button
+                  type="button"
+                  aria-label="React"
+                  data-tooltip={shortcutsEnabled ? "Press F to react" : undefined}
+                  onClick={react}
+                >
+                  <UiIcon name="sparkle" />
+                  <span>React</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Chat"
+                  aria-expanded={chatComposer}
+                  data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
+                  onClick={() =>
+                    setChatComposer((open) => {
+                      if (open) setChatMessage("");
+                      return !open;
+                    })
+                  }
+                >
+                  <UiIcon name="chat" />
+                  <span>Chat</span>
+                </button>
+                <button
+                  className={`chat-history-toggle${showChatHistory ? " active" : ""}`}
+                  type="button"
+                  aria-label={showChatHistory ? "Hide chat" : "Show chat"}
+                  aria-expanded={showChatHistory}
+                  onClick={() => setShowChatHistory((visible) => !visible)}
+                >
+                  <UiIcon name="history" />
+                  <span>{showChatHistory ? "Hide chat" : "Show chat"}</span>
+                </button>
+                <button
+                  className={lightsOut ? "active" : ""}
+                  type="button"
+                  aria-label="Toggle lights"
+                  aria-pressed={lightsOut}
+                  onClick={toggleLightsOut}
+                >
+                  <UiIcon name="moon" />
+                  <span>Lights</span>
+                </button>
+                <button
+                  type="button"
+                  ref={fullscreenButtonRef}
+                  aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={() => void toggleFullscreen()}
+                >
+                  <UiIcon name="fullscreen" />
+                  <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
+                </button>
+                <details className="player-menu">
+                  <summary aria-label="More player options" title="More player options">
+                    <UiIcon name="gear" />
+                  </summary>
+                  <div className="player-menu-popover">
+                    <button
+                      type="button"
+                      aria-expanded={showStats}
+                      onClick={(event) => {
+                        setShowStats((visible) => !visible);
+                        event.currentTarget.closest("details")?.removeAttribute("open");
+                      }}
+                    >
+                      {showStats ? "Hide stats" : "Show stats"}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={chatDisplayMode === "scrolling"}
+                      onClick={toggleChatDisplayMode}
+                    >
+                      Chat overlay: {chatDisplayMode === "scrolling" ? "scrolling" : "bubbles"}
+                    </button>
+                    <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
+                      Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
+                    </button>
+                    {streamUrl && (
+                      <a href={streamUrl} target="_blank" rel="noreferrer">
+                        Open in own player ↗<small>May not stay in sync</small>
+                      </a>
+                    )}
+                  </div>
+                </details>
+              </div>
             </div>
           </div>
-          {cinemaProgress?.screening &&
+          {relayStatus?.running &&
+            relayStatus.online &&
+            cinemaProgress?.screening?.ticketCountingEnabled &&
             (cinemaProgress.screening.ticketDesign || cinemaProgress.ticket) && (
               <div className="cinema-ticket-progress">
                 <UiIcon name="ticket" />
