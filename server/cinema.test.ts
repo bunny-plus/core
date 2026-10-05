@@ -11,6 +11,7 @@ import WebSocket, { WebSocketServer, type RawData } from "ws";
 import { ChatHistory } from "./chat-history";
 import { CinemaDiary } from "./cinema";
 import { WatchRoom } from "./room";
+import { generateTicketBunny } from "../shared/ticket-bunny";
 
 const startTime = Date.parse("2026-09-30T17:00:00.000Z");
 
@@ -386,6 +387,7 @@ test("migration preserves legacy tickets even when a design is later added to th
       earnedAt: "2026-09-29T17:10:00.000Z",
       number: 7,
       imagePath: null,
+      bunny: generateTicketBunny("legacy-screening"),
     };
     assert.equal(diary.current()?.ticketDesign, null);
     assert.deepEqual(diary.collection("legacy-viewer").tickets, [expected]);

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { generateTicketBunny, isTicketBunny, type TicketBunny } from "../shared/ticket-bunny";
 
 import {
   ticketWatchSeconds,
@@ -9,6 +10,7 @@ import {
   type CinemaProgress,
   type CinemaScreening,
   type CinemaTicket,
+  type CinemaTicketDesign,
 } from "../shared/cinema";
 
 type ScreeningRow = {
@@ -19,6 +21,7 @@ type ScreeningRow = {
   design_title: string | null;
   design_created_at: string | null;
   image_present: number;
+  bunny_json: string | null;
 };
 export type CinemaImage = { mimeType: string; data: Uint8Array };
 type ImageRow = { image_mime: string; image_data: Uint8Array };
@@ -32,8 +35,11 @@ type TicketRow = {
   earned_at: string;
   number: number;
   image_present: number;
+  bunny_json: string | null;
 };
 type CountRow = { total: number };
+type ArtworkScreening = { screening_id: string };
+type LegacyBunnyRecipient = { id: string; screening_id: string; bunny_json: string | null };
 type WatchingPulse = {
   memberId: string;
   screeningId: string;
@@ -46,7 +52,7 @@ const maximumPulseGap = 30_000;
 const collectionLimit = 100;
 
 function screeningFromRow(row: ScreeningRow): CinemaScreening {
-  return {
+  const screening: CinemaScreening = {
     id: row.id,
     title: row.title,
     startedAt: row.started_at,
@@ -60,6 +66,16 @@ function screeningFromRow(row: ScreeningRow): CinemaScreening {
           }
         : null,
   };
+  const bunny = storedBunny(row.bunny_json);
+  if (screening.ticketDesign && bunny) screening.ticketDesign.bunny = bunny;
+  return screening;
+}
+
+function storedBunny(json: string | null): TicketBunny | undefined {
+  if (!json) return undefined;
+  const value = JSON.parse(json);
+  if (!isTicketBunny(value)) throw new Error("Invalid stored ticket bunny");
+  return value;
 }
 
 function imagePath(screeningId: string) {
@@ -67,7 +83,7 @@ function imagePath(screeningId: string) {
 }
 
 function ticketFromRow(row: TicketRow): CinemaTicket {
-  return {
+  const ticket: CinemaTicket = {
     id: row.id,
     screeningId: row.screening_id,
     title: row.title,
@@ -76,6 +92,9 @@ function ticketFromRow(row: TicketRow): CinemaTicket {
     number: row.number,
     imagePath: row.image_present ? imagePath(row.screening_id) : null,
   };
+  const bunny = storedBunny(row.bunny_json);
+  if (bunny) ticket.bunny = bunny;
+  return ticket;
 }
 
 function screeningTitle(title: string | null | undefined) {
@@ -132,10 +151,90 @@ export class CinemaDiary {
         ticket_id TEXT PRIMARY KEY REFERENCES cinema_tickets(id),
         screening_id TEXT NOT NULL REFERENCES cinema_ticket_designs(screening_id)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS cinema_ticket_bunnies (
+        screening_id TEXT PRIMARY KEY REFERENCES cinema_ticket_designs(screening_id),
+        parts TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS cinema_legacy_ticket_bunnies (
+        ticket_id TEXT PRIMARY KEY REFERENCES cinema_tickets(id),
+        parts TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS cinema_ticket_migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      ) STRICT;
       CREATE TABLE IF NOT EXISTS cinema_counting_pauses (
         screening_id TEXT PRIMARY KEY REFERENCES cinema_screenings(id)
       ) STRICT;
     `);
+    try {
+      this.migrateTicketBunnies();
+    } catch (error) {
+      this.database.close();
+      throw error;
+    }
+  }
+
+  private migrateTicketBunnies() {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const migration = "pixel-bunnies-v1";
+      if (
+        this.database
+          .prepare("SELECT 1 FROM cinema_ticket_migrations WHERE name = ?")
+          .get(migration)
+      ) {
+        this.database.exec("COMMIT");
+        return;
+      }
+      // SAFETY: screening_id is TEXT in the STRICT ticket design schema above.
+      const designs = this.database
+        .prepare(`
+        SELECT d.screening_id FROM cinema_ticket_designs d
+        LEFT JOIN cinema_ticket_bunnies b ON b.screening_id = d.screening_id
+        WHERE b.screening_id IS NULL
+      `)
+        .all() as ArtworkScreening[];
+      const addDesign = this.database.prepare(
+        "INSERT INTO cinema_ticket_bunnies (screening_id, parts) VALUES (?, ?)",
+      );
+      for (const design of designs)
+        addDesign.run(
+          design.screening_id,
+          JSON.stringify(generateTicketBunny(design.screening_id)),
+        );
+
+      // Early tickets predate editable designs. Give those tickets artwork without
+      // attaching them to later designs, which would replace their original titles.
+      // SAFETY: These columns come from the STRICT ticket and bunny tables above.
+      const legacy = this.database
+        .prepare(`
+        SELECT t.id, t.screening_id, b.parts AS bunny_json FROM cinema_tickets t
+        LEFT JOIN cinema_ticket_artifacts a ON a.ticket_id = t.id
+        LEFT JOIN cinema_ticket_bunnies b ON b.screening_id = t.screening_id
+        LEFT JOIN cinema_legacy_ticket_bunnies l ON l.ticket_id = t.id
+        WHERE a.ticket_id IS NULL AND l.ticket_id IS NULL
+      `)
+        .all() as LegacyBunnyRecipient[];
+      const addLegacy = this.database.prepare(
+        "INSERT INTO cinema_legacy_ticket_bunnies (ticket_id, parts) VALUES (?, ?)",
+      );
+      for (const ticket of legacy)
+        addLegacy.run(
+          ticket.id,
+          ticket.bunny_json ?? JSON.stringify(generateTicketBunny(ticket.screening_id)),
+        );
+
+      // Uploaded image bytes stay available to older clients and for recovery.
+      // Run once: a new ticket deliberately created with no artwork stays blank.
+      this.database
+        .prepare("INSERT INTO cinema_ticket_migrations (name, applied_at) VALUES (?, ?)")
+        .run(migration, new Date().toISOString());
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   current(): CinemaScreening | null {
@@ -144,9 +243,10 @@ export class CinemaDiary {
       .prepare(`
         SELECT s.id, s.title, s.started_at, d.title AS design_title,
           d.created_at AS design_created_at, d.image_data IS NOT NULL AS image_present,
-          p.screening_id IS NOT NULL AS counting_paused
+          p.screening_id IS NOT NULL AS counting_paused, b.parts AS bunny_json
         FROM cinema_screenings s LEFT JOIN cinema_ticket_designs d ON d.screening_id = s.id
         LEFT JOIN cinema_counting_pauses p ON p.screening_id = s.id
+        LEFT JOIN cinema_ticket_bunnies b ON b.screening_id = d.screening_id
         WHERE s.ended_at IS NULL
       `)
       .get() as ScreeningRow | undefined;
@@ -222,7 +322,10 @@ export class CinemaDiary {
     title: string,
     image: CinemaImage | null,
     now = Date.now(),
+    bunny?: TicketBunny,
   ): CinemaScreening | null {
+    if (bunny !== undefined && (!isTicketBunny(bunny) || image !== null))
+      throw new Error("A ticket needs either valid bunny parts or an uploaded image");
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const screening = this.current();
@@ -237,15 +340,25 @@ export class CinemaDiary {
           VALUES (?, ?, ?, ?, ?)
         `)
         .run(screeningId, title, createdAt, image?.mimeType ?? null, image?.data ?? null);
+      if (bunny)
+        this.database
+          .prepare("INSERT INTO cinema_ticket_bunnies (screening_id, parts) VALUES (?, ?)")
+          .run(screeningId, JSON.stringify(bunny));
       // SAFETY: member_id is TEXT in the STRICT cinema_progress table created above.
       const eligible = this.database
         .prepare("SELECT member_id FROM cinema_progress WHERE screening_id = ? AND watched_ms >= ?")
         .all(screeningId, ticketWatchSeconds * 1_000) as EligibleMemberRow[];
       for (const member of eligible) this.awardTicket(member.member_id, screeningId, now);
       this.database.exec("COMMIT");
+      const ticketDesign: CinemaTicketDesign = {
+        title,
+        imagePath: image ? imagePath(screeningId) : null,
+        createdAt,
+      };
+      if (bunny) ticketDesign.bunny = { ...bunny };
       return {
         ...screening,
-        ticketDesign: { title, imagePath: image ? imagePath(screeningId) : null, createdAt },
+        ticketDesign,
       };
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -337,10 +450,13 @@ export class CinemaDiary {
     const rows = this.database
       .prepare(`
         SELECT t.id, t.screening_id, COALESCE(d.title, s.title) AS title,
-          s.started_at, t.earned_at, t.number, d.image_data IS NOT NULL AS image_present
+          s.started_at, t.earned_at, t.number, d.image_data IS NOT NULL AS image_present,
+          COALESCE(b.parts, l.parts) AS bunny_json
         FROM cinema_tickets t JOIN cinema_screenings s ON s.id = t.screening_id
         LEFT JOIN cinema_ticket_artifacts a ON a.ticket_id = t.id
         LEFT JOIN cinema_ticket_designs d ON d.screening_id = a.screening_id
+        LEFT JOIN cinema_ticket_bunnies b ON b.screening_id = d.screening_id
+        LEFT JOIN cinema_legacy_ticket_bunnies l ON l.ticket_id = t.id
         WHERE t.member_id = ? ORDER BY t.number DESC LIMIT ?
       `)
       .all(memberId, collectionLimit) as TicketRow[];
@@ -360,10 +476,13 @@ export class CinemaDiary {
     const row = this.database
       .prepare(`
         SELECT t.id, t.screening_id, COALESCE(d.title, s.title) AS title,
-          s.started_at, t.earned_at, t.number, d.image_data IS NOT NULL AS image_present
+          s.started_at, t.earned_at, t.number, d.image_data IS NOT NULL AS image_present,
+          COALESCE(b.parts, l.parts) AS bunny_json
         FROM cinema_tickets t JOIN cinema_screenings s ON s.id = t.screening_id
         LEFT JOIN cinema_ticket_artifacts a ON a.ticket_id = t.id
         LEFT JOIN cinema_ticket_designs d ON d.screening_id = a.screening_id
+        LEFT JOIN cinema_ticket_bunnies b ON b.screening_id = d.screening_id
+        LEFT JOIN cinema_legacy_ticket_bunnies l ON l.ticket_id = t.id
         WHERE t.member_id = ? AND t.screening_id = ?
       `)
       .get(memberId, screeningId) as TicketRow | undefined;

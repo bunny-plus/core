@@ -1,0 +1,184 @@
+.ticket-artwork-choice {
+  margin: 20px 0 14px;
+  padding: 0;
+  border: 0;
+}
+.ticket-artwork-choice legend,
+.ticket-bunny-editor legend {
+  margin-bottom: 8px;
+  color: #795064;
+  font-size: 12px;
+  font-weight: 750;
+}
+.ticket-artwork-choice > div {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #dfc7ce;
+  border-radius: 9px;
+  background: #fffaf5;
+}
+.ticket-artwork-choice button {
+  min-height: 36px;
+  padding: 6px 17px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8c6777;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ticket-artwork-choice button[aria-pressed="true"] {
+  border-color: #d4a5b8;
+  background: #f6dfe9;
+  color: #7c3e5c;
+}
+.ticket-bunny-editor {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 13px 14px;
+  border: 1px dashed #d6b7c2;
+  border-radius: 10px;
+  background: #fffaf5;
+}
+.ticket-bunny-editor > legend {
+  padding: 0 6px;
+}
+.ticket-bunny-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -3px 0 12px;
+}
+.ticket-bunny-shuffle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  margin: 0;
+  padding: 4px 9px;
+  border: 1px solid #dbbcc9;
+  border-radius: 6px;
+  background: #fff;
+  color: #8d4c6b;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ticket-bunny-shuffle .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+.ticket-bunny-parts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px 12px;
+}
+.ticket-bunny-part {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.ticket-bunny-part > span,
+.ticket-bunny-palette legend {
+  color: #846575;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ticket-bunny-part select {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 8px;
+  border: 1px solid #dfc7ce;
+  border-radius: 6px;
+  background: white;
+  color: #684654;
+  font: inherit;
+  font-size: 12px;
+}
+.ticket-bunny-palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ticket-bunny-palette legend {
+  margin-bottom: 6px;
+}
+.ticket-bunny-palette button {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #bda1ae;
+  border-radius: 50%;
+  color: #684654;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ticket-bunny-palette button[aria-pressed="true"] {
+  outline: 1.5px solid #91627a;
+  outline-offset: 2px;
+}
+.ticket-bunny-part select:focus-visible {
+  outline: 2px solid #b33b70;
+  outline-offset: 3px;
+}
+.ticket-bunny {
+  shape-rendering: crispEdges;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cinema-ticket--mint {
+  --ticket-wash: #e6edda;
+  --ticket-accent: #536c3c;
+  --ticket-edge: #b4c5a2;
+}
+.cinema-ticket--honey {
+  --ticket-wash: #ffecd1;
+  --ticket-accent: #965326;
+  --ticket-edge: #deb48a;
+}
+.cinema-ticket--sky {
+  --ticket-wash: #dce8f0;
+  --ticket-accent: #486b87;
+  --ticket-edge: #a2bccd;
+}
+.cinema-ticket--with-bunny {
+  height: 352px;
+}
+.cinema-ticket-bunny-artwork {
+  height: 162px;
+}
+.cinema-ticket--compact.cinema-ticket--with-bunny {
+  height: 306px;
+}
+.cinema-ticket--compact .cinema-ticket-bunny-artwork {
+  height: 130px;
+}
+@media (min-width: 681px) {
+  .cinema-ticket-admin-form .cinema-ticket-admin-preview {
+    position: sticky;
+    top: 20px;
+  }
+}
+@media (max-width: 680px) {
+  .cinema-ticket-admin-form .cinema-ticket-admin-preview {
+    grid-row: 1;
+  }
+}
+@media (max-width: 400px) {
+  .ticket-bunny-parts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

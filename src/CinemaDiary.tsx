@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
 import type { CinemaCollection, CinemaScreening, CinemaTicket } from "../shared/cinema";
+import type { TicketBunny as BunnyParts } from "../shared/ticket-bunny";
 import { apiJson, apiUrl } from "./api";
 import { AssetIcon, UiIcon } from "./Icons";
+import { TicketBunny } from "./TicketBunny";
 
 const ticketColors = ["rose", "apricot", "sage", "lilac"];
 
@@ -41,6 +43,7 @@ export function CinemaTicketCard({
       title={ticket.title}
       screenedAt={ticket.screenedAt}
       imageSrc={ticket.imagePath ? apiUrl(ticket.imagePath) : null}
+      bunny={ticket.bunny}
       earnedAt={ticket.earnedAt}
       number={ticket.number}
       compact={compact}
@@ -52,11 +55,13 @@ export function CinemaTicketPreview({
   screening,
   title,
   imageSrc,
+  bunny,
   created = false,
 }: {
   screening: CinemaScreening;
   title: string;
   imageSrc: string | null;
+  bunny?: BunnyParts;
   created?: boolean;
 }) {
   return (
@@ -65,6 +70,7 @@ export function CinemaTicketPreview({
       title={title || "Ticket title"}
       screenedAt={screening.startedAt}
       imageSrc={imageSrc}
+      bunny={bunny}
       previewLabel={created ? "10 minutes to collect" : "Ticket preview"}
     />
   );
@@ -97,6 +103,7 @@ function CinemaTicketPaper({
   title,
   screenedAt,
   imageSrc,
+  bunny,
   earnedAt,
   number,
   compact = false,
@@ -106,6 +113,7 @@ function CinemaTicketPaper({
   title: string;
   screenedAt: string;
   imageSrc: string | null;
+  bunny?: BunnyParts;
   earnedAt?: string;
   number?: number;
   compact?: boolean;
@@ -113,13 +121,19 @@ function CinemaTicketPaper({
 }) {
   return (
     <article
-      className={`cinema-ticket cinema-ticket--${screeningColor(screeningId)}${compact ? " cinema-ticket--compact" : ""}${imageSrc ? " cinema-ticket--with-artwork" : ""}`}
+      className={`cinema-ticket cinema-ticket--${bunny?.palette ?? screeningColor(screeningId)}${compact ? " cinema-ticket--compact" : ""}${imageSrc || bunny ? " cinema-ticket--with-artwork" : ""}${bunny ? " cinema-ticket--with-bunny" : ""}`}
       aria-label={
         number === undefined ? `Ticket preview: ${title}` : `${title}, ticket number ${number}`
       }
     >
       <div className="cinema-ticket-main">
-        {imageSrc && <TicketArtwork key={imageSrc} source={imageSrc} />}
+        {bunny ? (
+          <div className="cinema-ticket-artwork cinema-ticket-bunny-artwork">
+            <TicketBunny parts={bunny} />
+          </div>
+        ) : imageSrc ? (
+          <TicketArtwork key={imageSrc} source={imageSrc} />
+        ) : null}
         <div className="cinema-ticket-brand">
           <UiIcon name="film" />
           <span>CARROT CINEMA</span>

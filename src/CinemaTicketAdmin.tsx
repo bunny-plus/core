@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 
-import { cinemaImageMaxBytes, type CinemaScreening } from "../shared/cinema";
+import {
+  cinemaImageMaxBytes,
+  type CinemaScreening,
+  type CinemaTicketCreation,
+} from "../shared/cinema";
+import { generateTicketBunny, type TicketBunny } from "../shared/ticket-bunny";
 import { apiFetch, apiJson, apiUrl } from "./api";
 import { CinemaTicketPreview } from "./CinemaDiary";
 import { AssetIcon, UiIcon } from "./Icons";
+import TicketBunnyEditor from "./TicketBunnyEditor";
 
 type TicketImage = {
   mimeType: string;
@@ -16,6 +22,8 @@ type TicketDraft = {
   screeningId: string;
   title: string;
   image: TicketImage | null;
+  artwork: "bunny" | "image" | "none";
+  bunny: TicketBunny;
 };
 
 const imageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -67,7 +75,15 @@ export default function CinemaTicketAdmin() {
       setSubmitError(null);
       setNotice(null);
       setDraft(
-        next ? { screeningId: next.id, title: next.title.slice(0, 200), image: null } : null,
+        next
+          ? {
+              screeningId: next.id,
+              title: next.title.slice(0, 200),
+              image: null,
+              artwork: "bunny",
+              bunny: generateTicketBunny(next.id),
+            }
+          : null,
       );
       if (imageInput.current) imageInput.current.value = "";
     }
@@ -132,6 +148,13 @@ export default function CinemaTicketAdmin() {
     if (imageInput.current) imageInput.current.value = "";
   }
 
+  function chooseArtwork(artwork: TicketDraft["artwork"]) {
+    imageSelection.current += 1;
+    setReadingImage(false);
+    setImageError(null);
+    setDraft((previous) => (previous ? { ...previous, artwork } : null));
+  }
+
   async function chooseImage(file: File | undefined) {
     if (!file || !draft || submissionPending.current) return;
     const expectedScreeningId = draft.screeningId;
@@ -183,8 +206,7 @@ export default function CinemaTicketAdmin() {
     event.preventDefault();
     if (
       submissionPending.current ||
-      readingImage ||
-      imageError ||
+      (draft?.artwork === "image" && (readingImage || imageError)) ||
       loadingCurrent ||
       loadError ||
       !screening ||
@@ -202,17 +224,18 @@ export default function CinemaTicketAdmin() {
     setSubmitError(null);
     setNotice(null);
     try {
+      const creation: CinemaTicketCreation = {
+        screeningId: draft.screeningId,
+        title: draft.title.trim(),
+      };
+      if (draft.artwork === "bunny") creation.bunny = draft.bunny;
+      if (draft.artwork === "image" && draft.image)
+        creation.image = { mimeType: draft.image.mimeType, data: draft.image.data };
       const response = await apiFetch("/api/cinema/screening/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: request.signal,
-        body: JSON.stringify({
-          screeningId: draft.screeningId,
-          title: draft.title.trim(),
-          image: draft.image
-            ? { mimeType: draft.image.mimeType, data: draft.image.data }
-            : undefined,
-        }),
+        body: JSON.stringify(creation),
       });
       // SAFETY: This first-party endpoint returns {screening} on success or {error} on failure.
       const result = (await response.json()) as { screening: CinemaScreening; error?: string };
@@ -289,8 +312,7 @@ export default function CinemaTicketAdmin() {
   const design = screening?.ticketDesign;
   const canCreate =
     !submitting &&
-    !readingImage &&
-    !imageError &&
+    !(draft?.artwork === "image" && (readingImage || imageError)) &&
     !loadingCurrent &&
     !loadError &&
     screening !== null &&
@@ -374,6 +396,7 @@ export default function CinemaTicketAdmin() {
               screening={screening}
               title={design.title}
               imageSrc={design.imagePath ? apiUrl(design.imagePath) : null}
+              bunny={design.bunny}
               created
             />
           </div>
@@ -397,43 +420,82 @@ export default function CinemaTicketAdmin() {
                 setDraft((previous) => (previous ? { ...previous, title } : null));
               }}
             />
-            <label htmlFor={`${formId}-image`}>
-              Ticket artwork <span>optional</span>
-            </label>
-            <p className="cinema-ticket-admin-image-help" id={`${formId}-image-help`}>
-              PNG, JPG or WebP · up to 2 MiB
-            </p>
-            <input
-              ref={imageInput}
-              className="cinema-ticket-admin-file"
-              id={`${formId}-image`}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              aria-describedby={`${formId}-image-help${imageError ? ` ${formId}-image-error` : ""}`}
-              disabled={submitting}
-              onChange={(event) => void chooseImage(event.target.files?.[0])}
-            />
-            {readingImage && (
-              <p className="cinema-ticket-admin-image-status" role="status">
-                Loading image…
-              </p>
-            )}
-            {imageError && (
-              <p
-                className="cinema-ticket-admin-image-error"
-                id={`${formId}-image-error`}
-                role="alert"
-              >
-                {imageError}
-              </p>
-            )}
-            {(draft.image || imageError || readingImage) && (
-              <div className="cinema-ticket-admin-selected-image">
-                <span>{draft.image?.name ?? "No artwork selected"}</span>
-                <button type="button" disabled={submitting} onClick={removeImage}>
-                  {draft.image ? "Remove image" : "Use no artwork"}
+            <fieldset className="ticket-artwork-choice" disabled={submitting}>
+              <legend>Ticket artwork</legend>
+              <div>
+                <button
+                  type="button"
+                  aria-pressed={draft.artwork === "bunny"}
+                  onClick={() => chooseArtwork("bunny")}
+                >
+                  Bunny
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={draft.artwork === "image"}
+                  onClick={() => chooseArtwork("image")}
+                >
+                  Upload
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={draft.artwork === "none"}
+                  onClick={() => chooseArtwork("none")}
+                >
+                  None
                 </button>
               </div>
+            </fieldset>
+            {draft.artwork === "bunny" && (
+              <TicketBunnyEditor
+                value={draft.bunny}
+                disabled={submitting}
+                onChange={(bunny) =>
+                  setDraft((previous) => (previous ? { ...previous, bunny } : null))
+                }
+              />
+            )}
+            {draft.artwork === "image" && (
+              <>
+                <label htmlFor={`${formId}-image`}>
+                  Ticket artwork <span>optional</span>
+                </label>
+                <p className="cinema-ticket-admin-image-help" id={`${formId}-image-help`}>
+                  PNG, JPG or WebP · up to 2 MiB
+                </p>
+                <input
+                  ref={imageInput}
+                  className="cinema-ticket-admin-file"
+                  id={`${formId}-image`}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  aria-describedby={`${formId}-image-help${imageError ? ` ${formId}-image-error` : ""}`}
+                  disabled={submitting}
+                  onChange={(event) => void chooseImage(event.target.files?.[0])}
+                />
+                {readingImage && (
+                  <p className="cinema-ticket-admin-image-status" role="status">
+                    Loading image…
+                  </p>
+                )}
+                {imageError && (
+                  <p
+                    className="cinema-ticket-admin-image-error"
+                    id={`${formId}-image-error`}
+                    role="alert"
+                  >
+                    {imageError}
+                  </p>
+                )}
+                {(draft.image || imageError || readingImage) && (
+                  <div className="cinema-ticket-admin-selected-image">
+                    <span>{draft.image?.name ?? "No artwork selected"}</span>
+                    <button type="button" disabled={submitting} onClick={removeImage}>
+                      {draft.image ? "Remove image" : "Use no artwork"}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             <p className="cinema-ticket-admin-final-note">
               Title and artwork cannot be changed after creation.
@@ -447,7 +509,8 @@ export default function CinemaTicketAdmin() {
             <CinemaTicketPreview
               screening={screening}
               title={draft.title.trim()}
-              imageSrc={draft.image?.preview ?? null}
+              imageSrc={draft.artwork === "image" ? (draft.image?.preview ?? null) : null}
+              bunny={draft.artwork === "bunny" ? draft.bunny : undefined}
             />
           </div>
         </form>

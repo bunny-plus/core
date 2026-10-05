@@ -2,6 +2,7 @@ import { createSession, readCookie, readSession, sessionCookie, type Viewer } fr
 import { TtlCache } from "../server/cache";
 import type { CinemaDiary, CinemaImage } from "../server/cinema";
 import { cinemaImageMaxBytes } from "../shared/cinema";
+import { isTicketBunny } from "../shared/ticket-bunny";
 import { fetchJson, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
 import {
@@ -834,8 +835,12 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       const screeningId = input.screeningId;
       const title = input.title.trim();
       const image = ticketImage(input.image);
+      if (input.bunny !== undefined && !isTicketBunny(input.bunny))
+        throw new ClientError("Choose valid bunny parts", 400);
+      const bunny = input.bunny;
+      if (bunny && image) throw new ClientError("Choose a bunny or an uploaded image", 400);
       const screening = await serializedController(async () =>
-        diary.createTicket(screeningId, title, image),
+        diary.createTicket(screeningId, title, image, Date.now(), bunny),
       );
       if (!screening)
         return Response.json(

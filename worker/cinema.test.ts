@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { CinemaDiary } from "../server/cinema";
 import { cinemaImageMaxBytes } from "../shared/cinema";
+import { generateTicketBunny } from "../shared/ticket-bunny";
 import { createSession } from "./session";
 import { handleRequest, type Env } from "./index";
 
@@ -46,6 +47,74 @@ const restreamBody = JSON.stringify({
   source: "https://www.twitch.tv/bunny",
   title: "Together",
   quality: "best",
+});
+
+test("ticket creation validates bunny parts and returns the saved design", async () => {
+  const diary = new CinemaDiary(":memory:");
+  try {
+    const env = cinemaEnv("bunny-design", diary);
+    const screening = diary.start("Bunny screening");
+    const bunny = generateTicketBunny("api-bunny");
+    const invalid = [
+      null,
+      [],
+      "<svg/>",
+      { ...bunny, version: 2 },
+      { ...bunny, fur: "url(https://example.test)" },
+      { ...bunny, accessory: "script" },
+      { ...bunny, svg: "<svg onload='alert(1)'/>" },
+      { version: 1 },
+    ];
+    for (const [index, parts] of invalid.entries()) {
+      const cookie = await viewerCookie(env, `bunny-validation-${index}`, true);
+      const response = await handleRequest(
+        request(
+          env,
+          "/api/cinema/screening/ticket",
+          cookie,
+          JSON.stringify({ screeningId: screening.id, title: "Bunny night", bunny: parts }),
+        ),
+        env,
+      );
+      assert.equal(response.status, 400);
+      assert.equal(diary.current()?.ticketDesign, null);
+    }
+    const admin = await viewerCookie(env, "bunny-admin", true);
+    const both = await handleRequest(
+      request(
+        env,
+        "/api/cinema/screening/ticket",
+        admin,
+        JSON.stringify({
+          screeningId: screening.id,
+          title: "Both",
+          bunny,
+          image: { mimeType: "image/png", data: pngData },
+        }),
+      ),
+      env,
+    );
+    assert.equal(both.status, 400);
+    const viewer = await viewerCookie(env, "bunny-viewer");
+    const body = JSON.stringify({ screeningId: screening.id, title: "Bunny night", bunny });
+    const forbidden = await handleRequest(
+      request(env, "/api/cinema/screening/ticket", viewer, body),
+      env,
+    );
+    assert.equal(forbidden.status, 403);
+    const created = await handleRequest(
+      request(env, "/api/cinema/screening/ticket", admin, body),
+      env,
+    );
+    assert.equal(created.status, 201);
+    const design = (await created.json()).screening.ticketDesign;
+    assert.deepEqual(design.bunny, bunny);
+    assert.equal(design.imagePath, null);
+    const current = await handleRequest(request(env, "/api/cinema/screening", admin), env);
+    assert.deepEqual((await current.json()).screening.ticketDesign.bunny, bunny);
+  } finally {
+    diary.close();
+  }
 });
 
 test("ticket collections require authentication and cannot read another viewer's diary", async () => {
