@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { parseChatEffects } from "./chat-effects";
-import { PlaybackSynchronizer } from "./playback";
+import { playbackConfig, PlaybackSynchronizer } from "./playback";
 import { JellyfinSubtitles } from "./JellyfinSubtitles";
 import type { JellyfinPlayback } from "../shared/jellyfin";
 import { CinemaTicketCard } from "./CinemaDiary";
@@ -22,6 +22,7 @@ export type User = {
 
 type PlayerStats = {
   bandwidth: number | null;
+  mediaBitrate: number | null;
   bufferAhead: number;
   bufferTotal: number;
   delay: number | null;
@@ -293,6 +294,14 @@ function savedLightsOut() {
   }
 }
 
+function savedSlowConnection() {
+  try {
+    return localStorage.getItem("bunny-plus-slow-connection") === "true";
+  } catch {
+    return false;
+  }
+}
+
 function savedShortcuts() {
   try {
     return localStorage.getItem("bunny-plus-shortcuts") !== "false";
@@ -333,6 +342,8 @@ export default function WatchRoom({
   const [earnedTicket, setEarnedTicket] = useState<CinemaTicket | null>(null);
   const [volume, setVolume] = useState(savedVolume);
   const [lightsOut, setLightsOut] = useState(savedLightsOut);
+  const [slowConnection, setSlowConnection] = useState(savedSlowConnection);
+  const slowConnectionRef = useRef(slowConnection);
   const [fullscreen, setFullscreen] = useState(false);
   const initialVolumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
@@ -738,6 +749,13 @@ export default function WatchRoom({
   }, []);
 
   useEffect(() => {
+    slowConnectionRef.current = slowConnection;
+    const hls = hlsRef.current;
+    if (hls) Object.assign(hls.config, playbackConfig(delaySeconds, slowConnection));
+    if (videoRef.current) videoRef.current.playbackRate = 1;
+  }, [delaySeconds, slowConnection]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamUrl || streamOnline !== true) return;
     setPlayerStatus("loading");
@@ -751,15 +769,7 @@ export default function WatchRoom({
       const { default: HlsPlayer } = await import("hls.js");
       if (disposed) return;
       if (HlsPlayer.isSupported()) {
-        const hls = new HlsPlayer({
-          lowLatencyMode: false,
-          maxLiveSyncPlaybackRate: 1,
-          backBufferLength: 10,
-          liveSyncDuration: delaySeconds,
-          liveMaxLatencyDuration: Math.max(delaySeconds + 15, delaySeconds * 2),
-          maxBufferLength: 12,
-          maxMaxBufferLength: 20,
-        });
+        const hls = new HlsPlayer(playbackConfig(delaySeconds, slowConnectionRef.current));
         hls.loadSource(streamUrl);
         hls.attachMedia(media);
         hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
@@ -816,7 +826,12 @@ export default function WatchRoom({
         : video.seekable.length > 0
           ? video.seekable.end(video.seekable.length - 1) - delaySeconds
           : null;
-      const correction = synchronizer.update(video, target, performance.now());
+      const correction = synchronizer.update(
+        video,
+        target,
+        performance.now(),
+        !slowConnectionRef.current,
+      );
       if (correction.position !== null) video.currentTime = correction.position;
       video.playbackRate = correction.rate;
       if (!video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
@@ -852,9 +867,11 @@ export default function WatchRoom({
           ? null
           : liveEdge - video.currentTime;
       const quality = video.getVideoPlaybackQuality?.();
+      const hls = hlsRef.current;
 
       setStats({
         bandwidth: hlsRef.current?.bandwidthEstimate ?? null,
+        mediaBitrate: hls ? hls.levels[hls.currentLevel]?.realBitrate || null : null,
         bufferAhead,
         bufferTotal,
         delay,
@@ -924,6 +941,16 @@ export default function WatchRoom({
       localStorage.setItem("bunny-plus-shortcuts", String(next));
     } catch {
       // The shortcut preference still applies for this visit.
+    }
+  }
+
+  function toggleSlowConnection() {
+    const next = !slowConnection;
+    setSlowConnection(next);
+    try {
+      localStorage.setItem("bunny-plus-slow-connection", String(next));
+    } catch {
+      // The mode still applies for this visit if storage is unavailable.
     }
   }
 
@@ -999,7 +1026,9 @@ export default function WatchRoom({
                 <div className="stream-loading buffering-overlay" role="status">
                   <AssetIcon name="carrot" />
                   <strong>Buffering the live stream...</strong>
-                  <small>Catching everybun back up</small>
+                  <small>
+                    {slowConnection ? "Waiting for more video" : "Catching everybun back up"}
+                  </small>
                 </div>
               )}
               {playerStatus === "unsupported" && (
@@ -1255,6 +1284,14 @@ export default function WatchRoom({
                   <div className="player-menu-popover">
                     <button
                       type="button"
+                      aria-pressed={slowConnection}
+                      onClick={toggleSlowConnection}
+                    >
+                      Slow connection: {slowConnection ? "on" : "off"}
+                      <small>More buffer, no live catch-up. Same video quality.</small>
+                    </button>
+                    <button
+                      type="button"
                       aria-expanded={showStats}
                       onClick={(event) => {
                         setShowStats((visible) => !visible);
@@ -1333,7 +1370,7 @@ export default function WatchRoom({
               </div>
               <div>
                 <span>Target</span>
-                <strong>{delaySeconds}s</strong>
+                <strong>{slowConnection ? "Sync off" : `${delaySeconds}s`}</strong>
               </div>
               <div>
                 <span>Buffered ahead</span>
@@ -1360,11 +1397,21 @@ export default function WatchRoom({
                 <strong>{stats.resolution}</strong>
               </div>
               <div>
-                <span>Bandwidth</span>
+                <span title="Estimated speed while downloading segments, not the video bitrate">
+                  Download speed (est.)
+                </span>
                 <strong>
                   {stats.bandwidth === null
                     ? "--"
                     : `${(stats.bandwidth / 1_000_000).toFixed(2)} Mbps`}
+                </strong>
+              </div>
+              <div>
+                <span title="Average bitrate of the downloaded media segments">Media bitrate</span>
+                <strong>
+                  {stats.mediaBitrate === null
+                    ? "--"
+                    : `${(stats.mediaBitrate / 1_000_000).toFixed(2)} Mbps`}
                 </strong>
               </div>
               <div>

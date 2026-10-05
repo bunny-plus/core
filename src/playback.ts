@@ -1,3 +1,5 @@
+import type { HlsConfig } from "hls.js";
+
 type PlaybackMedia = Pick<
   HTMLVideoElement,
   "currentTime" | "buffered" | "readyState" | "seeking" | "paused"
@@ -16,7 +18,11 @@ export class PlaybackSynchronizer {
   private direction = 0;
   private lastSeek = -Infinity;
 
-  update(media: PlaybackMedia, target: number | null, now: number) {
+  update(media: PlaybackMedia, target: number | null, now: number, followLive = true) {
+    if (!followLive) {
+      this.driftSince = null;
+      return { label: "Slow connection · sync off", position: null, rate: 1 };
+    }
     const drift = target === null ? NaN : target - media.currentTime;
     const following = { label: "Following the live room", position: null, rate: 1 };
     if (!Number.isFinite(drift) || media.seeking || media.paused || media.readyState < 3) {
@@ -47,4 +53,19 @@ export class PlaybackSynchronizer {
     this.driftSince = null;
     return { label: "Resyncing to the live room", position: target, rate: 1 };
   }
+}
+
+export function playbackConfig(delaySeconds: number, slowConnection: boolean) {
+  return {
+    lowLatencyMode: false,
+    maxLiveSyncPlaybackRate: 1,
+    backBufferLength: 10,
+    liveSyncDuration: slowConnection ? Math.max(delaySeconds, 18) : delaySeconds,
+    liveMaxLatencyDuration: slowConnection
+      ? Infinity
+      : Math.max(delaySeconds + 15, delaySeconds * 2),
+    maxBufferLength: slowConnection ? 24 : 12,
+    maxMaxBufferLength: slowConnection ? 30 : 20,
+    abrMaxWithRealBitrate: true,
+  } satisfies Partial<HlsConfig>;
 }

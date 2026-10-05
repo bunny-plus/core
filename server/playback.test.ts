@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { PlaybackSynchronizer } from "../src/playback";
+import { playbackConfig, PlaybackSynchronizer } from "../src/playback";
 
 function buffered(...ranges: [number, number][]): TimeRanges {
   return {
@@ -103,4 +103,37 @@ test("two simulated hours recover from intermittent stalls without a seek loop",
   }
   assert.equal(seeks, 7);
   assert.equal(video.currentTime, 7220);
+});
+
+test("slow connection lets playback fall behind without seeking or speeding up", () => {
+  const sync = new PlaybackSynchronizer();
+  const video = media();
+  sync.update(video, 27, 0);
+  for (let second = 1; second < 7200; second++) {
+    video.readyState = second % 8 === 0 ? 2 : 4;
+    const correction = sync.update(video, 27 + second, second * 1000, false);
+    assert.equal(correction.position, null);
+    assert.equal(correction.rate, 1);
+    assert.match(correction.label, /sync off/);
+  }
+  video.readyState = 4;
+  // Re-enabling sync observes fresh drift before correcting.
+  assert.equal(sync.update(video, 27, 7_200_000).position, null);
+  assert.equal(sync.update(video, 27, 7_203_000).position, 27);
+});
+
+test("slow connection disables HLS latency seeking and keeps buffer memory bounded", () => {
+  const config = playbackConfig(6, false);
+  Object.assign(config, playbackConfig(6, true));
+  assert.equal(config.liveMaxLatencyDuration, Infinity);
+  assert.equal(config.maxLiveSyncPlaybackRate, 1);
+  assert.equal(config.lowLatencyMode, false);
+  assert.ok(config.liveSyncDuration >= 18);
+  assert.ok(config.maxBufferLength > playbackConfig(6, false).maxBufferLength);
+  assert.ok(config.maxBufferLength <= config.maxMaxBufferLength);
+  assert.ok(config.maxMaxBufferLength <= 30);
+  assert.equal(config.backBufferLength, 10);
+  assert.equal(playbackConfig(60, true).liveSyncDuration, 60);
+  Object.assign(config, playbackConfig(6, false));
+  assert.deepEqual(config, playbackConfig(6, false));
 });
