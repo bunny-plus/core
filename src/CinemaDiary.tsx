@@ -25,8 +25,9 @@ function screeningDate(date: string) {
 
 function screeningTime(date: string) {
   return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   }).format(new Date(date));
 }
 

@@ -7,11 +7,55 @@ import test from "node:test";
 
 import {
   bowBunny,
+  bunnyAccessories,
   generateTicketBunny,
   isTicketBunny,
   maDongSeokBunny,
 } from "../shared/ticket-bunny";
 import { CinemaDiary } from "./cinema";
+
+test("all accessory choices survive ticket storage alongside the original designs", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "ticket-accessories-"));
+  const file = join(directory, "cinema.sqlite");
+  let diary = new CinemaDiary(file);
+  try {
+    assert.equal(bunnyAccessories.length, 60);
+    assert.equal(new Set(bunnyAccessories).size, 60);
+    assert.deepEqual(bunnyAccessories.slice(0, 9), [
+      "bow",
+      "leopardbow",
+      "flower",
+      "tiara",
+      "headphones",
+      "heartshades",
+      "hoops",
+      "flipphone",
+      "chain",
+    ]);
+    for (const [index, accessory] of bunnyAccessories.entries()) {
+      const at = index * 700_000;
+      const parts = { ...bowBunny, accessory };
+      assert.ok(isTicketBunny(parts));
+      const screening = diary.start(accessory, at);
+      assert.deepEqual(
+        diary.createTicket(screening.id, accessory, null, at, parts)?.ticketDesign?.bunny,
+        parts,
+      );
+      for (let elapsed = 0; elapsed <= 600_000; elapsed += 10_000)
+        diary.watching("owner", "tab", screening.id, true, at + elapsed);
+    }
+    const expected = diary.collection("owner");
+    assert.equal(expected.total, bunnyAccessories.length);
+    for (const ticket of expected.tickets)
+      assert.deepEqual(ticket.bunny, { ...bowBunny, accessory: ticket.title });
+    diary.close();
+    diary = new CinemaDiary(file);
+    assert.deepEqual(diary.collection("owner"), expected);
+  } finally {
+    diary.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("bunny generation is repeatable, varied, and produces supported parts", () => {
   assert.deepEqual(generateTicketBunny("screening-1"), generateTicketBunny("screening-1"));

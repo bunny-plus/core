@@ -14,6 +14,7 @@ import {
 } from "../shared/ticket-bunny";
 import { UiIcon } from "./Icons";
 import { ticketBunnyColours } from "./ticket-bunny-colours";
+import { bunnyAccessoryDetails, bunnyAccessoryGroups } from "./ticket-bunny-accessories";
 
 function PartSelect<T extends string>({
   label,
@@ -143,24 +144,29 @@ export default function TicketBunnyEditor({
           disabled={disabled}
           onChange={(outfit) => onChange({ ...value, outfit })}
         />
-        <PartSelect
-          label="Accessory"
-          options={bunnyAccessories}
-          labels={{
-            bow: "Ribbon",
-            leopardbow: "Leopard bow",
-            flower: "Hibiscus",
-            tiara: "Tiara",
-            headphones: "Headphones",
-            heartshades: "Heart shades",
-            hoops: "Gold hoops",
-            flipphone: "Deco flip phone",
-            chain: "Gold chain",
-          }}
-          value={value.accessory}
-          disabled={disabled}
-          onChange={(accessory) => onChange({ ...value, accessory })}
-        />
+        <label className="ticket-bunny-part">
+          <span>Accessory</span>
+          <select
+            value={value.accessory}
+            disabled={disabled}
+            onChange={(event) => {
+              const accessory = bunnyAccessories.find((part) => part === event.target.value);
+              if (accessory) onChange({ ...value, accessory });
+            }}
+          >
+            {bunnyAccessoryGroups.map((group) => (
+              <optgroup key={group} label={group}>
+                {bunnyAccessories
+                  .filter((part) => bunnyAccessoryDetails[part].group === group)
+                  .map((part) => (
+                    <option key={part} value={part}>
+                      {bunnyAccessoryDetails[part].label}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
         <fieldset className="ticket-bunny-palette">
           <legend>Colour</legend>
           {bunnyPalettes.map((palette) => (
