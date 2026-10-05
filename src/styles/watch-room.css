@@ -950,9 +950,12 @@ body.lights-out .chat-composer input {
   font-weight: 900;
 }
 .screen-player:not(:fullscreen) .chat-panels {
+  position: absolute;
+  z-index: 12;
+  top: 100%;
+  right: 0;
   display: grid;
   width: min(480px, 100%);
-  margin: 0 0 12px auto;
   gap: 8px;
 }
 .screen-player:not(:fullscreen) .chat-composer,
