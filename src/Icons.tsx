@@ -1,6 +1,15 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 
-type AssetName = "blossom" | "bunny" | "bunny-face" | "carrot" | "leafy";
+type AssetName =
+  | "blossom"
+  | "bunny"
+  | "bunny-face"
+  | "bunny-sleep"
+  | "bunny-hug"
+  | "bunny-back"
+  | "carrot"
+  | "leafy"
+  | "bow";
 type IconName =
   | "broadcast"
   | "chat"
@@ -26,16 +35,20 @@ type IconName =
   | "wrench";
 
 const assets = {
-  blossom: "/cherry_blossom_3d.png",
+  blossom: "/charm-blossom.svg",
   bunny: "/rabbit_animated.png",
   "bunny-face": "/rabbit_face_animated.png",
-  carrot: "/carrot_3d.png",
-  leafy: "/leafy_green_3d.png",
+  carrot: "/charm-carrot.svg",
+  leafy: "/charm-leaf.svg",
+  "bunny-sleep": "/charm-bunny-sleep.svg",
+  "bunny-hug": "/charm-bunny-hug.svg",
+  "bunny-back": "/charm-bunny-back.svg",
+  bow: "/ribbon.svg",
 } satisfies Record<AssetName, string>;
 
 const staticBunnies = {
-  bunny: "/rabbit_static.png",
-  "bunny-face": "/rabbit_face_static.png",
+  bunny: "/charm-bunny.svg",
+  "bunny-face": "/charm-bunny-face.svg",
 };
 
 function reducedMotionSnapshot() {

@@ -7,6 +7,7 @@ import {
   bunnyFurs,
   bunnyOutfits,
   bunnyPalettes,
+  bowBunny,
   generateTicketBunny,
   maDongSeokBunny,
   type TicketBunny,
@@ -68,6 +69,13 @@ export default function TicketBunnyEditor({
         <button
           type="button"
           className="ticket-bunny-shuffle"
+          onClick={() => onChange({ ...bowBunny })}
+        >
+          <UiIcon name="heart" /> Bow bunny
+        </button>
+        <button
+          type="button"
+          className="ticket-bunny-shuffle"
           onClick={() => onChange({ ...maDongSeokBunny })}
         >
           <UiIcon name="heart" /> Ma Dong-seok
@@ -90,6 +98,7 @@ export default function TicketBunnyEditor({
             cocoa: "Cocoa",
             smoke: "Silver",
             ink: "Licorice",
+            blush: "Blush pink",
           }}
           value={value.fur}
           disabled={disabled}

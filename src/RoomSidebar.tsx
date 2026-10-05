@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { UiIcon } from "./Icons";
+import { AssetIcon, UiIcon } from "./Icons";
 import { parseChatEffects } from "./chat-effects";
 import type { RoomChat, User } from "./WatchRoom";
 
@@ -104,7 +104,9 @@ export default function RoomSidebar({
       {open ? (
         <>
           <header className="room-sidebar-heading">
-            <h2>room chat</h2>
+            <h2>
+              <AssetIcon animate={false} name="bunny-face" /> room chat
+            </h2>
             <button
               ref={collapseRef}
               type="button"

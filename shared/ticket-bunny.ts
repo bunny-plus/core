@@ -1,8 +1,8 @@
 import type { JsonValue } from "../server/upstream";
 
-// Persist these named parts, not a random seed: existing tickets keep their design
-// when more parts are added. Version 1's drawings are kept in TicketBunny.tsx.
-export const bunnyFurs = ["cream", "biscuit", "cocoa", "smoke", "ink"] as const;
+// Persist named parts so artwork updates and new choices preserve each ticket's traits.
+// Version 1 remains the storage format for both old and newly created bunnies.
+export const bunnyFurs = ["cream", "biscuit", "cocoa", "smoke", "ink", "blush"] as const;
 export const bunnyEars = ["upright", "floppy", "lop", "short"] as const;
 export const bunnyFaces = ["sparkle", "wink", "dreamy", "tough"] as const;
 export const bunnyOutfits = ["leopard", "camisole", "sailor", "action"] as const;
@@ -37,6 +37,16 @@ export const maDongSeokBunny: TicketBunny = {
   outfit: "action",
   accessory: "chain",
   palette: "sky",
+};
+
+export const bowBunny: TicketBunny = {
+  version: 1,
+  fur: "blush",
+  ears: "upright",
+  face: "sparkle",
+  outfit: "camisole",
+  accessory: "bow",
+  palette: "rose",
 };
 
 function isPart<T extends string>(options: readonly T[], value: JsonValue | undefined): value is T {

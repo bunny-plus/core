@@ -1,0 +1,97 @@
+/* Illustrated charms share the ribbon's cream edges and dusty pink ink. */
+.header-bunny-charms {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  left: 300px;
+  top: 15px;
+  pointer-events: none;
+}
+.header-bunny-charms .asset-bunny-sleep {
+  width: 44px;
+  height: 37px;
+}
+.header-bunny-charms .asset-carrot {
+  width: 29px;
+  height: 34px;
+  margin-left: 4px;
+  rotate: 23deg;
+}
+.floating-decorations img {
+  opacity: 0.18;
+  filter: none;
+}
+.floating-decorations .asset-bow {
+  width: 68px;
+  height: 46px;
+  rotate: 15deg;
+}
+.burrow-title > .asset-bunny-face {
+  position: absolute;
+  right: 11px;
+  bottom: 9px;
+  width: 25px;
+  height: 27px;
+  rotate: 9deg;
+}
+.activity-spot.cinema > .cinema-carrot-charm {
+  position: absolute;
+  top: 63px;
+  right: 86px;
+  width: 42px;
+  height: 49px;
+  rotate: 12deg;
+  pointer-events: none;
+}
+.pouch-charm > .asset-carrot {
+  width: 31px;
+  height: 38px;
+}
+.diary-home-link > .diary-peeking-bunny {
+  position: absolute;
+  width: 45px;
+  height: 48px;
+  top: -35px;
+  right: 23px;
+  rotate: 9deg;
+  pointer-events: none;
+}
+.cinema-diary-count > .diary-count-bunny {
+  position: absolute;
+  width: 45px;
+  height: 48px;
+  top: -37px;
+  right: 13px;
+  rotate: 7deg;
+  pointer-events: none;
+}
+.room-sidebar-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.room-sidebar-heading h2 > .asset-icon {
+  width: 24px;
+  height: 27px;
+  flex: none;
+  rotate: -7deg;
+}
+body.lights-out .header-bunny-charms {
+  opacity: 0.45;
+}
+@media (max-width: 600px) {
+  .header-bunny-charms {
+    display: none;
+  }
+  .activity-spot.cinema > .cinema-carrot-charm {
+    top: auto;
+    bottom: 15px;
+    right: 80px;
+    width: 29px;
+    height: 34px;
+  }
+  .floating-decorations img {
+    opacity: 0.12;
+  }
+}

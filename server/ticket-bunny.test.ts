@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-import { generateTicketBunny, isTicketBunny, maDongSeokBunny } from "../shared/ticket-bunny";
+import {
+  bowBunny,
+  generateTicketBunny,
+  isTicketBunny,
+  maDongSeokBunny,
+} from "../shared/ticket-bunny";
 import { CinemaDiary } from "./cinema";
 
 test("bunny generation is repeatable, varied, and produces supported parts", () => {
@@ -13,6 +18,7 @@ test("bunny generation is repeatable, varied, and produces supported parts", () 
   const designs = Array.from({ length: 100 }, (_, i) => generateTicketBunny(`screening-${i}`));
   assert.ok(designs.every(isTicketBunny));
   assert.ok(isTicketBunny(maDongSeokBunny));
+  assert.ok(isTicketBunny(bowBunny));
   assert.ok(new Set(designs.map((design) => JSON.stringify(design))).size > 90);
 });
 
@@ -27,7 +33,7 @@ test("bunny tickets retain their chosen parts across viewers, later screenings, 
       diary.watching("viewer", "first-tab", original.id, true, time);
     const oldTicket = diary.collection("viewer").tickets[0];
     const screening = diary.start("Bunny screening", 700_000);
-    const parts = generateTicketBunny("saved-bunny");
+    const parts = { ...bowBunny };
     const expected = { ...parts };
     // Someone who already reached ten minutes receives the design as soon as it is created.
     for (let time = 700_000; time <= 1_300_000; time += 10_000)

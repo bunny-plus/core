@@ -224,6 +224,7 @@ export default function CinemaDiary({ currentUser }: { currentUser: { name: stri
           </h1>
         </div>
         <div className="cinema-diary-count" aria-live="polite">
+          <AssetIcon className="diary-count-bunny" animate={false} name="bunny-face" />
           <UiIcon name="film" />
           <strong>{collection ? collection.total.toLocaleString() : "—"}</strong>
           <span>{collection?.total === 1 ? "ticket" : "tickets"}</span>

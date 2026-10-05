@@ -132,6 +132,10 @@ export default function App() {
         <Link className="wordmark" to="/">
           <AssetIcon animate={false} name="bunny-face" /> bunny<span>+</span>
         </Link>
+        <span className="header-bunny-charms" aria-hidden="true">
+          <AssetIcon name="bunny-sleep" />
+          <AssetIcon name="carrot" />
+        </span>
         <div className="account">
           <details className="profile-menu" ref={profileRef} name="bunny-popover">
             <summary aria-label="Open profile menu" title={session.user.name}>
@@ -196,7 +200,7 @@ function AdminPouch({ locked = false }: { locked?: boolean }) {
     <>
       <span className="pouch-zipper" aria-hidden="true" />
       <span className="pouch-charm" aria-hidden="true">
-        <UiIcon name={locked ? "lock" : "wrench"} />
+        {locked ? <UiIcon name="lock" /> : <AssetIcon name="carrot" />}
       </span>
       <span className="pouch-bow" aria-hidden="true" />
       <div className="pouch-label">
@@ -218,7 +222,7 @@ function HomePage({
     <section className="activity-home">
       <div className="burrow-title">
         <h1>pick a tunnel</h1>
-        <UiIcon name="paw" />
+        <AssetIcon animate={false} name="bunny-face" />
       </div>
       <div className="burrow-map">
         <svg
@@ -241,6 +245,7 @@ function HomePage({
         <UiIcon className="trail-charm charm-three" name="heart" />
         <Link className="activity-spot cinema" to="/stream">
           <span className="cinema-tape" aria-hidden="true" />
+          <AssetIcon className="cinema-carrot-charm" name="carrot" />
           <small>NOW SHOWING</small>
           <h2>
             carrot
@@ -289,6 +294,7 @@ function HomePage({
           </div>
         )}
         <Link className="diary-home-link" to="/diary">
+          <AssetIcon className="diary-peeking-bunny" animate={false} name="bunny-face" />
           <UiIcon name="ticket" />
           <span>
             <strong>cinema diary</strong>
@@ -393,14 +399,14 @@ function FloatingDecorations() {
     "bunny-face",
     "carrot",
     "blossom",
-    "leafy",
-    "bunny",
+    "bunny-hug",
+    "bunny-sleep",
     "carrot",
     "blossom",
     "bunny-face",
     "carrot",
-    "leafy",
-    "bunny",
+    "bow",
+    "bunny-back",
     "blossom",
   ] as const;
   return (
