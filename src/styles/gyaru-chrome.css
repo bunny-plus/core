@@ -1,0 +1,362 @@
+/* Small paper, ribbon, and photo details on the existing room chrome. */
+.room-header {
+  border: 1px solid #d9b9c3;
+  border-radius: 7px 17px 8px 7px;
+  background:
+    radial-gradient(#d9bbae55 0.7px, transparent 0.8px) 0 0 / 7px 7px,
+    linear-gradient(108deg, #fffdf5, #fff7f8 62%, #fffaf0);
+  box-shadow:
+    2px 3px 0 #edceda,
+    3px 4px 0 #d5b6c0,
+    0 8px 22px #7953620d;
+}
+.room-header::before {
+  content: "";
+  position: absolute;
+  left: 195px;
+  top: -5px;
+  width: 59px;
+  height: 12px;
+  background: url("/leopard.svg") center / 43px;
+  opacity: 0.56;
+  transform: rotate(-5deg);
+  border-inline: 1px dashed #fff4e2;
+  pointer-events: none;
+}
+.room-header::after {
+  left: 11px;
+  right: 11px;
+  bottom: 5px;
+  height: 0;
+  border-bottom: 1px dashed #d5aeb956;
+}
+.room-header .wordmark {
+  color: #bc6a87;
+  text-shadow:
+    -1px -1px 0 #fffdf7,
+    1px -1px 0 #fffdf7,
+    -1px 1px 0 #fffdf7,
+    1px 1px 0 #fffdf7,
+    2px 2px 0 #eac8d5;
+}
+.room-header .wordmark > span {
+  color: #d7a364;
+}
+.room-header .wordmark > .asset-icon {
+  filter: drop-shadow(0 1px 0 #fff) drop-shadow(1px 2px 0 #e8d5dd);
+}
+.profile-menu > summary {
+  padding: 3px 3px 7px;
+  border: 1px solid #d7babd;
+  border-radius: 3px;
+  background: #fffdf8;
+  box-shadow: 2px 2px 0 #dfc5ca;
+  transform: rotate(4deg);
+}
+.profile-menu > summary > img:not(.profile-carrot),
+.profile-menu > summary > span {
+  border-radius: 1px;
+}
+.profile-menu > summary::after {
+  top: -9px;
+  left: -9px;
+  width: 28px;
+  height: 20px;
+  border: 0;
+  border-radius: 0;
+  background: url("/ribbon.svg") center / contain no-repeat;
+  box-shadow: none;
+  rotate: -13deg;
+  pointer-events: none;
+}
+.profile-menu > summary > .profile-carrot {
+  width: 20px;
+  height: 20px;
+  right: -6px;
+  bottom: -6px;
+}
+.profile-menu[open] > summary {
+  box-shadow: 2px 2px 0 #c793a6;
+}
+.player-actions {
+  position: relative;
+  border: 1px solid #d8b7c2;
+  padding: 6px 7px;
+  border-radius: 7px 17px 7px 12px;
+  background:
+    radial-gradient(#dfbec854 0.6px, transparent 0.8px) 0 0 / 6px 6px,
+    linear-gradient(110deg, #fffdf5, #fff9fb);
+  box-shadow:
+    2px 3px 0 #ecd7d7,
+    3px 4px 0 #d9bdc6;
+}
+.player-actions::before {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: -5px;
+  width: 28px;
+  height: 8px;
+  background: repeating-linear-gradient(45deg, #e0aebb99 0 3px, #f4d4ddaa 3px 6px);
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+.player-actions::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: -10px;
+  width: 25px;
+  height: 19px;
+  background: url("/ribbon.svg") center / contain no-repeat;
+  transform: rotate(12deg);
+  pointer-events: none;
+}
+.player-actions > button,
+.player-actions .volume-toggle,
+.player-actions > details > summary {
+  color: #96536c;
+  border-radius: 5px;
+  text-shadow: 0 1px #fff;
+}
+.player-actions > button.active,
+.player-actions > button[aria-expanded="true"],
+.player-actions > .subtitle-menu--enabled > summary,
+.player-actions > details[open] > summary {
+  color: #994266;
+  background: #f7dce7;
+  box-shadow:
+    inset 0 0 0 1px #dfafc4,
+    1px 1px 0 #edd4de;
+}
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.screen-player:not(:fullscreen) .live-state {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 9px;
+  max-width: 100%;
+  min-width: 0;
+  color: #996079;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+}
+.screen-player:not(:fullscreen) .live-badge {
+  padding: 4px 7px;
+  border: 1px solid #dbb5c3;
+  border-radius: 3px;
+  background: #fff8f8;
+  box-shadow: 1px 1px 0 #efdce1;
+}
+.screen-player:not(:fullscreen) .live-state i {
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 0 2px #fb718520;
+}
+.screen-player:not(:fullscreen) .live-state.offline .live-badge {
+  color: #827b81;
+  border-color: #d8d0d3;
+}
+.screen-player:not(:fullscreen) .stream-title {
+  grid-column: 2;
+  max-width: min(300px, 52vw);
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid #d9c5b3;
+  border-radius: 2px 5px 3px 2px;
+  background: #fffaf0;
+  box-shadow: 1px 2px 0 #eddfd4;
+  color: #82556b;
+  font-size: 11px;
+  font-weight: 700;
+}
+.screen-player:not(:fullscreen) .sync-copy {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #8a777f;
+  font-size: 10px;
+  font-weight: 450;
+}
+.cinema-ticket-progress {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 10px 5px 0;
+}
+.cinema-ticket-progress > .cinema-ticket-stub {
+  position: relative;
+  display: flex;
+  flex: 0 1 330px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 22px 10px 11px;
+  border: 1px solid #ddc7cb;
+  border-radius: 3px 7px 4px 3px;
+  background: #fffcf5;
+  box-shadow: 2px 2px 0 #eddfd8;
+}
+.cinema-ticket-stub::before {
+  position: absolute;
+  content: "";
+  top: -4px;
+  left: 17px;
+  width: 25px;
+  height: 7px;
+  background: repeating-linear-gradient(45deg, #e0aebb99 0 3px, #f4d4ddaa 3px 6px);
+  transform: rotate(-5deg);
+  pointer-events: none;
+}
+.cinema-ticket-stub::after {
+  position: absolute;
+  content: "";
+  top: 5px;
+  bottom: 5px;
+  right: 9px;
+  border-right: 1px dashed #d6bac1;
+  pointer-events: none;
+}
+.cinema-ticket-stamp {
+  display: grid;
+  width: 29px;
+  height: 33px;
+  flex: none;
+  place-items: center;
+  border: 1px dashed #c8a2b0;
+  border-radius: 3px;
+  color: #9f657e;
+  transform: rotate(-5deg);
+}
+.cinema-ticket-stamp .ui-icon {
+  width: 19px;
+  height: 19px;
+}
+.cinema-ticket-copy {
+  flex: 1;
+  min-width: 0;
+}
+.cinema-ticket-progress-title {
+  margin-bottom: 3px;
+  color: #855969;
+  font:
+    italic 700 15px Georgia,
+    serif;
+}
+.cinema-ticket-copy > span {
+  color: #927580;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.cinema-ticket-progress progress {
+  width: 100%;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 0;
+  accent-color: #b78399;
+  background: #ecdde2;
+}
+.cinema-ticket-progress progress::-webkit-progress-bar {
+  border-radius: 0;
+  background: #ecdde2;
+}
+.cinema-ticket-progress progress::-webkit-progress-value {
+  border-radius: 0;
+  background: #b78399;
+}
+.cinema-ticket-progress progress::-moz-progress-bar {
+  border-radius: 0;
+  background: #b78399;
+}
+.cinema-ticket-progress > a {
+  margin-left: auto;
+  padding-block: 8px;
+  color: #916579;
+  font-size: 11px;
+}
+body.lights-out .screen-player:not(:fullscreen) .live-badge,
+body.lights-out .screen-player:not(:fullscreen) .stream-title,
+body.lights-out .cinema-ticket-progress > .cinema-ticket-stub {
+  border-color: #654653;
+  background: #251d23;
+  box-shadow: 1px 2px 0 #422b37;
+  color: #d1a8bb;
+}
+body.lights-out .screen-player:not(:fullscreen) .sync-copy,
+body.lights-out .cinema-ticket-copy > span {
+  color: #b59daa;
+}
+body.lights-out .cinema-ticket-progress-title,
+body.lights-out .cinema-ticket-progress > a {
+  color: #cda3b7;
+}
+body.lights-out .player-actions > .subtitle-menu--enabled > summary {
+  color: #eac2d5;
+  background: #57394b;
+  box-shadow: inset 0 0 0 1px #876178;
+}
+.screen-player:fullscreen .player-actions :is(button, summary) {
+  text-shadow: none;
+}
+.screen-player:fullscreen .player-actions > .subtitle-menu--enabled > summary {
+  color: #ffe5f2;
+  background: #57394b;
+  box-shadow: inset 0 0 0 1px #876178;
+}
+.player-actions .volume-control {
+  border-right: 1px dashed #d7b6c3;
+}
+.player-actions .volume-control input::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #dfbd8c var(--volume), #f1dbe4 var(--volume));
+}
+.player-actions .volume-control input::-moz-range-track {
+  background: linear-gradient(to right, #dfbd8c var(--volume), #f1dbe4 var(--volume));
+}
+body.lights-out .stream-page .room-header .wordmark {
+  color: #c296a9;
+  text-shadow: 1px 1px #0f0d10;
+}
+body.lights-out .stream-page .room-header::before {
+  opacity: 0.25;
+}
+body.lights-out .stream-page .player-actions :is(button, summary) {
+  text-shadow: none;
+}
+body.lights-out .stream-page .player-actions > button[aria-expanded="true"] {
+  background: #57394b;
+  color: #f5cfe2;
+  box-shadow: inset 0 0 0 1px #876178;
+}
+@media (hover: hover) and (pointer: fine) {
+  .player-actions > button:hover,
+  .player-actions > details > summary:hover,
+  .player-actions .volume-toggle:hover {
+    background-color: #f4e4e8;
+  }
+}
+@media (max-width: 600px) {
+  .room-header::before {
+    left: 142px;
+    width: 40px;
+    height: 10px;
+  }
+  .player-actions {
+    padding: 4px;
+  }
+  .player-actions::after {
+    width: 21px;
+    height: 16px;
+    top: -8px;
+  }
+}
+@media (max-width: 360px) {
+  .screen-player:not(:fullscreen) .player-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 0;
+    border-radius: 7px 17px 7px 12px;
+  }
+}

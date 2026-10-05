@@ -16,6 +16,8 @@ type IconName =
   | "paw"
   | "reset"
   | "server"
+  | "send"
+  | "sidebar"
   | "sparkle"
   | "subtitles"
   | "ticket"
@@ -146,6 +148,13 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     ),
     sparkle: (
       <path d="M12 2c.8 5.2 2.8 8 8 10-5.2 2-7.2 4.8-8 10-.8-5.2-2.8-8-8-10 5.2-2 7.2-4.8 8-10Z" />
+    ),
+    send: <path d="m3 3 18 9-18 9 4-9-4-9Zm4 9h14" />,
+    sidebar: (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M15 4v16m-6-11 3 3-3 3" />
+      </>
     ),
     subtitles: (
       <>

@@ -12,6 +12,7 @@ import type { JellyfinPlayback } from "../shared/jellyfin";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
 import { useDismissibleDetails } from "./useDismissibleDetails";
+import RoomSidebar from "./RoomSidebar";
 
 export type User = {
   admin: boolean;
@@ -50,7 +51,7 @@ type RoomReaction = {
   x: number;
 };
 
-type RoomChat = {
+export type RoomChat = {
   createdAt: string;
   id: string;
   member: { avatar: string | null; id: string; name: string };
@@ -60,7 +61,6 @@ type RoomChat = {
 
 type ChatDisplayMode = "bubbles" | "scrolling";
 type OverlayChat = RoomChat & { lane: number; expiresAt: number };
-type ParticleVariant = "blossom" | "bunny-face" | "carrot" | "leafy";
 type RoomStyle = CSSProperties & {
   "--character-index"?: number;
   "--chat-x"?: string;
@@ -72,21 +72,6 @@ type RoomStyle = CSSProperties & {
 function roomStyle(style: RoomStyle): CSSProperties {
   return style;
 }
-
-type ViewerParticle = {
-  age: number;
-  bounces: number;
-  id: number;
-  lifetime: number;
-  rotation: number;
-  size: number;
-  spin: number;
-  variant: ParticleVariant;
-  vx: number;
-  vy: number;
-  x: number;
-  y: number;
-};
 
 function ChatMessage({ message, scrolling = false }: { message: string; scrolling?: boolean }) {
   const effects = parseChatEffects(message);
@@ -112,163 +97,6 @@ function ChatMessage({ message, scrolling = false }: { message: string; scrollin
         </span>
       ))}
     </span>
-  );
-}
-
-const viewerConnectorCharms = ["blossom", "leafy", "bunny-face"] as const;
-const particleThemes: ParticleVariant[][] = [
-  ["carrot", "leafy"],
-  ["blossom", "bunny-face"],
-  ["carrot", "blossom", "leafy"],
-  ["bunny-face", "leafy", "blossom"],
-];
-
-function newViewerParticle(id: number, theme: ParticleVariant[]): ViewerParticle {
-  return {
-    age: 0,
-    bounces: 0,
-    id,
-    lifetime: 1.05 + Math.random() * 0.65,
-    rotation: Math.random() * 90 - 45,
-    size: 17 + Math.random() * 12,
-    spin: Math.random() * 260 - 130,
-    variant: theme[Math.floor(Math.random() * theme.length)] ?? "blossom",
-    vx: Math.random() * 190 - 95,
-    vy: -(75 + Math.random() * 105),
-    x: Math.random() * 10 - 5,
-    y: Math.random() * 8 - 2,
-  };
-}
-
-function ViewerParticleEmitter({ active }: { active: boolean }) {
-  const [particles, setParticles] = useState<ViewerParticle[]>([]);
-  const activeRef = useRef(active);
-  const frameRef = useRef<number | null>(null);
-  const lastFrameRef = useRef(0);
-  const nextIdRef = useRef(0);
-  const particlesRef = useRef<ViewerParticle[]>([]);
-  const spawnTimeRef = useRef(0);
-  const themeRef = useRef<ParticleVariant[]>(particleThemes[0]!);
-  const tickRef = useRef<(time: number) => void>(() => undefined);
-
-  tickRef.current = (time: number) => {
-    const delta = Math.min((time - lastFrameRef.current) / 1_000, 0.034);
-    lastFrameRef.current = time;
-    spawnTimeRef.current += delta;
-
-    const next = particlesRef.current
-      .map((particle) => {
-        const drag = Math.pow(0.982, delta * 60);
-        let vx = particle.vx * drag;
-        let vy = particle.vy + 270 * delta;
-        let x = particle.x + vx * delta;
-        let y = particle.y + vy * delta;
-        let bounces = particle.bounces;
-        if (y > 40 && vy > 0 && bounces === 0) {
-          y = 40;
-          vy *= -0.36;
-          vx *= 0.72;
-          bounces += 1;
-        }
-        return {
-          ...particle,
-          age: particle.age + delta,
-          bounces,
-          rotation: particle.rotation + particle.spin * delta,
-          vx,
-          vy,
-          x,
-          y,
-        };
-      })
-      .filter((particle) => particle.age < particle.lifetime);
-
-    if (activeRef.current) {
-      while (spawnTimeRef.current >= 0.085 && next.length < 16) {
-        spawnTimeRef.current -= 0.085;
-        next.push(newViewerParticle(nextIdRef.current++, themeRef.current));
-      }
-    }
-
-    particlesRef.current = next;
-    setParticles(next);
-    if (activeRef.current || next.length > 0) {
-      frameRef.current = requestAnimationFrame((nextTime) => tickRef.current(nextTime));
-    } else {
-      frameRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    activeRef.current = active;
-    if (active) {
-      themeRef.current = particleThemes[Math.floor(Math.random() * particleThemes.length)]!;
-      spawnTimeRef.current = 0.085;
-      if (frameRef.current === null && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        lastFrameRef.current = performance.now();
-        frameRef.current = requestAnimationFrame((time) => tickRef.current(time));
-      }
-    }
-  }, [active]);
-
-  useEffect(
-    () => () => {
-      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    },
-    [],
-  );
-
-  return (
-    <span className="avatar-particle-field" aria-hidden="true">
-      {particles.map((particle) => {
-        const opacity = Math.min(1, particle.age / 0.1, (particle.lifetime - particle.age) / 0.28);
-        const scale = 0.45 + Math.min(1, particle.age / 0.16) * 0.55;
-        return (
-          <span
-            className="physics-particle"
-            style={{
-              height: particle.size,
-              opacity,
-              transform: `translate(-50%, -50%) translate3d(${particle.x}px, ${particle.y}px, 0) rotate(${particle.rotation}deg) scale(${scale})`,
-              width: particle.size,
-            }}
-            key={particle.id}
-          >
-            <AssetIcon animate={false} name={particle.variant} />
-          </span>
-        );
-      })}
-    </span>
-  );
-}
-
-function ViewerAvatar({ current, member }: { current: boolean; member: User }) {
-  const [spraying, setSpraying] = useState(false);
-  return (
-    <div
-      className={`viewer-avatar${current ? " current" : ""}`}
-      aria-label={`${member.name}${current ? " (you)" : ""}`}
-      onPointerEnter={(event) =>
-        setSpraying(
-          event.pointerType === "mouse" &&
-            window.matchMedia("(hover: hover) and (pointer: fine)").matches,
-        )
-      }
-      onPointerLeave={() => setSpraying(false)}
-    >
-      {member.avatar ? (
-        <img src={member.avatar} alt={member.name} />
-      ) : (
-        <span className="avatar-fallback" aria-label={member.name}>
-          {member.name[0]?.toUpperCase()}
-        </span>
-      )}
-      <ViewerParticleEmitter active={spraying} />
-      <span className="avatar-hover-card" aria-hidden="true">
-        <strong>{member.name}</strong>
-      </span>
-    </div>
   );
 }
 
@@ -324,6 +152,14 @@ function savedChatDisplayMode(): ChatDisplayMode {
   }
 }
 
+function savedSidebarOpen() {
+  try {
+    return localStorage.getItem("bunny-plus-sidebar") !== "closed";
+  } catch {
+    return true;
+  }
+}
+
 export default function WatchRoom({
   currentUser,
   delaySeconds,
@@ -371,6 +207,9 @@ export default function WatchRoom({
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
   const [chats, setChats] = useState<OverlayChat[]>([]);
   const [chatHistory, setChatHistory] = useState<RoomChat[]>([]);
+  const [chatSequence, setChatSequence] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(savedSidebarOpen);
+  const [composeRequest, setComposeRequest] = useState(0);
   const [chatComposer, setChatComposer] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
@@ -419,12 +258,16 @@ export default function WatchRoom({
       )
         return;
       event.preventDefault();
-      setChatComposer(true);
+      if (fullscreen) setChatComposer(true);
+      else {
+        changeSidebarOpen(true);
+        setComposeRequest((current) => current + 1);
+      }
     }
 
     window.addEventListener("keydown", chatShortcut);
     return () => window.removeEventListener("keydown", chatShortcut);
-  }, [shortcutsEnabled]);
+  }, [shortcutsEnabled, fullscreen]);
 
   useEffect(() => {
     if (showChatHistory && chatHistoryRef.current) {
@@ -448,7 +291,12 @@ export default function WatchRoom({
 
   useEffect(() => {
     const screen = playerRef.current;
-    if (!screen || playerStatus !== "ready" || isBuffering || chatComposer || showChatHistory)
+    if (
+      !screen ||
+      playerStatus !== "ready" ||
+      isBuffering ||
+      (fullscreen && (chatComposer || showChatHistory))
+    )
       return;
     let timer: ReturnType<typeof setTimeout>;
     let keyboardInteraction = false;
@@ -506,7 +354,7 @@ export default function WatchRoom({
       window.removeEventListener("pointercancel", release);
       document.removeEventListener("fullscreenchange", reveal);
     };
-  }, [playerStatus, isBuffering, chatComposer, showChatHistory]);
+  }, [playerStatus, isBuffering, chatComposer, showChatHistory, fullscreen]);
 
   useEffect(() => {
     let stopped = false;
@@ -706,6 +554,7 @@ export default function WatchRoom({
               message: message.message,
               x: message.x,
             };
+            setChatSequence((current) => current + 1);
             setChats((current) => {
               const previousLane = current.at(-1)?.lane;
               return [
@@ -1022,12 +871,23 @@ export default function WatchRoom({
       socketRef.current.send(JSON.stringify({ type: "chat", message: text }));
       setChatMessage("");
       setChatComposer(false);
+      return true;
+    }
+    return false;
+  }
+
+  function changeSidebarOpen(open: boolean) {
+    setSidebarOpen(open);
+    try {
+      localStorage.setItem("bunny-plus-sidebar", open ? "open" : "closed");
+    } catch {
+      // Keep the selected layout for this visit when storage is unavailable.
     }
   }
 
   return (
     <div className="watch-content">
-      <div className="room-grid">
+      <div className={`room-grid room-grid--sidebar${sidebarOpen ? "" : " sidebar-collapsed"}`}>
         <section className="screen-column">
           <div className="screen-player" ref={playerRef} tabIndex={-1}>
             <div className="screen-frame">
@@ -1133,40 +993,41 @@ export default function WatchRoom({
                     <strong aria-hidden="true">{reaction.member.name}</strong>
                   </span>
                 ))}
-                {chats.map((chat) =>
-                  chatDisplayMode === "scrolling" ? (
-                    <span
-                      className="room-chat-scroll"
-                      style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
-                      key={chat.id}
-                    >
-                      <strong>{chat.member.name}</strong>
-                      <span aria-hidden="true">: </span>
-                      <ChatMessage message={chat.message} scrolling />
-                    </span>
-                  ) : (
-                    <span
-                      className="room-chat"
-                      style={roomStyle({ "--chat-x": `${chat.x}%` })}
-                      key={chat.id}
-                    >
-                      <span className="room-chat-avatar" aria-hidden="true">
-                        {chat.member.avatar ? (
-                          <img src={chat.member.avatar} alt="" />
-                        ) : (
-                          <span>{chat.member.name[0]?.toUpperCase()}</span>
-                        )}
+                {(fullscreen || !sidebarOpen) &&
+                  chats.map((chat) =>
+                    chatDisplayMode === "scrolling" ? (
+                      <span
+                        className="room-chat-scroll"
+                        style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
+                        key={chat.id}
+                      >
+                        <strong>{chat.member.name}</strong>
+                        <span aria-hidden="true">: </span>
+                        <ChatMessage message={chat.message} scrolling />
                       </span>
-                      <span className="room-chat-bubble">
-                        <strong aria-hidden="true">{chat.member.name}</strong>
-                        <span className="sr-only">{chat.member.name} says: </span>
-                        <span>
-                          <ChatMessage message={chat.message} />
+                    ) : (
+                      <span
+                        className="room-chat"
+                        style={roomStyle({ "--chat-x": `${chat.x}%` })}
+                        key={chat.id}
+                      >
+                        <span className="room-chat-avatar" aria-hidden="true">
+                          {chat.member.avatar ? (
+                            <img src={chat.member.avatar} alt="" />
+                          ) : (
+                            <span>{chat.member.name[0]?.toUpperCase()}</span>
+                          )}
+                        </span>
+                        <span className="room-chat-bubble">
+                          <strong aria-hidden="true">{chat.member.name}</strong>
+                          <span className="sr-only">{chat.member.name} says: </span>
+                          <span>
+                            <ChatMessage message={chat.message} />
+                          </span>
                         </span>
                       </span>
-                    </span>
-                  ),
-                )}
+                    ),
+                  )}
               </div>
               {shortcutsEnabled && (
                 <span className="reaction-shortcut-hint" aria-hidden="true">
@@ -1178,15 +1039,17 @@ export default function WatchRoom({
               <div
                 className={`live-state ${streamOnline === false || relayStatus?.running === false ? "offline" : ""}`}
               >
-                <i aria-hidden="true" />
-                <span>
-                  {streamOnline === null || relayStatus === null
-                    ? "CHECKING"
-                    : !streamOnline
-                      ? "OFFLINE"
-                      : relayStatus.running
-                        ? "LIVE"
-                        : "IDLE"}
+                <span className="live-badge">
+                  <i aria-hidden="true" />
+                  <span>
+                    {streamOnline === null || relayStatus === null
+                      ? "CHECKING"
+                      : !streamOnline
+                        ? "OFFLINE"
+                        : relayStatus.running
+                          ? "LIVE"
+                          : "IDLE"}
+                  </span>
                 </span>
                 {relayStatus?.running && (
                   <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
@@ -1240,34 +1103,33 @@ export default function WatchRoom({
                   data-tooltip={shortcutsEnabled ? "Press F to react" : undefined}
                   onClick={react}
                 >
-                  <UiIcon name="sparkle" />
+                  <UiIcon name="heart" />
                   <span>React</span>
                 </button>
-                <button
-                  type="button"
-                  aria-label="Chat"
-                  aria-expanded={chatComposer}
-                  data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
-                  onClick={() =>
-                    setChatComposer((open) => {
-                      if (open) setChatMessage("");
-                      return !open;
-                    })
-                  }
-                >
-                  <UiIcon name="chat" />
-                  <span>Chat</span>
-                </button>
-                <button
-                  className={`chat-history-toggle${showChatHistory ? " active" : ""}`}
-                  type="button"
-                  aria-label={showChatHistory ? "Hide chat" : "Show chat"}
-                  aria-expanded={showChatHistory}
-                  onClick={() => setShowChatHistory((visible) => !visible)}
-                >
-                  <UiIcon name="history" />
-                  <span>{showChatHistory ? "Hide chat" : "Show chat"}</span>
-                </button>
+                {fullscreen && (
+                  <button
+                    type="button"
+                    aria-label="Chat"
+                    aria-expanded={chatComposer}
+                    data-tooltip={shortcutsEnabled ? "Press C to chat" : undefined}
+                    onClick={() => setChatComposer((open) => !open)}
+                  >
+                    <UiIcon name="chat" />
+                    <span>Chat</span>
+                  </button>
+                )}
+                {fullscreen && (
+                  <button
+                    className={`chat-history-toggle${showChatHistory ? " active" : ""}`}
+                    type="button"
+                    aria-label={showChatHistory ? "Hide chat" : "Show chat"}
+                    aria-expanded={showChatHistory}
+                    onClick={() => setShowChatHistory((visible) => !visible)}
+                  >
+                    <UiIcon name="history" />
+                    <span>{showChatHistory ? "Hide chat" : "Show chat"}</span>
+                  </button>
+                )}
                 <button
                   className={lightsOut ? "active" : ""}
                   type="button"
@@ -1329,7 +1191,7 @@ export default function WatchRoom({
                 </details>
               </div>
             </div>
-            {(showChatHistory || chatComposer) && (
+            {fullscreen && (showChatHistory || chatComposer) && (
               <div className="chat-panels">
                 {showChatHistory && (
                   <aside className="chat-history-panel" aria-label="Chat">
@@ -1405,23 +1267,27 @@ export default function WatchRoom({
             cinemaProgress?.screening?.ticketCountingEnabled &&
             (cinemaProgress.screening.ticketDesign || cinemaProgress.ticket) && (
               <div className="cinema-ticket-progress">
-                <UiIcon name="ticket" />
-                <div>
-                  <strong className="cinema-ticket-progress-title">
-                    {cinemaProgress.screening.ticketDesign?.title || cinemaProgress.ticket?.title}
-                  </strong>
-                  <span>
-                    {cinemaProgress.ticket
-                      ? "Ticket collected"
-                      : `${formatTime(cinemaProgress.watchedSeconds)} / ${formatTime(cinemaProgress.requiredSeconds)} watched`}
+                <div className="cinema-ticket-stub">
+                  <span className="cinema-ticket-stamp">
+                    <UiIcon name="ticket" />
                   </span>
-                  {!cinemaProgress.ticket && (
-                    <progress
-                      aria-label="Watch time toward your cinema ticket"
-                      max={cinemaProgress.requiredSeconds}
-                      value={cinemaProgress.watchedSeconds}
-                    />
-                  )}
+                  <div className="cinema-ticket-copy">
+                    <strong className="cinema-ticket-progress-title">
+                      {cinemaProgress.screening.ticketDesign?.title || cinemaProgress.ticket?.title}
+                    </strong>
+                    <span>
+                      {cinemaProgress.ticket
+                        ? "Ticket collected"
+                        : `${formatTime(cinemaProgress.watchedSeconds)} / ${formatTime(cinemaProgress.requiredSeconds)} watched`}
+                    </span>
+                    {!cinemaProgress.ticket && (
+                      <progress
+                        aria-label="Watch time toward your cinema ticket"
+                        max={cinemaProgress.requiredSeconds}
+                        value={cinemaProgress.watchedSeconds}
+                      />
+                    )}
+                  </div>
                 </div>
                 <Link to="/diary">My tickets ↗</Link>
               </div>
@@ -1503,30 +1369,19 @@ export default function WatchRoom({
             </div>
           )}
         </section>
-        <aside className="audience-panel">
-          <div className="member-list">
-            {members.map((member, index) => (
-              <div className="viewer-entry" key={member.id}>
-                <ViewerAvatar current={member.id === currentUser.id} member={member} />
-                {index < members.length - 1 && (
-                  <span className="viewer-link" aria-hidden="true">
-                    <span className="viewer-link-track">
-                      <svg className="viewer-link-trail" viewBox="0 0 52 44" focusable="false">
-                        <path className="viewer-link-ribbon" d="M26 0C8 10 45 29 26 44" />
-                        <path className="viewer-link-stitches" d="M26 0C8 10 45 29 26 44" />
-                      </svg>
-                      <AssetIcon
-                        animate={false}
-                        className="viewer-link-charm"
-                        name={viewerConnectorCharms[index % viewerConnectorCharms.length]}
-                      />
-                    </span>
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </aside>
+        <RoomSidebar
+          currentUser={currentUser}
+          members={members}
+          messages={chatHistory}
+          messageSequence={chatSequence}
+          open={sidebarOpen}
+          fullscreen={fullscreen}
+          composeRequest={composeRequest}
+          draft={chatMessage}
+          onDraftChange={setChatMessage}
+          onOpenChange={changeSidebarOpen}
+          onSend={chat}
+        />
       </div>
     </div>
   );

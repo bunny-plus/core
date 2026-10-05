@@ -1,3 +1,18 @@
+@media (min-width: 901px) and (max-width: 1150px) {
+  .activity-spot.cinema {
+    left: 2%;
+    width: 34%;
+  }
+  .activity-spot.admin {
+    right: 2%;
+    width: 240px;
+  }
+  .activity-spot.chloe {
+    left: 40%;
+    width: 215px;
+  }
+}
+
 @media (max-width: 900px) {
   .burrow-map {
     display: flex;
@@ -10,7 +25,7 @@
     inset: 15px -5px 0;
   }
   .burrow-trail,
-  .trail-carrot,
+  .trail-charm,
   .burrow-hole {
     display: none;
   }
@@ -29,6 +44,18 @@
   .activity-spot.admin,
   .activity-spot.chloe {
     margin-top: 30px;
+  }
+  .activity-spot.cinema {
+    width: min(calc(100% - 12px), 370px);
+    height: 195px;
+  }
+  .activity-spot.admin {
+    width: min(100%, 275px);
+    height: 195px;
+  }
+  .activity-spot.chloe {
+    width: min(100%, 235px);
+    height: 205px;
   }
   .future-patch {
     position: relative;

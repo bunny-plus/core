@@ -191,6 +191,22 @@ function SessionError({ message, onRetry }: { message: string; onRetry: () => vo
   );
 }
 
+function AdminPouch({ locked = false }: { locked?: boolean }) {
+  return (
+    <>
+      <span className="pouch-zipper" aria-hidden="true" />
+      <span className="pouch-charm" aria-hidden="true">
+        <UiIcon name={locked ? "lock" : "wrench"} />
+      </span>
+      <span className="pouch-bow" aria-hidden="true" />
+      <div className="pouch-label">
+        <h2>admin burrow</h2>
+        <p>{locked ? "staff only" : "stream & tickets"}</p>
+      </div>
+    </>
+  );
+}
+
 function HomePage({
   canChatChloe,
   canManageStream,
@@ -211,44 +227,48 @@ function HomePage({
           preserveAspectRatio="none"
           aria-hidden="true"
         >
-          <path d="M500 8 C510 48 535 63 565 100" />
-          <path d="M520 245 C455 275 365 300 250 310" />
-          <path d="M635 225 C720 220 790 250 860 285" />
-          <path d="M250 350 C315 450 440 448 550 478" />
-          <path d="M855 370 C790 450 685 450 590 478" />
+          <path
+            className="trail-ribbon"
+            d="M500 8 C510 48 535 63 565 100 M520 245 C455 275 365 300 250 310 M635 225 C720 220 790 250 860 285 M250 350 C315 450 440 448 550 478 M855 370 C790 450 685 450 590 478"
+          />
+          <path
+            className="trail-stitch"
+            d="M500 8 C510 48 535 63 565 100 M520 245 C455 275 365 300 250 310 M635 225 C720 220 790 250 860 285 M250 350 C315 450 440 448 550 478 M855 370 C790 450 685 450 590 478"
+          />
         </svg>
-        <AssetIcon className="trail-carrot carrot-one" name="carrot" />
-        <AssetIcon className="trail-carrot carrot-two" name="carrot" />
-        <AssetIcon className="trail-carrot carrot-three" name="carrot" />
+        <UiIcon className="trail-charm charm-one" name="heart" />
+        <UiIcon className="trail-charm charm-two" name="sparkle" />
+        <UiIcon className="trail-charm charm-three" name="heart" />
         <Link className="activity-spot cinema" to="/stream">
-          <UiIcon className="spot-icon" name="film" />
+          <span className="cinema-tape" aria-hidden="true" />
           <small>NOW SHOWING</small>
-          <h2>carrot cinema</h2>
-          <p>the live room</p>
+          <h2>
+            carrot
+            <br />
+            cinema
+          </h2>
+          <p>
+            the live room <span aria-hidden="true">↗</span>
+          </p>
           <span className="ticket-stub" aria-hidden="true">
+            <UiIcon className="spot-icon" name="film" />
             <i>ADMIT</i>
             <strong>ONE</strong>
-            <AssetIcon name="carrot" />
+            <span className="ticket-barcode" />
           </span>
         </Link>
         {canManageStream ? (
           <Link className="activity-spot admin" to="/admin">
-            <UiIcon className="spot-icon" name="wrench" />
-            <small>KEEP OUT, BUNS</small>
-            <h2>admin burrow</h2>
-            <p>break stuff</p>
+            <AdminPouch />
           </Link>
         ) : (
           <div className="activity-spot admin locked" aria-label="Admin burrow requires permission">
-            <UiIcon className="spot-icon" name="lock" />
-            <small>ROLE REQUIRED</small>
-            <h2>admin burrow</h2>
-            <p>no sneaking in</p>
-            <b>can't go there</b>
+            <AdminPouch locked />
           </div>
         )}
         {canChatChloe ? (
           <Link className="activity-spot chloe" to="/chloe">
+            <span className="chloe-bow" aria-hidden="true" />
             <UiIcon className="chloe-sparkle sparkle-one" name="sparkle" />
             <UiIcon className="spot-icon" name="nail" />
             <UiIcon className="chloe-sparkle sparkle-two" name="sparkle" />
