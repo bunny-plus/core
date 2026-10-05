@@ -193,15 +193,9 @@ export default function StreamControl() {
 
   return (
     <section className="stream-modal admin-stream-panel" aria-labelledby="stream-control-title">
-      <header>
-        <div>
-          <AssetIcon name="carrot" />
-          <div>
-            <h2 id="stream-control-title">Choose a stream source</h2>
-            <p>Pick what everyone watches next.</p>
-          </div>
-        </div>
-      </header>
+      <h2 id="stream-control-title" className="sr-only">
+        Stream source
+      </h2>
 
       {status?.running && (
         <div className="current-stream">
@@ -257,10 +251,7 @@ export default function StreamControl() {
           onClick={() => setSource("restream")}
         >
           <UiIcon name="broadcast" />
-          <span>
-            <strong>Restream</strong>
-            <small>YouTube + Twitch</small>
-          </span>
+          <strong>Restream</strong>
         </button>
         <button
           className={source === "jellyfin" ? "active" : ""}
@@ -270,10 +261,7 @@ export default function StreamControl() {
           onClick={() => setSource("jellyfin")}
         >
           <UiIcon name="server" />
-          <span>
-            <strong>Jellyfin</strong>
-            <small>Movies + shows</small>
-          </span>
+          <strong>Jellyfin</strong>
         </button>
       </div>
 

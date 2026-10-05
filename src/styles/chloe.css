@@ -2,7 +2,7 @@
   position: relative;
   z-index: 2;
   display: grid;
-  min-height: calc(100vh - 80px);
+  flex: 1;
   place-items: center;
   padding: 40px 20px;
 }
@@ -86,7 +86,7 @@
 .chloe-coming-soon {
   margin: 20px 5px;
   color: var(--gray-500);
-  font-size: 11px;
+  font-size: 13px;
   text-align: center;
 }
 .chloe-phone > a {
@@ -95,7 +95,7 @@
   border-radius: 12px;
   background: #29232c;
   color: white;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   text-align: center;
   text-decoration: none;

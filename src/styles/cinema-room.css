@@ -19,9 +19,10 @@
     box-shadow 0.2s,
     rotate 0.2s;
 }
-.diary-home-link:hover {
-  rotate: 2deg;
-  box-shadow: 6px 9px 0 rgba(204, 150, 96, 0.2);
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .diary-home-link:hover {
+    box-shadow: 6px 9px 0 rgba(204, 150, 96, 0.2);
+  }
 }
 .diary-home-link:focus-visible {
   outline: 3px solid var(--pink-500);
@@ -44,7 +45,7 @@
 .diary-home-link small {
   display: block;
   margin-top: 3px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .cinema-ticket-progress {
   display: flex;
@@ -52,7 +53,7 @@
   gap: 10px;
   padding: 11px 4px 0;
   color: #8f526b;
-  font-size: 12px;
+  font-size: 13px;
 }
 .cinema-ticket-progress > .ui-icon {
   flex-shrink: 0;
@@ -111,13 +112,8 @@
 .cinema-ticket-award-heading {
   display: flex;
   align-items: flex-start;
+  justify-content: flex-end;
   gap: 16px;
-}
-.cinema-ticket-award-heading p {
-  flex: 1;
-  margin: 0 0 14px;
-  color: #8f526b;
-  font-size: 13px;
 }
 .cinema-ticket-award-heading button {
   width: 28px;
@@ -145,7 +141,6 @@ body.lights-out .cinema-ticket-award {
   background: #211820;
   border-color: #503242;
 }
-body.lights-out .cinema-ticket-award-heading p,
 body.lights-out .cinema-ticket-award > a {
   color: #ecc3d5;
 }
@@ -161,7 +156,7 @@ body.lights-out .cinema-ticket-award > a {
 @media (max-width: 600px) {
   .cinema-ticket-progress {
     align-items: flex-start;
-    font-size: 11px;
+    font-size: 13px;
   }
   .cinema-ticket-award {
     padding: 12px;

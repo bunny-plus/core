@@ -1,0 +1,48 @@
+/* Keep focus immediate and visible, including controls without component-specific rings. */
+:where(button, a[href], summary, select):focus-visible {
+  outline: 2px solid #be185d;
+  outline-offset: 3px;
+}
+body.lights-out :where(button, a[href], summary, select):focus-visible,
+.screen-player:fullscreen :where(button, a[href], summary, select):focus-visible {
+  outline-color: var(--pink-300);
+}
+:focus-visible,
+:focus-visible::before,
+:focus-visible::after {
+  transition: none !important;
+}
+
+/* Individual scale preserves layout transforms, such as the centered diary link. */
+@media (prefers-reduced-motion: no-preference) {
+  :is(
+    button:not(:disabled),
+    summary,
+    .primary-button,
+    .activity-spot:not(.locked),
+    .profile-popover a,
+    .player-menu-popover a,
+    .diary-home-link,
+    .cinema-diary-button
+  ):not(:focus-visible) {
+    transition:
+      scale 120ms var(--ease-out),
+      transform 180ms var(--ease-out),
+      box-shadow 180ms var(--ease-out),
+      border-color 120ms,
+      background-color 120ms,
+      color 120ms;
+  }
+  :is(
+      button:not(:disabled),
+      summary,
+      .primary-button,
+      .activity-spot:not(.locked),
+      .profile-popover a,
+      .player-menu-popover a,
+      .diary-home-link,
+      .cinema-diary-button
+    ):active:not(:focus-visible) {
+    scale: 0.98;
+  }
+}

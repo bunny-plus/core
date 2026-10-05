@@ -14,8 +14,10 @@ type IconName =
   | "moon"
   | "nail"
   | "paw"
+  | "reset"
   | "server"
   | "sparkle"
+  | "subtitles"
   | "ticket"
   | "volume"
   | "volume-off"
@@ -134,6 +136,7 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
         <path d="M6.5 17c0-3.2 2.5-5.5 5.5-5.5s5.5 2.3 5.5 5.5c0 2-1.7 3-3.2 2.2a4.8 4.8 0 0 0-4.6 0C8.2 20 6.5 19 6.5 17Z" />
       </>
     ),
+    reset: <path d="M4 10a8 8 0 1 1 1.5 7M4 4v6h6" />,
     server: (
       <>
         <rect x="4" y="3" width="16" height="7" rx="2" />
@@ -143,6 +146,12 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     ),
     sparkle: (
       <path d="M12 2c.8 5.2 2.8 8 8 10-5.2 2-7.2 4.8-8 10-.8-5.2-2.8-8-8-10 5.2-2 7.2-4.8 8-10Z" />
+    ),
+    subtitles: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <path d="M7 11h2m4 0h4M7 15h6m3 0h1" />
+      </>
     ),
     ticket: (
       <>

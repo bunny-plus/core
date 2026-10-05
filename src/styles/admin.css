@@ -1,49 +1,23 @@
+.admin-page {
+  width: min(800px, 92vw);
+  padding-top: 4vh;
+}
 .admin-page-heading {
   display: flex;
   align-items: center;
-  gap: 17px;
-  margin-bottom: 30px;
+  gap: 12px;
+  margin-bottom: 22px;
   text-align: left;
 }
 .admin-page-heading > .ui-icon {
-  width: 58px;
-  height: 58px;
-  filter: drop-shadow(0 8px 8px rgba(244, 114, 166, 0.18));
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  color: var(--pink-400);
 }
 .admin-page-heading h1 {
   margin: 0;
-  color: var(--pink-400);
-  font-size: clamp(35px, 6vw, 53px);
-  letter-spacing: -0.05em;
-}
-.admin-page-heading small {
-  display: block;
-  margin: 4px 0 0;
-  color: var(--gray-500);
-  font-size: 14px;
-}
-.admin-page-heading > div > p {
-  margin: 0 0 2px;
-  color: var(--orange-400);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-}
-.admin-page {
-  width: min(800px, 92vw);
-  padding-top: 5vh;
-}
-.admin-page-heading {
-  justify-content: flex-start;
-}
-.admin-page-heading > .ui-icon {
-  width: 48px;
-  height: 48px;
-}
-.admin-page-heading h1 {
-  font-size: clamp(34px, 5vw, 46px);
-}
-.admin-stream-panel {
-  width: 100%;
-  max-height: none;
+  color: var(--pink-500);
+  font-size: clamp(28px, 5vw, 36px);
+  letter-spacing: -0.04em;
 }

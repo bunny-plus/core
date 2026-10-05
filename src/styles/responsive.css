@@ -30,14 +30,6 @@
   .activity-spot.chloe {
     margin-top: 30px;
   }
-  .activity-spot.cinema:hover,
-  .activity-spot.admin:hover,
-  .activity-spot.chloe:hover {
-    transform: translateY(-5px) rotate(1deg);
-  }
-  .activity-spot.locked:hover {
-    transform: none;
-  }
   .future-patch {
     position: relative;
     right: auto;
@@ -115,11 +107,15 @@
     padding: 17px;
     border-width: 3px;
   }
-  .source-picker {
-    grid-template-columns: 1fr;
-  }
   .source-picker > button {
     padding: 8px 10px;
+  }
+  .track-selectors select,
+  .restream-panel input,
+  .restream-panel select,
+  .cinema-ticket-admin-fields > input,
+  .chat-composer input {
+    font-size: 16px;
   }
   .track-selectors {
     grid-template-columns: 1fr;
@@ -148,11 +144,8 @@
     gap: 10px;
   }
   .admin-page-heading > .ui-icon {
-    width: 42px;
-    height: 42px;
-  }
-  .admin-page-heading small {
-    font-size: 11px;
+    width: 32px;
+    height: 32px;
   }
   .watch-content {
     width: calc(100% - 24px);
@@ -196,6 +189,9 @@
   .player-actions > button > span {
     display: none;
   }
+  .player-menu {
+    position: static;
+  }
   .volume-control {
     min-width: 0;
     padding: 0;
@@ -211,6 +207,16 @@
   }
   .player-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .player-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: center;
+    row-gap: 4px;
+    border-radius: 18px;
   }
 }
 

@@ -151,29 +151,24 @@ export default function JellyfinControl({
 
   return (
     <div className="jellyfin-panel">
-      <div className="restream-intro">
-        <UiIcon name="server" />
-        <div>
-          <strong>Your Jellyfin library</strong>
-          <p>Choose a movie or episode to watch together.</p>
-        </div>
-      </div>
-      <nav className="jellyfin-breadcrumbs" aria-label="Jellyfin library location">
-        <button type="button" disabled={starting} onClick={() => navigate([])}>
-          Library
-        </button>
-        {trail.map((item, index) => (
-          <button
-            type="button"
-            key={item.id}
-            disabled={starting}
-            aria-current={index === trail.length - 1 ? "page" : undefined}
-            onClick={() => navigate(trail.slice(0, index + 1))}
-          >
-            {item.name}
+      {trail.length > 0 && (
+        <nav className="jellyfin-breadcrumbs" aria-label="Jellyfin library location">
+          <button type="button" disabled={starting} onClick={() => navigate([])}>
+            Library
           </button>
-        ))}
-      </nav>
+          {trail.map((item, index) => (
+            <button
+              type="button"
+              key={item.id}
+              disabled={starting}
+              aria-current={index === trail.length - 1 ? "page" : undefined}
+              onClick={() => navigate(trail.slice(0, index + 1))}
+            >
+              {item.name}
+            </button>
+          ))}
+        </nav>
+      )}
       <label className="stream-search-label" htmlFor="jellyfin-search">
         {parentId ? "Search in this show" : "Search movies and shows"}
       </label>
@@ -211,7 +206,6 @@ export default function JellyfinControl({
         <div className="stream-options">
           <header>
             <div>
-              <small>SETTING UP</small>
               <strong>{options.item.title}</strong>
             </div>
             <button

@@ -23,7 +23,7 @@
 
 .cinema-ticket-admin-heading span {
   color: #95694c;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.13em;
 }
@@ -78,7 +78,7 @@
 
 .cinema-ticket-admin-current span {
   color: #986445;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.15em;
 }
@@ -86,7 +86,7 @@
 .cinema-ticket-admin-current strong {
   margin-top: 5px;
   color: #71503e;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -94,14 +94,14 @@
 .cinema-ticket-admin-fields > label {
   display: block;
   margin: 18px 0 7px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 850;
 }
 
 .cinema-ticket-admin-fields > label span {
   margin-left: 4px;
   color: #8a6b76;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -114,12 +114,12 @@
   background: white;
   color: #674552;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .cinema-ticket-admin-fields > .cinema-ticket-admin-file {
   padding: 7px;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .cinema-ticket-admin-file::file-selector-button {
@@ -138,7 +138,7 @@
 .cinema-ticket-admin-image-help {
   margin: -3px 0 9px;
   color: #80616c;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .cinema-ticket-admin-selected-image {
@@ -152,7 +152,7 @@
 .cinema-ticket-admin-selected-image > span {
   min-width: 0;
   color: #80616c;
-  font-size: 10px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -164,7 +164,7 @@
   border-radius: 7px;
   background: #fff;
   color: #a63c63;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -172,7 +172,7 @@
 .cinema-ticket-admin-image-status,
 .cinema-ticket-admin-image-error {
   margin: 8px 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -187,7 +187,7 @@
 .cinema-ticket-admin-final-note {
   margin: 19px 0 13px;
   color: #80616c;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -203,7 +203,7 @@
   border-radius: 10px;
   background: #c54b7b;
   color: white;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 850;
   cursor: pointer;
 }
@@ -235,7 +235,7 @@
 .cinema-ticket-admin-counting p {
   margin: 6px 0 0;
   color: #80616c;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -270,7 +270,7 @@
   display: block;
   margin: 0 0 11px;
   color: #9d4165;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 850;
   letter-spacing: 0.12em;
 }
@@ -279,7 +279,7 @@
   max-width: 200px;
   margin: 12px 0 0;
   color: #80616c;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
   text-align: center;
 }
@@ -298,7 +298,7 @@
   border-radius: 7px;
   background: #eef4e3;
   color: #5b723e;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.09em;
 }
@@ -326,7 +326,7 @@
 
 .cinema-ticket-admin-created-copy small {
   color: #80616c;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
 }
 
@@ -338,7 +338,7 @@
   border-radius: 10px;
   background: #fff1e9;
   color: #914635;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -448,6 +448,6 @@
   }
 
   .cinema-ticket-admin-heading p {
-    font-size: 11px;
+    font-size: 12px;
   }
 }

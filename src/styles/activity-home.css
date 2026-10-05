@@ -102,20 +102,20 @@
   text-align: center;
   text-decoration: none;
   transition:
-    transform 0.3s,
-    box-shadow 0.3s;
+    transform 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out);
 }
 .activity-spot .spot-icon {
   width: 54px;
   height: 54px;
   filter: drop-shadow(0 7px 5px rgba(84, 52, 78, 0.14));
-  transition: transform 0.3s;
+  transition: transform 0.18s var(--ease-out);
 }
 .activity-spot small {
   margin-top: 5px;
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 900;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.06em;
 }
 .activity-spot h2 {
   margin: 3px 0 0;
@@ -125,21 +125,23 @@
 .activity-spot p {
   margin: 2px 0 0;
   color: var(--gray-500);
-  font-size: 11px;
+  font-size: 13px;
 }
 .activity-spot b {
   position: absolute;
   right: 20px;
   bottom: 17px;
-  font-size: 9px;
+  font-size: 12px;
   text-transform: uppercase;
 }
-.activity-spot:hover {
-  box-shadow: 0 27px 55px rgba(244, 114, 166, 0.25);
-  transform: translateY(-7px) rotate(2deg);
-}
-.activity-spot:hover .spot-icon {
-  transform: scale(1.13) rotate(-7deg);
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .activity-spot:not(.locked):not(:focus-visible):hover {
+    box-shadow: 0 22px 44px rgba(244, 114, 166, 0.2);
+    transform: translateY(-2px);
+  }
+  .activity-spot:not(.locked):not(.chloe):not(:focus-visible):hover .spot-icon {
+    transform: scale(1.03);
+  }
 }
 .activity-spot.cinema {
   top: 155px;
@@ -298,10 +300,6 @@
   letter-spacing: 0.12em;
   rotate: -17deg;
 }
-.activity-spot.locked:hover {
-  box-shadow: 0 18px 40px rgba(84, 52, 78, 0.13);
-  transform: none;
-}
 .activity-spot.chloe {
   top: 78px;
   left: 42%;
@@ -349,9 +347,6 @@
   width: 46px;
   height: 46px;
   margin-top: 3px;
-  transform: none;
-}
-.activity-spot.chloe:hover .spot-icon {
   transform: none;
 }
 .activity-spot.chloe small {

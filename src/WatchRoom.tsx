@@ -11,6 +11,7 @@ import { JellyfinSubtitles } from "./JellyfinSubtitles";
 import type { JellyfinPlayback } from "../shared/jellyfin";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
+import { useDismissibleDetails } from "./useDismissibleDetails";
 
 export type User = {
   admin: boolean;
@@ -248,7 +249,12 @@ function ViewerAvatar({ current, member }: { current: boolean; member: User }) {
     <div
       className={`viewer-avatar${current ? " current" : ""}`}
       aria-label={`${member.name}${current ? " (you)" : ""}`}
-      onPointerEnter={() => setSpraying(true)}
+      onPointerEnter={(event) =>
+        setSpraying(
+          event.pointerType === "mouse" &&
+            window.matchMedia("(hover: hover) and (pointer: fine)").matches,
+        )
+      }
       onPointerLeave={() => setSpraying(false)}
     >
       {member.avatar ? (
@@ -332,7 +338,10 @@ export default function WatchRoom({
   const subtitleOverlayRef = useRef<HTMLDivElement>(null);
   const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
   const chatHistoryRef = useRef<HTMLDivElement>(null);
+  const playerMenuRef = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(playerMenuRef);
   const hlsRef = useRef<Hls | null>(null);
+  const playbackRef = useRef<{ play: () => void; fail: () => void } | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const clockOffsetRef = useRef(0);
   const screeningIdRef = useRef("");
@@ -345,13 +354,15 @@ export default function WatchRoom({
   const [slowConnection, setSlowConnection] = useState(savedSlowConnection);
   const slowConnectionRef = useRef(slowConnection);
   const [fullscreen, setFullscreen] = useState(false);
-  const initialVolumeRef = useRef(volume);
+  const volumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
   const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
     "loading",
   );
   const [isBuffering, setIsBuffering] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [playbackAttempt, setPlaybackAttempt] = useState(0);
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
@@ -419,7 +430,7 @@ export default function WatchRoom({
     if (showChatHistory && chatHistoryRef.current) {
       chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
     }
-  }, [chatHistory, showChatHistory]);
+  }, [chatHistory, showChatHistory, fullscreen]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -528,9 +539,8 @@ export default function WatchRoom({
         if (!status.online) {
           setPlayerStatus("error");
           setIsBuffering(false);
+          setAutoplayBlocked(false);
           setSyncLabel("Stream is offline");
-        } else {
-          setPlayerStatus((current) => (current === "error" ? "loading" : current));
         }
       } catch {
         if (!stopped && !request.signal.aborted) {
@@ -759,36 +769,66 @@ export default function WatchRoom({
     const video = videoRef.current;
     if (!video || !streamUrl || streamOnline !== true) return;
     setPlayerStatus("loading");
-    video.volume = initialVolumeRef.current;
-    video.muted = initialVolumeRef.current === 0;
-    video.defaultMuted = initialVolumeRef.current === 0;
+    setIsBuffering(false);
+    setAutoplayBlocked(false);
+    setSyncLabel("Connecting to the stream");
+    video.volume = volumeRef.current;
+    video.muted = volumeRef.current === 0;
+    video.defaultMuted = volumeRef.current === 0;
     let disposed = false;
+    let failed = false;
     let attachedHls: Hls | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+
+    function failPlayback() {
+      if (disposed || failed) return;
+      failed = true;
+      attachedHls?.stopLoad();
+      setPlayerStatus("error");
+      setIsBuffering(false);
+      setAutoplayBlocked(false);
+      setSyncLabel("Playback failed");
+      // Refresh the playlist/session after a fatal error, even while the server stays online.
+      retry = setTimeout(() => setPlaybackAttempt((current) => current + 1), 10_000);
+    }
+
+    async function play() {
+      if (disposed || failed || !video) return;
+      try {
+        await video.play();
+      } catch (error) {
+        if (disposed || failed) return;
+        if (error instanceof DOMException && error.name === "NotAllowedError") {
+          setAutoplayBlocked(true);
+          setIsBuffering(false);
+          setSyncLabel("Tap to play");
+        } else if (video.error) {
+          failPlayback();
+        }
+      }
+    }
+
+    playbackRef.current = { play, fail: failPlayback };
 
     async function attachStream(media: HTMLVideoElement) {
+      // Safari's native HLS works without the MediaSource pipeline used by hls.js.
+      if (media.canPlayType("application/vnd.apple.mpegurl")) {
+        media.src = streamUrl;
+        play();
+        return;
+      }
       const { default: HlsPlayer } = await import("hls.js");
       if (disposed) return;
       if (HlsPlayer.isSupported()) {
         const hls = new HlsPlayer(playbackConfig(delaySeconds, slowConnectionRef.current));
-        hls.loadSource(streamUrl);
-        hls.attachMedia(media);
-        hls.on(HlsPlayer.Events.MANIFEST_PARSED, () => {
-          if (disposed) return;
-          void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
-        });
-        hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
-          if (disposed) return;
-          if (data.fatal) {
-            setPlayerStatus("error");
-            setStreamOnline(false);
-          }
-        });
         attachedHls = hls;
         hlsRef.current = hls;
-        void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
-      } else if (media.canPlayType("application/vnd.apple.mpegurl")) {
-        media.src = streamUrl;
-        void media.play().catch(() => setSyncLabel("Tap the video to resume audio"));
+        hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
+          if (data.fatal) failPlayback();
+        });
+        hls.loadSource(streamUrl);
+        hls.attachMedia(media);
+        play();
       } else {
         setPlayerStatus("unsupported");
         setIsBuffering(false);
@@ -796,9 +836,11 @@ export default function WatchRoom({
       }
     }
 
-    void attachStream(video);
+    void attachStream(video).catch(failPlayback);
     return () => {
       disposed = true;
+      clearTimeout(retry);
+      playbackRef.current = null;
       attachedHls?.destroy();
       if (hlsRef.current === attachedHls) hlsRef.current = null;
       video.pause();
@@ -806,13 +848,17 @@ export default function WatchRoom({
       video.removeAttribute("src");
       video.load();
     };
-  }, [delaySeconds, streamOnline, streamUrl]);
+  }, [delaySeconds, streamOnline, streamUrl, playbackAttempt]);
 
   useEffect(() => {
     const synchronizer = new PlaybackSynchronizer();
     const timer = setInterval(() => {
       const video = videoRef.current;
-      if (!video || playerStatus !== "ready") return;
+      if (!video || playerStatus !== "ready" || autoplayBlocked) return;
+      if (video.paused) {
+        playbackRef.current?.play();
+        return;
+      }
       if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         synchronizer.update(video, null, performance.now());
         setIsBuffering(true);
@@ -836,10 +882,9 @@ export default function WatchRoom({
       video.playbackRate = correction.rate;
       if (!video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
         setSyncLabel(correction.label);
-      if (video.paused) void video.play().catch(() => undefined);
     }, 1_000);
     return () => clearInterval(timer);
-  }, [delaySeconds, playerStatus, streamUrl]);
+  }, [delaySeconds, playerStatus, streamUrl, autoplayBlocked]);
 
   useEffect(() => {
     if (!showStats) return;
@@ -899,6 +944,7 @@ export default function WatchRoom({
     if (!video) return;
     video.volume = value;
     video.muted = value === 0;
+    volumeRef.current = value;
     if (value > 0) lastAudibleVolumeRef.current = value;
     setVolume(value);
     try {
@@ -907,7 +953,7 @@ export default function WatchRoom({
       // Playback still works when storage is unavailable.
     }
     if (value > 0 && video.paused) {
-      void video.play().catch(() => setSyncLabel("Tap the video to resume audio"));
+      playbackRef.current?.play();
     }
   }
 
@@ -990,39 +1036,56 @@ export default function WatchRoom({
                 autoPlay
                 muted={volume === 0}
                 playsInline
-                onCanPlay={() => {
+                onPlaying={() => {
                   setPlayerStatus("ready");
                   setIsBuffering(false);
-                  void videoRef.current
-                    ?.play()
-                    .catch(() => setSyncLabel("Tap the video to resume audio"));
+                  setAutoplayBlocked(false);
+                  setSyncLabel(
+                    slowConnection ? "Slow connection · sync off" : "Following the live room",
+                  );
                 }}
-                onError={() => setPlayerStatus("error")}
-                onLoadedData={() => setPlayerStatus("ready")}
-                onPlaying={() => setIsBuffering(false)}
+                onError={() => playbackRef.current?.fail()}
                 onStalled={() => {
-                  if ((videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA) {
+                  if (
+                    playerStatus === "ready" &&
+                    !autoplayBlocked &&
+                    (videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA
+                  ) {
                     setIsBuffering(true);
                     setSyncLabel("Buffering the live stream...");
                   }
                 }}
                 onWaiting={() => {
+                  if (playerStatus !== "ready" || autoplayBlocked) return;
                   setIsBuffering(true);
                   setSyncLabel("Buffering the live stream...");
                 }}
                 onClick={() => {
-                  if (videoRef.current?.paused) void videoRef.current.play();
+                  if (videoRef.current?.paused) playbackRef.current?.play();
                 }}
               />
               <div className="jellyfin-subtitles" ref={subtitleOverlayRef} />
-              {(streamOnline === null || playerStatus === "loading") && streamUrl && (
-                <div className="stream-loading" role="status">
-                  <AssetIcon name="carrot" />
-                  <strong>Tuning the bunny ears...</strong>
-                  <small>Waiting for the live stream</small>
+              {(streamOnline === null || playerStatus === "loading") &&
+                streamUrl &&
+                !autoplayBlocked && (
+                  <div className="stream-loading" role="status">
+                    <AssetIcon name="carrot" />
+                    <strong>Tuning the bunny ears...</strong>
+                    <small>Waiting for the live stream</small>
+                  </div>
+                )}
+              {streamOnline === true && autoplayBlocked && playerStatus !== "error" && (
+                <div className="stream-loading">
+                  <button
+                    className="stream-action"
+                    type="button"
+                    onClick={() => playbackRef.current?.play()}
+                  >
+                    Tap to play
+                  </button>
                 </div>
               )}
-              {playerStatus === "ready" && isBuffering && (
+              {playerStatus === "ready" && isBuffering && !autoplayBlocked && (
                 <div className="stream-loading buffering-overlay" role="status">
                   <AssetIcon name="carrot" />
                   <strong>Buffering the live stream...</strong>
@@ -1039,10 +1102,23 @@ export default function WatchRoom({
               )}
               {playerStatus !== "unsupported" &&
                 (!streamUrl || streamOnline === false || playerStatus === "error") && (
-                  <div className="stream-error">
-                    {streamUrl
-                      ? "The stream is offline right now. This screen will reconnect when broadcasting resumes."
-                      : "Set STREAM_URL to connect the screen."}
+                  <div className="stream-error" role="status">
+                    <span>
+                      {!streamUrl
+                        ? "Set STREAM_URL to connect the screen."
+                        : streamOnline === false
+                          ? "The stream is offline. Reconnecting when it returns."
+                          : "Couldn't play the video. Reconnecting…"}
+                    </span>
+                    {streamUrl && streamOnline === true && (
+                      <button
+                        className="stream-action"
+                        type="button"
+                        onClick={() => setPlaybackAttempt((current) => current + 1)}
+                      >
+                        Retry playback
+                      </button>
+                    )}
                   </div>
                 )}
               <div className="reaction-layer" aria-live="polite" aria-relevant="additions">
@@ -1096,72 +1172,6 @@ export default function WatchRoom({
                 <span className="reaction-shortcut-hint" aria-hidden="true">
                   Press <kbd>F</kbd> to react
                 </span>
-              )}
-              {chatComposer && (
-                <form
-                  className="chat-composer"
-                  autoComplete="off"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    chat(chatMessage);
-                  }}
-                >
-                  <button
-                    className="chat-composer-close"
-                    type="button"
-                    aria-label="Close chat"
-                    onClick={() => {
-                      setChatMessage("");
-                      setChatComposer(false);
-                    }}
-                  >
-                    ×
-                  </button>
-                  <label htmlFor="chat-message">Say something cute</label>
-                  <div>
-                    <input
-                      id="chat-message"
-                      autoFocus
-                      autoCapitalize="off"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      maxLength={64}
-                      placeholder="omg..."
-                      value={chatMessage}
-                      onChange={(event) => setChatMessage(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          setChatMessage("");
-                          setChatComposer(false);
-                        }
-                      }}
-                    />
-                    <button type="submit">Send</button>
-                  </div>
-                </form>
-              )}
-              {showChatHistory && (
-                <aside className="chat-history-panel" aria-label="Chat">
-                  <button
-                    className="chat-history-close"
-                    type="button"
-                    aria-label="Hide chat"
-                    onClick={() => setShowChatHistory(false)}
-                  >
-                    ×
-                  </button>
-                  <div ref={chatHistoryRef}>
-                    {chatHistory.map((chat) => (
-                      <p className="chat-history-entry" key={chat.id}>
-                        <strong>{chat.member.name}</strong>
-                        <span aria-hidden="true">: </span>
-                        <span>
-                          <ChatMessage message={chat.message} />
-                        </span>
-                      </p>
-                    ))}
-                  </div>
-                </aside>
               )}
             </div>
             <div className="screen-footer">
@@ -1277,7 +1287,7 @@ export default function WatchRoom({
                   <UiIcon name="fullscreen" />
                   <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
                 </button>
-                <details className="player-menu">
+                <details className="player-menu" ref={playerMenuRef} name="bunny-popover">
                   <summary aria-label="More player options" title="More player options">
                     <UiIcon name="gear" />
                   </summary>
@@ -1319,6 +1329,76 @@ export default function WatchRoom({
                 </details>
               </div>
             </div>
+            {(showChatHistory || chatComposer) && (
+              <div className="chat-panels">
+                {showChatHistory && (
+                  <aside className="chat-history-panel" aria-label="Chat">
+                    <button
+                      className="chat-history-close"
+                      type="button"
+                      aria-label="Hide chat"
+                      onClick={() => setShowChatHistory(false)}
+                    >
+                      ×
+                    </button>
+                    <div ref={chatHistoryRef}>
+                      {chatHistory.map((chat) => (
+                        <p className="chat-history-entry" key={chat.id}>
+                          <strong>{chat.member.name}</strong>
+                          <span aria-hidden="true">: </span>
+                          <span>
+                            <ChatMessage message={chat.message} />
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  </aside>
+                )}
+                {chatComposer && (
+                  <form
+                    className="chat-composer"
+                    autoComplete="off"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      chat(chatMessage);
+                    }}
+                  >
+                    <button
+                      className="chat-composer-close"
+                      type="button"
+                      aria-label="Close chat"
+                      onClick={() => {
+                        setChatMessage("");
+                        setChatComposer(false);
+                      }}
+                    >
+                      ×
+                    </button>
+                    <label htmlFor="chat-message">Say something cute</label>
+                    <div>
+                      <input
+                        id="chat-message"
+                        autoFocus
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        maxLength={64}
+                        placeholder="omg..."
+                        value={chatMessage}
+                        onChange={(event) => setChatMessage(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            setChatMessage("");
+                            setChatComposer(false);
+                          }
+                        }}
+                      />
+                      <button type="submit">Send</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
           {relayStatus?.running &&
             relayStatus.online &&
@@ -1349,7 +1429,9 @@ export default function WatchRoom({
           {earnedTicket && (
             <aside className="cinema-ticket-award" aria-label="New cinema ticket">
               <div className="cinema-ticket-award-heading">
-                <p role="status">Ticket collected</p>
+                <p className="sr-only" role="status">
+                  Added to your tickets
+                </p>
                 <button
                   type="button"
                   aria-label="Dismiss ticket"
@@ -1359,7 +1441,7 @@ export default function WatchRoom({
                 </button>
               </div>
               <CinemaTicketCard ticket={earnedTicket} compact />
-              <Link to="/diary">See your collection ↗</Link>
+              <Link to="/diary">My tickets ↗</Link>
             </aside>
           )}
           {showStats && stats && (

@@ -7,6 +7,7 @@ import CinemaDiary from "./CinemaDiary";
 import CinemaTicketAdmin from "./CinemaTicketAdmin";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiUrl } from "./api";
+import { useDismissibleDetails } from "./useDismissibleDetails";
 
 type Session = {
   delaySeconds: number;
@@ -20,6 +21,7 @@ export default function App() {
   const previousLocation = useRef(route.key);
   const mainRef = useRef<HTMLElement>(null);
   const profileRef = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(profileRef);
   const [session, setSession] = useState<Session | null | undefined>();
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [sessionRequest, setSessionRequest] = useState(0);
@@ -131,7 +133,7 @@ export default function App() {
           <AssetIcon animate={false} name="bunny-face" /> bunny<span>+</span>
         </Link>
         <div className="account">
-          <details className="profile-menu" ref={profileRef}>
+          <details className="profile-menu" ref={profileRef} name="bunny-popover">
             <summary aria-label="Open profile menu" title={session.user.name}>
               {session.user.avatar ? (
                 <img src={session.user.avatar} alt="" />
@@ -309,10 +311,7 @@ function AdminPage() {
     <section className="admin-page">
       <div className="admin-page-heading">
         <UiIcon name="wrench" />
-        <div>
-          <p>ADMIN BURROW</p>
-          <h1>Stream control</h1>
-        </div>
+        <h1>Stream control</h1>
       </div>
       <StreamControl />
       <CinemaTicketAdmin />

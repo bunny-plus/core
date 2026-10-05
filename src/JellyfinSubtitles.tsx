@@ -3,7 +3,9 @@ import type JASSUB from "jassub";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { JellyfinPlayback, JellyfinSubtitles as SubtitleOptions } from "../shared/jellyfin";
 import { apiFetch, apiJson } from "./api";
+import { UiIcon } from "./Icons";
 import { subtitleTime } from "./subtitle-clock";
+import { useDismissibleDetails } from "./useDismissibleDetails";
 
 type Props = {
   playback: JellyfinPlayback;
@@ -13,6 +15,8 @@ type Props = {
 };
 
 export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Props) {
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  useDismissibleDetails(menuRef);
   const timingRef = useRef({ startedAt: playback.startedAt, delay: 0 });
   const [options, setOptions] = useState<SubtitleOptions | null>(null);
   const [enabled, setEnabled] = useState(() => {
@@ -57,8 +61,9 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
         setOptions(result);
         if (!result.tracks.length) setStatus("No subtitles were selected for this stream");
       })
-      .catch((reason: Error) => {
-        if (!abort.signal.aborted) setError(reason.message);
+      .catch(() => {
+        if (!abort.signal.aborted)
+          setError("We couldn’t load the selected subtitles. Check your connection and try again.");
       });
     return () => abort.abort();
   }, [base, retry]);
@@ -202,56 +207,95 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
       if (missingFont) setError("Some fonts were unavailable; using a fallback font.");
       frame = video!.requestVideoFrameCallback(render);
     }
-    void load().catch((reason: Error) => fail(reason.message));
+    void load().catch((reason: Error) =>
+      fail(
+        reason instanceof TypeError
+          ? "We couldn’t download this track. Check your connection and try again."
+          : reason.message,
+      ),
+    );
     return dispose;
   }, [base, track, options, videoRef, hlsRef, overlayRef, retry]);
 
   return (
-    <details className={`subtitle-menu${track !== null ? " subtitle-menu--enabled" : ""}`}>
+    <details
+      ref={menuRef}
+      name="bunny-popover"
+      className={`subtitle-menu${track !== null ? " subtitle-menu--enabled" : ""}`}
+    >
       <summary aria-label="Subtitles" title={track !== null ? "Subtitles on" : "Subtitles off"}>
-        CC
+        <UiIcon name="subtitles" />
       </summary>
-      <div className="subtitle-panel">
+      <div className="subtitle-panel" role="group" aria-label="Subtitle settings">
         <label className="subtitle-toggle">
-          <span>Enable subtitles</span>
+          <span>Subtitles</span>
           <input
             type="checkbox"
+            role="switch"
+            aria-label="Show subtitles"
             checked={enabled && Boolean(selected)}
             disabled={!selected}
             onChange={(event) => toggleSubtitles(event.target.checked)}
           />
         </label>
-        {selected && <p>{selected.label}</p>}
-        {track !== null && (
-          <div className="subtitle-delay">
-            <span>
-              Delay: {delay > 0 ? "+" : ""}
-              {delay.toFixed(1)}s
-            </span>
+        <p className="subtitle-track" title={selected?.label}>
+          {selected?.label || (options ? "No track selected" : "Loading…")}
+        </p>
+        {selected && (
+          <fieldset
+            className="subtitle-timing"
+            disabled={track === null}
+            aria-label="Subtitle timing"
+          >
+            <span>Delay</span>
             <button
               type="button"
               aria-label="Show subtitles 0.5 seconds earlier"
+              title="0.5 seconds earlier"
+              disabled={delay <= -30}
               onClick={() => setDelay((value) => Math.max(-30, value - 0.5))}
             >
               −
             </button>
+            <output aria-live="polite" aria-label="Subtitle delay">
+              {delay > 0 ? "+" : ""}
+              {delay.toFixed(1)}
+              <small>s</small>
+            </output>
             <button
               type="button"
               aria-label="Show subtitles 0.5 seconds later"
+              title="0.5 seconds later"
+              disabled={delay >= 30}
               onClick={() => setDelay((value) => Math.min(30, value + 0.5))}
             >
               +
             </button>
-            <button type="button" onClick={() => setDelay(0)}>
-              Reset
+            <button
+              className="subtitle-reset"
+              type="button"
+              aria-label="Reset subtitle delay"
+              title="Reset delay"
+              disabled={delay === 0}
+              onClick={() => setDelay(0)}
+            >
+              <UiIcon name="reset" />
+            </button>
+          </fieldset>
+        )}
+        {error ? (
+          <div className="subtitle-error" role="status">
+            <span title={error}>
+              {error.startsWith("Some fonts") ? "Using a fallback font" : "Subtitles unavailable"}
+            </span>
+            <button type="button" onClick={() => setRetry((value) => value + 1)}>
+              Retry
             </button>
           </div>
-        )}
-        <p role="status">{error || (!enabled && selected ? "Subtitles are off" : status)}</p>
-        {error && (
-          <button type="button" onClick={() => setRetry((value) => value + 1)}>
-            Reload subtitles
-          </button>
+        ) : (
+          <span className="sr-only" role="status">
+            {!enabled && selected ? "Subtitles are off" : status}
+          </span>
         )}
       </div>
     </details>

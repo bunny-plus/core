@@ -40,10 +40,8 @@ export default function RestreamControl({ onStarted }: { onStarted: (title: stri
       <div className="restream-intro">
         <UiIcon name="broadcast" />
         <div>
-          <strong>Relay a public livestream</strong>
-          <p>
-            Paste a YouTube or Twitch stream URL. Private and subscriber streams are unsupported.
-          </p>
+          <strong>YouTube or Twitch</strong>
+          <p>Public streams only. Private and subscriber streams are unsupported.</p>
         </div>
       </div>
       <form onSubmit={(event) => void start(event)}>

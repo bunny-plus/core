@@ -1,4 +1,6 @@
 .room-shell {
+  display: flex;
+  flex-direction: column;
   padding-bottom: 50px;
   overflow: visible;
 }
@@ -59,6 +61,7 @@
   position: relative;
   z-index: 5;
   display: flex;
+  flex-shrink: 0;
   width: min(1540px, calc(100% - 28px));
   min-height: 68px;
   align-items: center;
@@ -137,6 +140,10 @@
 .profile-menu > summary::-webkit-details-marker {
   display: none;
 }
+.profile-menu > summary:focus-visible {
+  outline: 2px solid #be185d;
+  outline-offset: 5px;
+}
 .profile-menu > summary::after {
   position: absolute;
   top: -5px;
@@ -150,13 +157,11 @@
   content: "";
   rotate: -10deg;
 }
-.profile-menu > summary:hover,
 .profile-menu[open] > summary {
   box-shadow:
     3px 3px 0 var(--pink-300),
     6px 6px 0 rgba(251, 146, 60, 0.28),
     0 11px 22px rgba(84, 52, 78, 0.14);
-  transform: translate(-1px, -1px) rotate(2deg);
 }
 .profile-menu > summary > img:not(.profile-carrot),
 .profile-menu > summary > span {
@@ -235,10 +240,10 @@
   display: block;
 }
 .profile-identity small {
-  color: var(--orange-400);
-  font-size: 9px;
+  color: #a95c26;
+  font-size: 12px;
   font-weight: 1000;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.04em;
 }
 .profile-identity strong {
   max-width: 130px;
@@ -264,7 +269,7 @@
   box-shadow: 2px 2px 0 rgba(249, 168, 198, 0.3);
   color: var(--gray-700);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   text-align: left;
   text-decoration: none;
@@ -273,12 +278,13 @@
     border-color 0.15s,
     box-shadow 0.15s;
 }
-.profile-popover a:hover,
-.profile-popover button:hover {
-  border-color: var(--pink-400);
-  background: white;
-  box-shadow: 3px 3px 0 var(--pink-200);
-  transform: translate(-1px, -1px);
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .profile-popover a:hover,
+  .profile-popover button:hover {
+    border-color: var(--pink-400);
+    background: white;
+    box-shadow: 3px 3px 0 var(--pink-200);
+  }
 }
 .profile-popover button {
   color: #be185d;
@@ -290,7 +296,7 @@
 .profile-popover .logout-error {
   margin: 6px 4px 2px;
   color: #b91c1c;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.35;
 }
 .profile-popover a .ui-icon,
