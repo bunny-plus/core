@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 
 import { authenticateRoomMember, handleRequest, type Env } from "../worker/index";
 import { ChatHistory } from "./chat-history";
+import { AuthSessions } from "./auth-sessions";
 import { CinemaDiary } from "./cinema";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
@@ -15,6 +16,7 @@ const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
 const chatDatabasePath = env.CHAT_DB_PATH || "data/chat.sqlite";
+env.AUTH_SESSIONS = new AuthSessions(join(dirname(chatDatabasePath), "sessions.sqlite"));
 try {
   env.CINEMA_DIARY = new CinemaDiary(join(dirname(chatDatabasePath), "cinema.sqlite"));
 } catch (error) {
@@ -148,7 +150,9 @@ server.on("upgrade", async (request, socket, head) => {
     );
     if (!authorization) throw new Error("Unauthorized");
     webSockets.handleUpgrade(request, socket, head, (webSocket) =>
-      room.connect(webSocket, authorization.member, authorization.expires),
+      room.connect(webSocket, authorization.member, authorization.expires, () =>
+        authenticateRoomMember(webRequest(request), env, requestMetadata(request)),
+      ),
     );
   } catch (error) {
     const status =

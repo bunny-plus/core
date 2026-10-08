@@ -64,6 +64,44 @@ export default function App() {
     return () => request.abort();
   }, [sessionRequest]);
 
+  const signedIn = session !== undefined && session !== null;
+  useEffect(() => {
+    if (!signedIn || loggingOut) return;
+    const request = new AbortController();
+    let pending = false;
+
+    async function refreshSession() {
+      if (pending || document.visibilityState === "hidden") return;
+      pending = true;
+      try {
+        const response = await apiFetch("/api/session", { signal: request.signal });
+        if (request.signal.aborted) return;
+        if (response.status === 401 || response.status === 403) {
+          setSession(null);
+        } else if (response.ok) {
+          // SAFETY: /api/session is produced by the matching server-side Session contract.
+          const refreshed = (await response.json()) as Session;
+          if (!request.signal.aborted) setSession(refreshed);
+        }
+      } catch {
+        // Keep the current page during temporary network or Discord failures.
+      } finally {
+        pending = false;
+      }
+    }
+
+    const refresh = () => void refreshSession();
+    const interval = window.setInterval(refresh, 15 * 60 * 1_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      request.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [signedIn, loggingOut]);
+
   if (sessionError)
     return (
       <SessionError

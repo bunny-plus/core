@@ -14,6 +14,8 @@ export type RoomMember = {
 };
 
 type RoomSession = {
+  authorizationExpires: number;
+  reauthorize?: () => Promise<{ member: RoomMember; expires: number } | null>;
   connectionId: string;
   expiry: NodeJS.Timeout;
   lastSeen: number;
@@ -55,6 +57,7 @@ const maxMessagesPerWindow = 20;
 const maxConnections = 200;
 const maxConnectionsPerMember = 5;
 const maxBufferedAmount = 64 * 1_024;
+const authorizationCheckInterval = 60_000;
 
 export class WatchRoom {
   private readonly memberActivity = new Map<string, MemberActivity>();
@@ -69,7 +72,12 @@ export class WatchRoom {
     this.sweep.unref();
   }
 
-  connect(socket: WebSocket, member: RoomMember, authorizationExpires: number) {
+  connect(
+    socket: WebSocket,
+    member: RoomMember,
+    authorizationExpires: number,
+    reauthorize?: RoomSession["reauthorize"],
+  ) {
     const memberConnections = [...this.sessions.values()].filter(
       (session) => session.member.id === member.id,
     ).length;
@@ -84,11 +92,13 @@ export class WatchRoom {
       return;
     }
     const expiry = setTimeout(
-      () => socket.close(4001, "Session expired"),
-      authorizationExpires - now,
+      () => void this.checkAuthorization(socket),
+      Math.min(authorizationExpires - now, authorizationCheckInterval),
     );
     expiry.unref();
     this.sessions.set(socket, {
+      authorizationExpires,
+      reauthorize,
       connectionId: randomUUID(),
       expiry,
       lastSeen: now,
@@ -116,6 +126,38 @@ export class WatchRoom {
     );
     this.sendCinemaProgress(socket, member.id);
     this.broadcastPresence();
+  }
+
+  private async checkAuthorization(socket: WebSocket) {
+    const session = this.sessions.get(socket);
+    if (!session) return;
+    try {
+      if (session.reauthorize) {
+        const authorization = await session.reauthorize();
+        if (this.sessions.get(socket) !== session) return;
+        if (!authorization || authorization.member.id !== session.member.id) {
+          socket.close(4001, "Session expired");
+          return;
+        }
+        const changed = JSON.stringify(session.member) !== JSON.stringify(authorization.member);
+        session.member = authorization.member;
+        session.authorizationExpires = authorization.expires;
+        if (changed) this.broadcastPresence();
+      }
+      const remaining = session.authorizationExpires - Date.now();
+      if (remaining <= 0) {
+        socket.close(4001, "Session expired");
+        return;
+      }
+      session.expiry = setTimeout(
+        () => void this.checkAuthorization(socket),
+        Math.min(remaining, authorizationCheckInterval),
+      );
+      session.expiry.unref();
+    } catch {
+      // A temporary Discord outage should reconnect the room without logging the viewer out.
+      socket.close(4002, "Session check unavailable");
+    }
   }
 
   private message(socket: WebSocket, value: string) {

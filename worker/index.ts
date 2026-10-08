@@ -1,9 +1,11 @@
-import { createSession, readCookie, readSession, sessionCookie, type Viewer } from "./session";
+import { readCookie, readSession, sessionCookie, type Viewer } from "./session";
+import { discordViewer, exchangeDiscordToken, persistentViewer } from "./discord";
+import type { AuthSessions } from "../server/auth-sessions";
 import { TtlCache } from "../server/cache";
 import type { CinemaDiary, CinemaImage } from "../server/cinema";
 import { cinemaImageMaxBytes } from "../shared/cinema";
 import { isTicketBunny } from "../shared/ticket-bunny";
-import { fetchJson, type JsonObject, type JsonValue } from "../server/upstream";
+import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
 import {
   JellyfinError,
@@ -22,6 +24,7 @@ export interface Env {
   APP_VERSION?: string;
   APP_URL: string;
   API_URL?: string;
+  AUTH_SESSIONS?: AuthSessions;
   CHAT_DB_PATH?: string;
   CINEMA_DIARY?: CinemaDiary;
   DISCORD_CLIENT_ID: string;
@@ -46,17 +49,6 @@ export interface Env {
   TORBOX_API_KEY: string;
 }
 
-type DiscordUser = {
-  avatar: string | null;
-  global_name: string | null;
-  id: string;
-  username: string;
-};
-
-type DiscordMember = {
-  roles: string[];
-};
-
 type ControllerResponse = {
   detail?: string;
   error?: string;
@@ -66,7 +58,6 @@ type ControllerResponse = {
 };
 
 type DevViewer = Partial<Omit<Viewer, "expires">>;
-type RolePermissions = { [roleId: string]: string[] };
 
 export type RoomMember = Pick<Viewer, "admin" | "avatar" | "id" | "name">;
 
@@ -185,24 +176,6 @@ function isDevViewer(value: JsonValue): value is DevViewer {
   );
 }
 
-function isRolePermissions(value: JsonValue): value is RolePermissions {
-  return isJsonObject(value) && Object.values(value).every(isStringList);
-}
-
-function isDiscordUser(value: JsonValue): value is DiscordUser {
-  if (!isJsonObject(value)) return false;
-  return (
-    isString(value.id) &&
-    isString(value.username) &&
-    (value.avatar === null || isString(value.avatar)) &&
-    (value.global_name === null || isString(value.global_name))
-  );
-}
-
-function isDiscordMember(value: JsonValue): value is DiscordMember {
-  return isJsonObject(value) && isStringList(value.roles);
-}
-
 function isControllerResponse(value: JsonValue): value is ControllerResponse {
   if (!isJsonObject(value)) return false;
   return (
@@ -288,6 +261,8 @@ function isLoopback(address: string | undefined) {
 }
 
 async function viewerForRequest(request: Request, env: Env, metadata?: RequestMetadata) {
+  const token = readCookie(request, "bp_session");
+  if (token && !token.includes(".")) return persistentViewer(token, env);
   const session = await readSession(request, env.SESSION_SECRET);
   if (session) return session;
 
@@ -315,16 +290,6 @@ async function viewerForRequest(request: Request, env: Env, metadata?: RequestMe
     } satisfies Viewer;
   } catch {
     throw new Error("DEV_USER_JSON must contain a valid local Viewer object");
-  }
-}
-
-function permissionsForRoles(roleIds: string[], env: Env) {
-  try {
-    const parsed: JsonValue = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}");
-    if (!isRolePermissions(parsed)) throw new Error();
-    return [...new Set(roleIds.flatMap((roleId) => parsed[roleId] ?? []))];
-  } catch {
-    throw new Error("DISCORD_ROLE_PERMISSIONS must map Discord role IDs to permission arrays");
   }
 }
 
@@ -621,80 +586,27 @@ async function finishLogin(request: Request, env: Env) {
   }
 
   try {
-    const { data: token, response: tokenResponse } = await fetchJson<{
-      access_token?: JsonValue;
-    }>("https://discord.com/api/oauth2/token", {
-      body: new URLSearchParams({
-        client_id: env.DISCORD_CLIENT_ID,
-        client_secret: env.DISCORD_CLIENT_SECRET,
+    const credentials = await exchangeDiscordToken(
+      new URLSearchParams({
         code,
         grant_type: "authorization_code",
         redirect_uri: redirectUri(request, env),
       }),
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      method: "POST",
-      name: "Discord OAuth",
-      requireOk: false,
-      timeoutMs: 10_000,
-    });
-    if (!tokenResponse.ok) throw new Error("Discord token exchange failed");
-    if (!isString(token.access_token) || !token.access_token)
-      throw new Error("Discord token exchange failed");
-    const headers = { Authorization: `Bearer ${token.access_token}` };
-    const [userResult, memberResult] = await Promise.all([
-      fetchJson<JsonValue>("https://discord.com/api/users/@me", {
-        headers,
-        name: "Discord API",
-        requireOk: false,
-        timeoutMs: 10_000,
-      }),
-      fetchJson<JsonValue>(
-        `https://discord.com/api/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`,
-        {
-          headers,
-          name: "Discord API",
-          requireOk: false,
-          timeoutMs: 10_000,
-        },
-      ),
-    ]);
-    if (!userResult.response.ok || !memberResult.response.ok) {
+      env,
+    );
+    if (!credentials) throw new Error("Discord token exchange failed");
+    const viewer = await discordViewer(credentials.accessToken, env);
+    if (!viewer) {
       return redirect(
         `${env.APP_URL.replace(/\/$/, "")}/?error=not-a-member`,
         oauthCookie("", request, 0),
       );
     }
 
-    const user = userResult.data;
-    const member = memberResult.data;
-    if (!isDiscordUser(user) || !isDiscordMember(member)) {
-      throw new Error("Discord API returned invalid data");
-    }
-
-    const avatar = user.avatar
-      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.webp?size=128`
-      : null;
-    const admins = new Set(
-      env.ADMIN_DISCORD_IDS.split(",")
-        .map((id) => id.trim())
-        .filter(Boolean),
-    );
-    const permissions = permissionsForRoles(member.roles, env);
-    const admin = admins.has(user.id) || permissions.includes("admin");
-    if (admin) {
-      if (!permissions.includes("stream.manage")) permissions.push("stream.manage");
-      if (!permissions.includes("chloe.chat")) permissions.push("chloe.chat");
-    }
-    const session = await createSession(
-      {
-        admin,
-        avatar,
-        id: user.id,
-        name: user.global_name ?? user.username,
-        permissions,
-      },
-      env.SESSION_SECRET,
-    );
+    if (!env.AUTH_SESSIONS) throw new Error("Session storage is unavailable");
+    const previousToken = readCookie(request, "bp_session");
+    if (previousToken) env.AUTH_SESSIONS.revoke(previousToken);
+    const session = env.AUTH_SESSIONS.create(viewer, credentials);
     return redirect(env.APP_URL, sessionCookie(session, undefined, isSecure(request)));
   } catch {
     return redirect(`${env.APP_URL.replace(/\/$/, "")}/?error=oauth`, oauthCookie("", request, 0));
@@ -730,7 +642,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
   if (url.pathname === "/api/session" && request.method === "GET") {
     const viewer = await viewerForRequest(request, env, metadata);
     if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
-    return Response.json({
+    const response = Response.json({
       delaySeconds: Number(env.STREAM_DELAY_SECONDS || 6),
       streamUrl: env.STREAM_URL,
       user: {
@@ -741,8 +653,14 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         permissions: viewer.permissions ?? [],
       },
     });
+    const token = readCookie(request, "bp_session");
+    if (token && env.AUTH_SESSIONS?.renew(token))
+      response.headers.set("Set-Cookie", sessionCookie(token, undefined, isSecure(request)));
+    return response;
   }
   if (url.pathname === "/api/logout" && request.method === "POST") {
+    const token = readCookie(request, "bp_session");
+    if (token) env.AUTH_SESSIONS?.revoke(token);
     return new Response(null, {
       headers: { "Set-Cookie": sessionCookie("", 0, isSecure(request)) },
       status: 204,
@@ -1284,7 +1202,16 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
 }
 
 export async function handleRequest(request: Request, env: Env, metadata?: RequestMetadata) {
-  const response = await routeRequest(request, env, metadata);
+  let response: Response;
+  try {
+    response = await routeRequest(request, env, metadata);
+  } catch (error) {
+    if (!(error instanceof UpstreamError)) throw error;
+    response = Response.json(
+      { error: "Discord could not check your session. Please try again." },
+      { status: 503 },
+    );
+  }
   const pathname = new URL(request.url).pathname;
   if (pathname.startsWith("/api/") || pathname.startsWith("/auth/")) {
     response.headers.set("Cache-Control", "private, no-store");

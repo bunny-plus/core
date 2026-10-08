@@ -11,7 +11,7 @@ export type Viewer = {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const sessionLifetimeSeconds = 24 * 60 * 60;
+export const sessionLifetimeSeconds = 30 * 24 * 60 * 60;
 
 function encode(bytes: Uint8Array) {
   let binary = "";
@@ -42,7 +42,7 @@ function isString(value: JsonValue): value is string {
   return typeof value === "string";
 }
 
-function isViewer(value: JsonValue): value is Viewer {
+export function isViewer(value: JsonValue): value is Viewer {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   return (
     typeof value.admin === "boolean" &&
