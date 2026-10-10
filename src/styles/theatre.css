@@ -1,0 +1,132 @@
+body.theatre-mode {
+  overflow: hidden;
+}
+body.theatre-mode .stream-page > :is(.room-header, .floating-decorations, .version-id) {
+  display: none;
+}
+.watch-content.watch-content--theatre {
+  position: fixed;
+  z-index: 35;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  background: #09070b;
+}
+.watch-content--theatre .room-grid--sidebar {
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) clamp(240px, 24vw, 320px);
+  gap: 0;
+}
+.watch-content--theatre .room-grid--sidebar.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr) 48px;
+}
+.watch-content--theatre .screen-column {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+}
+.watch-content--theatre .screen-player-dock,
+.watch-content--theatre .screen-player-dock > div,
+.screen-player.screen-player--theatre,
+.screen-player.screen-player--theatre .screen-frame {
+  width: 100%;
+  height: 100%;
+}
+.screen-player.screen-player--theatre .screen-frame {
+  border-radius: 0;
+  aspect-ratio: auto;
+  box-shadow: none;
+}
+.screen-player.screen-player--theatre {
+  container: theatre-player / inline-size;
+}
+.watch-content--theatre .room-sidebar {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.watch-content--theatre .room-sidebar-heading::before {
+  display: none;
+}
+.watch-content--theatre .room-sidebar.is-collapsed {
+  flex-direction: column;
+  padding: 5px 3px 8px;
+}
+.watch-content--theatre .room-rail-members {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.watch-content--theatre .cinema-ticket-progress {
+  display: none;
+}
+.watch-content--theatre .cinema-ticket-award {
+  position: absolute;
+  z-index: 20;
+  top: 12px;
+  right: 12px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  margin: 0;
+  overflow-y: auto;
+}
+.watch-content--theatre .player-stats,
+.watch-content--theatre .screen-column > [role="alert"] {
+  position: absolute;
+  z-index: 20;
+  top: 12px;
+  left: 12px;
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  margin: 0;
+  overflow-y: auto;
+}
+.watch-content--theatre .screen-column > [role="alert"] {
+  padding: 10px 12px;
+  border: 1px solid #493847;
+  border-radius: 8px;
+  background: #241e27;
+  color: #ffe5f2;
+}
+@container theatre-player (max-width: 760px) {
+  .screen-player.screen-player--theatre .screen-footer {
+    padding: 20px 10px 18px;
+    gap: 6px;
+  }
+  .screen-player.screen-player--theatre .live-state,
+  .screen-player.screen-player--theatre .player-actions > button > span {
+    display: none;
+  }
+  .screen-player.screen-player--theatre .player-actions > button {
+    min-width: 36px;
+    padding-inline: 6px;
+  }
+  .screen-player.screen-player--theatre .player-menu > summary,
+  .screen-player.screen-player--theatre .subtitle-menu > summary {
+    width: 40px;
+    height: 40px;
+  }
+}
+@media (max-width: 900px) and (orientation: portrait) {
+  .watch-content--theatre .room-grid--sidebar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(180px, 38%);
+  }
+  .watch-content--theatre .room-grid--sidebar.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 52px;
+  }
+  .watch-content--theatre .room-sidebar.is-collapsed {
+    flex-direction: row;
+    padding: 4px 6px;
+  }
+  .watch-content--theatre .room-rail-members {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}

@@ -18,6 +18,57 @@
   margin-left: 4px;
   rotate: 23deg;
 }
+.screen-footer {
+  padding-bottom: 18px;
+}
+.player-bottom-charms {
+  position: absolute;
+  inset: auto 32px -12px;
+  display: flex;
+  height: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.player-charm {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.player-charm::before {
+  content: "";
+  position: absolute;
+  bottom: calc(100% - 3px);
+  left: 50%;
+  height: 7px;
+  border-left: 1px dotted #cfa1b5;
+}
+.player-charm--bunny .asset-icon {
+  width: 32px;
+  height: 26px;
+  rotate: -8deg;
+}
+.player-charm--strawberry .asset-icon {
+  width: 22px;
+  height: 24px;
+  rotate: 10deg;
+}
+.player-charm--heart .asset-icon {
+  width: 20px;
+  height: 24px;
+  rotate: -6deg;
+}
+.player-charm--moon .asset-icon {
+  width: 24px;
+  height: 24px;
+  rotate: -12deg;
+}
+.player-charm--blossom .asset-icon {
+  width: 22px;
+  height: 22px;
+  rotate: 12deg;
+}
 .floating-decorations img {
   opacity: 0.18;
   filter: none;
@@ -81,6 +132,30 @@ body.lights-out .header-bunny-charms {
   opacity: 0.45;
 }
 @media (max-width: 600px) {
+  .player-bottom-charms {
+    inset: auto 20px -9px;
+    height: 18px;
+  }
+  .player-charm--bunny .asset-icon {
+    width: 24px;
+    height: 20px;
+  }
+  .player-charm--strawberry .asset-icon {
+    width: 16px;
+    height: 18px;
+  }
+  .player-charm--heart .asset-icon {
+    width: 15px;
+    height: 18px;
+  }
+  .player-charm--moon .asset-icon {
+    width: 18px;
+    height: 18px;
+  }
+  .player-charm--blossom .asset-icon {
+    width: 16px;
+    height: 16px;
+  }
   .header-bunny-charms {
     display: none;
   }

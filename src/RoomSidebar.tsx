@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { parseChatEffects } from "./chat-effects";
@@ -21,6 +21,7 @@ export default function RoomSidebar({
   messageSequence,
   open,
   fullscreen,
+  theatre,
   composeRequest,
   draft,
   onDraftChange,
@@ -33,6 +34,7 @@ export default function RoomSidebar({
   messageSequence: number;
   open: boolean;
   fullscreen: boolean;
+  theatre: boolean;
   composeRequest: number;
   draft: string;
   onDraftChange: (message: string) => void;
@@ -56,13 +58,13 @@ export default function RoomSidebar({
     if (open && view === "chat" && atBottom && !fullscreen) setReadSequence(messageSequence);
   }, [open, view, atBottom, fullscreen, messageSequence]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open && view === "chat" && logRef.current) {
       logRef.current.scrollTop = followingRef.current
         ? logRef.current.scrollHeight
         : scrollTopRef.current;
     }
-  }, [messages, open, view]);
+  }, [messages, open, view, theatre]);
 
   useEffect(() => {
     if (!composeRequest) return;

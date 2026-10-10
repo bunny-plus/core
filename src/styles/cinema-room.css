@@ -116,13 +116,17 @@
   gap: 16px;
 }
 .cinema-ticket-award-heading button {
+  display: grid;
   width: 28px;
   height: 28px;
+  place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--pink-50);
   color: #8f526b;
   font-size: 20px;
+  line-height: 1;
   cursor: pointer;
 }
 .cinema-ticket-award > a {
@@ -140,6 +144,17 @@ body.lights-out .cinema-ticket-progress progress {
 body.lights-out .cinema-ticket-award {
   background: #211820;
   border-color: #503242;
+}
+body.lights-out .cinema-ticket-award-heading button {
+  border-radius: 6px;
+  background: transparent;
+  color: #bca5b5;
+}
+@media (hover: hover) {
+  body.lights-out .cinema-ticket-award-heading button:hover {
+    background: #382833;
+    color: #ecc3d5;
+  }
 }
 body.lights-out .cinema-ticket-award > a {
   color: #ecc3d5;

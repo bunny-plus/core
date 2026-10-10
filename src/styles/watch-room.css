@@ -125,7 +125,7 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   aspect-ratio: 16 / 9;
   border: 0;
   border-radius: 5px;
-  background: #111118;
+  background: #000;
   box-shadow:
     0 0 0 2px var(--pink-300),
     0 20px 45px rgba(244, 114, 166, 0.25);
@@ -134,24 +134,25 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   display: block;
   width: 100%;
   height: 100%;
+  background: #000;
   object-fit: contain;
 }
 .screen-player.cursor-idle .screen-frame,
 .screen-player.cursor-idle .screen-frame *,
-.screen-player:fullscreen.cursor-idle,
-.screen-player:fullscreen.cursor-idle * {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre).cursor-idle,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre).cursor-idle * {
   cursor: none;
 }
-.screen-player:fullscreen,
-.screen-player:fullscreen .screen-frame {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre),
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .screen-frame {
   width: 100vw;
   height: 100vh;
   border-radius: 0;
   aspect-ratio: auto;
-  background: #09070b;
+  background: #000;
   box-shadow: none;
 }
-.screen-player:fullscreen .screen-footer {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .screen-footer {
   position: absolute;
   z-index: 15;
   inset: auto 0 0;
@@ -161,17 +162,18 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  background: linear-gradient(transparent, #09070bd9);
+  background: linear-gradient(transparent, #000000d9);
   transition:
     opacity 0.2s,
     visibility 0.2s;
 }
-.screen-player:fullscreen.cursor-idle .screen-footer {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre).cursor-idle
+  .screen-footer {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
 }
-.screen-player:fullscreen .player-actions {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .player-actions {
   max-width: 100%;
   width: auto;
   justify-content: center;
@@ -179,34 +181,49 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   background: #201720ed;
   box-shadow: 0 8px 28px #0006;
 }
-.screen-player:fullscreen .player-actions > button,
-.screen-player:fullscreen .player-menu > summary,
-.screen-player:fullscreen .subtitle-menu > summary,
-.screen-player:fullscreen .volume-toggle {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .player-actions
+  > button,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .player-menu > summary,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .subtitle-menu
+  > summary,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .volume-toggle {
   color: #fff1f7;
 }
-.screen-player:fullscreen .player-actions > button:hover,
-.screen-player:fullscreen .player-menu > summary:hover,
-.screen-player:fullscreen .subtitle-menu > summary:hover,
-.screen-player:fullscreen .subtitle-menu[open] > summary,
-.screen-player:fullscreen .volume-toggle:hover {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .player-actions
+  > button:hover,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .player-menu
+  > summary:hover,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .subtitle-menu
+  > summary:hover,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .subtitle-menu[open]
+  > summary,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .volume-toggle:hover {
   background: #ffffff1a;
 }
-.screen-player:fullscreen .volume-control > .volume-slider {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .volume-control
+  > .volume-slider {
   display: block;
   width: clamp(70px, 14vw, 118px);
 }
-.screen-player:fullscreen .live-state {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .live-state {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   color: #ffd6e6;
 }
-.screen-player:fullscreen .sync-copy,
-.screen-player:fullscreen .reaction-shortcut-hint {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .sync-copy,
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .reaction-shortcut-hint {
   display: none;
 }
-.screen-player:fullscreen .chat-composer {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-composer {
   bottom: 145px;
 }
 .stream-error,
@@ -404,6 +421,9 @@ body.lights-out .stream-page .volume-slider > .asset-icon {
   color: white;
   font-size: 12px;
   font-weight: 900;
+}
+body.lights-out .room-chat-avatar {
+  opacity: 0.28;
 }
 .room-chat-avatar img {
   width: 100%;
@@ -949,7 +969,7 @@ body.lights-out .chat-composer input {
   color: #ffc6dc;
   font-weight: 900;
 }
-.screen-player:not(:fullscreen) .chat-panels {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-panels {
   position: absolute;
   z-index: 12;
   top: 100%;
@@ -958,8 +978,8 @@ body.lights-out .chat-composer input {
   width: min(480px, 100%);
   gap: 8px;
 }
-.screen-player:not(:fullscreen) .chat-composer,
-.screen-player:not(:fullscreen) .chat-history-panel {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-composer,
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-history-panel {
   position: relative;
   inset: auto;
   width: 100%;
@@ -970,41 +990,56 @@ body.lights-out .chat-composer input {
   box-shadow: none;
   color: var(--gray-700);
 }
-.screen-player:not(:fullscreen) .chat-history-panel > div {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-panel
+  > div {
   min-height: 44px;
   max-height: min(280px, 40dvh);
   padding: 12px 36px 12px 12px;
   gap: 6px;
   scrollbar-width: thin;
 }
-.screen-player:not(:fullscreen) .chat-history-panel > div::-webkit-scrollbar {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-panel
+  > div::-webkit-scrollbar {
   display: block;
   width: 5px;
 }
-.screen-player:not(:fullscreen) .chat-history-entry {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-history-entry {
   color: inherit;
   text-shadow: none;
 }
-.screen-player:not(:fullscreen) .chat-history-entry strong {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-entry
+  strong {
   color: var(--pink-500);
 }
-.screen-player:not(:fullscreen) .chat-history-close {
+.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-history-close {
   top: 4px;
   right: 4px;
   color: var(--gray-500);
   text-shadow: none;
 }
-body.lights-out .screen-player:not(:fullscreen) .chat-composer,
-body.lights-out .screen-player:not(:fullscreen) .chat-history-panel {
+body.lights-out
+  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-composer,
+body.lights-out
+  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-panel {
   border-color: #4b2c3a;
   background: #181217;
   color: #f8e8ef;
 }
-body.lights-out .screen-player:not(:fullscreen) .chat-history-entry strong,
-body.lights-out .screen-player:not(:fullscreen) .chat-history-close {
+body.lights-out
+  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-entry
+  strong,
+body.lights-out
+  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
+  .chat-history-close {
   color: #e6b2c7;
 }
-.screen-player:fullscreen .chat-panels {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .chat-panels {
   display: contents;
 }
 .player-menu {

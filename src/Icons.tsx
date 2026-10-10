@@ -8,7 +8,10 @@ type AssetName =
   | "bunny-hug"
   | "bunny-back"
   | "carrot"
+  | "heart-locket"
   | "leafy"
+  | "moon-star"
+  | "strawberry"
   | "bow";
 type IconName =
   | "broadcast"
@@ -23,12 +26,14 @@ type IconName =
   | "moon"
   | "nail"
   | "paw"
+  | "picture-in-picture"
   | "reset"
   | "server"
   | "send"
   | "sidebar"
   | "sparkle"
   | "subtitles"
+  | "theatre"
   | "ticket"
   | "volume"
   | "volume-off"
@@ -39,7 +44,10 @@ const assets = {
   bunny: "/rabbit_animated.png",
   "bunny-face": "/rabbit_face_animated.png",
   carrot: "/charm-carrot.svg",
+  "heart-locket": "/charm-heart-locket.svg",
   leafy: "/charm-leaf.svg",
+  "moon-star": "/charm-moon-star.svg",
+  strawberry: "/charm-strawberry.svg",
   "bunny-sleep": "/charm-bunny-sleep.svg",
   "bunny-hug": "/charm-bunny-hug.svg",
   "bunny-back": "/charm-bunny-back.svg",
@@ -152,6 +160,13 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
       </>
     ),
     reset: <path d="M4 10a8 8 0 1 1 1.5 7M4 4v6h6" />,
+    "picture-in-picture": (
+      <>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <rect x="12" y="11" width="6" height="6" rx="1" />
+        <path d="m6 7 3 3M9 7v3H6" />
+      </>
+    ),
     server: (
       <>
         <rect x="4" y="3" width="16" height="7" rx="2" />
@@ -173,6 +188,12 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
       <>
         <rect x="3" y="5" width="18" height="14" rx="3" />
         <path d="M7 11h2m4 0h4M7 15h6m3 0h1" />
+      </>
+    ),
+    theatre: (
+      <>
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <path d="M6 5v14M18 5v14" />
       </>
     ),
     ticket: (

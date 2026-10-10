@@ -145,6 +145,7 @@
   color: #8b4b67;
   font-size: 12px;
   font-weight: 700;
+  transition: opacity 0.25s;
 }
 .room-member-photo img {
   display: block;
@@ -408,6 +409,12 @@ body.lights-out .room-sidebar {
 }
 body.lights-out .room-sidebar-heading h2 {
   color: #c79ba9;
+}
+body.lights-out .room-member-photo {
+  opacity: 0.28;
+}
+body.lights-out .room-sidebar button:is(:hover, :focus-visible) .room-member-photo {
+  opacity: 0.85;
 }
 body.lights-out .room-sidebar-composer {
   background: #251d23;

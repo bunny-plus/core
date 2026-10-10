@@ -12,11 +12,18 @@ type Props = {
   videoRef: RefObject<HTMLVideoElement | null>;
   hlsRef: RefObject<Hls | null>;
   overlayRef: RefObject<HTMLDivElement | null>;
+  ownerDocument?: Document;
 };
 
-export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Props) {
+export function JellyfinSubtitles({
+  playback,
+  videoRef,
+  hlsRef,
+  overlayRef,
+  ownerDocument,
+}: Props) {
   const menuRef = useRef<HTMLDetailsElement>(null);
-  useDismissibleDetails(menuRef);
+  useDismissibleDetails(menuRef, ownerDocument);
   const timingRef = useRef({ startedAt: playback.startedAt, delay: 0 });
   const [options, setOptions] = useState<SubtitleOptions | null>(null);
   const [enabled, setEnabled] = useState(() => {

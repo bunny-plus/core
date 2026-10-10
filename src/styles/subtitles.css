@@ -205,7 +205,7 @@ body.lights-out .subtitle-menu[open] > summary {
   background: #f9a8c617;
 }
 body.lights-out .subtitle-panel,
-.screen-player:fullscreen .subtitle-panel {
+.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre) .subtitle-panel {
   --sub-surface: #241e27;
   --sub-text: #fff1f7;
   --sub-muted: #bca5b5;
