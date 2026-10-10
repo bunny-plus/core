@@ -350,30 +350,45 @@ export default function WatchRoom({
     let timer: ReturnType<typeof setTimeout>;
     let keyboardInteraction = document.activeElement?.matches(":focus-visible") ?? false;
     let pointerDown = false;
+    let touchInteraction = !window.matchMedia("(hover: hover)").matches;
+    let pointerOverControls = !!screen.querySelector(".player-actions:hover, .live-state:hover");
+    const quickFade = theatreActive && !expandedPlayer;
     const reveal = (event?: Event) => {
       if (event?.type === "keydown") keyboardInteraction = true;
       else if (event?.type.startsWith("pointer")) keyboardInteraction = false;
+      if (event instanceof PointerEvent) {
+        touchInteraction = event.pointerType === "touch";
+        pointerOverControls =
+          event.target instanceof Element &&
+          screen.contains(event.target) &&
+          !!event.target.closest(".player-actions, .live-state");
+      }
       if (event?.type === "pointerdown") pointerDown = true;
       screen.classList.remove("cursor-idle");
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        const focused = document.activeElement;
-        if (
-          (immersivePlayer || screen.matches(":hover")) &&
-          !pointerDown &&
-          !screen.querySelector("details[open]") &&
-          !(
-            keyboardInteraction &&
-            focused?.matches(
-              "input, textarea, select, summary, button, a, [contenteditable='true']",
-            ) &&
-            screen.contains(focused)
+      timer = setTimeout(
+        () => {
+          const focused = document.activeElement;
+          if (
+            (immersivePlayer || screen.matches(":hover")) &&
+            !pointerDown &&
+            !(quickFade && !touchInteraction && pointerOverControls) &&
+            !screen.querySelector("details[open]") &&
+            !(
+              keyboardInteraction &&
+              focused?.matches(
+                "input, textarea, select, summary, button, a, [contenteditable='true']",
+              ) &&
+              screen.contains(focused)
+            )
           )
-        )
-          screen.classList.add("cursor-idle");
-      }, 3_000);
+            screen.classList.add("cursor-idle");
+        },
+        quickFade && !touchInteraction && !pointerOverControls ? 600 : 3_000,
+      );
     };
     const leave = () => {
+      pointerOverControls = false;
       if (immersivePlayer) reveal();
       else {
         clearTimeout(timer);
@@ -403,7 +418,15 @@ export default function WatchRoom({
       window.removeEventListener("pointercancel", release);
       document.removeEventListener("fullscreenchange", reveal);
     };
-  }, [playerStatus, isBuffering, chatComposer, showChatHistory, expandedPlayer, immersivePlayer]);
+  }, [
+    playerStatus,
+    isBuffering,
+    chatComposer,
+    showChatHistory,
+    expandedPlayer,
+    immersivePlayer,
+    theatreActive,
+  ]);
 
   useEffect(() => {
     let stopped = false;

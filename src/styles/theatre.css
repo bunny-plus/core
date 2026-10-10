@@ -42,6 +42,50 @@ body.theatre-mode .stream-page > :is(.room-header, .floating-decorations, .versi
 .screen-player.screen-player--theatre {
   container: theatre-player / inline-size;
 }
+.screen-player.screen-player--theatre:not(:fullscreen) .screen-footer {
+  inset: 0;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  padding-top: max(20px, env(safe-area-inset-top));
+  background: none;
+  pointer-events: none;
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .screen-footer::before,
+.screen-player.screen-player--theatre:not(:fullscreen) .screen-footer::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .screen-footer::before {
+  bottom: 0;
+  height: 130px;
+  background: linear-gradient(transparent, #000000d9);
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .screen-footer::after {
+  top: 0;
+  height: 85px;
+  background: linear-gradient(#0006, transparent);
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .live-state {
+  align-self: flex-start;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  pointer-events: auto;
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .live-badge {
+  flex-shrink: 0;
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .stream-title {
+  min-width: 0;
+  max-width: min(580px, 100%);
+}
+.screen-player.screen-player--theatre:not(:fullscreen) .player-actions {
+  pointer-events: auto;
+}
 .watch-content--theatre .room-sidebar {
   width: 100%;
   min-height: 0;
@@ -97,7 +141,6 @@ body.theatre-mode .stream-page > :is(.room-header, .floating-decorations, .versi
     padding: 20px 10px 18px;
     gap: 6px;
   }
-  .screen-player.screen-player--theatre .live-state,
   .screen-player.screen-player--theatre .player-actions > button > span {
     display: none;
   }
