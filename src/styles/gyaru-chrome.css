@@ -122,7 +122,6 @@
 }
 .player-actions > button.active,
 .player-actions > button[aria-expanded="true"],
-.player-actions > .subtitle-menu--enabled > summary,
 .player-actions > details[open] > summary {
   color: #994266;
   background: #f7dce7;
@@ -136,7 +135,7 @@
   gap: 7px;
   white-space: nowrap;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .live-state {
+.screen-player:not(:fullscreen, .screen-player--theatre) .live-state {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 6px 9px;
@@ -147,25 +146,23 @@
   font-weight: 750;
   letter-spacing: 0.06em;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .live-badge {
+.screen-player:not(:fullscreen, .screen-player--theatre) .live-badge {
   padding: 4px 7px;
   border: 1px solid #dbb5c3;
   border-radius: 3px;
   background: #fff8f8;
   box-shadow: 1px 1px 0 #efdce1;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .live-state i {
+.screen-player:not(:fullscreen, .screen-player--theatre) .live-state i {
   width: 5px;
   height: 5px;
   box-shadow: 0 0 0 2px #fb718520;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .live-state.offline
-  .live-badge {
+.screen-player:not(:fullscreen, .screen-player--theatre) .live-state.offline .live-badge {
   color: #827b81;
   border-color: #d8d0d3;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .stream-title {
+.screen-player:not(:fullscreen, .screen-player--theatre) .stream-title {
   grid-column: 2;
   max-width: min(300px, 52vw);
   margin: 0;
@@ -178,7 +175,7 @@
   font-size: 11px;
   font-weight: 700;
 }
-.screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .sync-copy {
+.screen-player:not(:fullscreen, .screen-player--theatre) .sync-copy {
   grid-column: 1 / -1;
   margin: 0;
   color: #8a777f;
@@ -280,21 +277,15 @@
   color: #916579;
   font-size: 11px;
 }
-body.lights-out
-  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .live-badge,
-body.lights-out
-  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .stream-title,
+body.lights-out .screen-player:not(:fullscreen, .screen-player--theatre) .live-badge,
+body.lights-out .screen-player:not(:fullscreen, .screen-player--theatre) .stream-title,
 body.lights-out .cinema-ticket-progress > .cinema-ticket-stub {
   border-color: #654653;
   background: #251d23;
   box-shadow: 1px 2px 0 #422b37;
   color: #d1a8bb;
 }
-body.lights-out
-  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .sync-copy,
+body.lights-out .screen-player:not(:fullscreen, .screen-player--theatre) .sync-copy,
 body.lights-out .cinema-ticket-copy > span {
   color: #b59daa;
 }
@@ -302,27 +293,13 @@ body.lights-out .cinema-ticket-progress-title,
 body.lights-out .cinema-ticket-progress > a {
   color: #cda3b7;
 }
-body.lights-out .player-actions > .subtitle-menu--enabled > summary {
-  color: #eac2d5;
-  background: #57394b;
-  box-shadow: inset 0 0 0 1px #876178;
-}
-.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .player-actions
-  :is(button, summary) {
+.screen-player:is(:fullscreen, .screen-player--theatre) .player-actions :is(button, summary) {
   text-shadow: none;
 }
-.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .player-actions
-  > .subtitle-menu--enabled
-  > summary,
-.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
+.screen-player:is(:fullscreen, .screen-player--theatre)
   .player-actions
   > button:is(.active, [aria-expanded="true"]),
-.screen-player:is(:fullscreen, .screen-player--pip, .screen-player--theatre)
-  .player-actions
-  > details[open]
-  > summary {
+.screen-player:is(:fullscreen, .screen-player--theatre) .player-actions > details[open] > summary {
   color: #ffe5f2;
   background: #57394b;
   box-shadow: inset 0 0 0 1px #876178;
@@ -378,7 +355,7 @@ body.lights-out .stream-page .player-actions > button[aria-expanded="true"] {
   }
 }
 @media (max-width: 360px) {
-  .screen-player:not(:fullscreen, .screen-player--pip, .screen-player--theatre) .player-actions {
+  .screen-player:not(:fullscreen, .screen-player--theatre) .player-actions {
     display: flex;
     justify-content: space-between;
     gap: 0;

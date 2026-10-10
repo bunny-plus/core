@@ -45,14 +45,10 @@ export type JellyfinPlayback = {
   mediaSourceId: string;
   // Older relay sessions have no admin-selected subtitle track.
   subtitleIndex?: number | null;
+  // Absent on older controller versions.
+  subtitlesBurnedIn?: boolean;
   // Estimated program date of episode time zero, measured from FFmpeg output.
-  // This is independent of a viewer's HLS buffer and local computer clock.
   startedAt: number | null;
-};
-
-export type JellyfinSubtitles = {
-  tracks: JellyfinSubtitle[];
-  fonts: number[];
 };
 
 export type JellyfinOptions = {

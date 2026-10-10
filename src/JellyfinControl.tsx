@@ -287,7 +287,10 @@ export default function JellyfinControl({
               </select>
             </label>
           </div>
-          <p>The selected subtitles are on by default. Viewers can turn them off with CC.</p>
+          <p>
+            The selected subtitles are burned into the video for everyone. Choose None to stream
+            without them.
+          </p>
           <button
             className="start-relay"
             type="button"

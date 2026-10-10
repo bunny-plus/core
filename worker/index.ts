@@ -14,8 +14,6 @@ import {
   jellyfinOptions,
   jellyfinRelay,
   isJellyfinPlayback,
-  jellyfinSubtitleSource,
-  jellyfinSubtitleFile,
 } from "../server/jellyfin";
 import type { JellyfinPlayback } from "../shared/jellyfin";
 
@@ -374,7 +372,11 @@ async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
     maxBytes: 256_000,
     name: "Stream controller",
     timeoutMs:
-      action === "probe" || action === "restream" || action === "jellyfin" ? 30_000 : 10_000,
+      action === "jellyfin"
+        ? 90_000
+        : action === "probe" || action === "restream"
+          ? 30_000
+          : 10_000,
   });
   if (!isControllerResponse(result)) throw new Error("Stream controller returned invalid data");
   return result;
@@ -1140,50 +1142,6 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       return Response.json(await controller(env, "GET"));
-    } catch (error) {
-      return apiError(error instanceof Error ? error : null);
-    }
-  }
-  if (url.pathname.startsWith("/api/jellyfin/subtitles/") && request.method === "GET") {
-    const authorization = await authorizeCostly(request, env, metadata, "jellyfin-subtitles", 90);
-    if (authorization instanceof Response) return authorization;
-    try {
-      const match =
-        /^\/api\/jellyfin\/subtitles\/([a-f\d]{32})(?:\/(track|font)\/(\d{1,5}))?$/.exec(
-          url.pathname,
-        );
-      if (!match) throw new JellyfinError("Subtitle not found", 404);
-      // Read current controller state, not the stream-info cache: never serve a previous relay's files.
-      const status = await serializedController(() => controller(env, "GET"));
-      const playback = status.running ? status.jellyfin : null;
-      if (!playback || playback.sessionId !== match[1])
-        throw new JellyfinError("The stream has changed. Reload subtitles.", 409);
-      if (playback.subtitleIndex == null) {
-        if (match[2]) throw new JellyfinError("No subtitles were selected for this stream", 404);
-        return Response.json({ tracks: [], fonts: [] });
-      }
-      const source = await cachedData(
-        `jellyfin-subtitles:${env.JELLYFIN_URL}:${playback.sessionId}`,
-        60,
-        () => jellyfinSubtitleSource(env, playback),
-      );
-      const selected = source.subtitles.find(
-        (track) => track.index === playback.subtitleIndex && track.supported,
-      );
-      if (!selected) throw new JellyfinError("The selected subtitles are no longer available", 404);
-      if (!match[2]) return Response.json({ tracks: [selected], fonts: source.fonts });
-      const result = await jellyfinSubtitleFile(
-        env,
-        playback,
-        source,
-        match[2] === "font" ? "font" : "track",
-        Number(match[3]),
-      );
-      // Extraction can take time. Do not release an old episode after a concurrent stream change.
-      const current = await serializedController(() => controller(env, "GET"));
-      if (!current.running || current.jellyfin?.sessionId !== playback.sessionId)
-        throw new JellyfinError("The stream has changed. Reload subtitles.", 409);
-      return result;
     } catch (error) {
       return apiError(error instanceof Error ? error : null);
     }

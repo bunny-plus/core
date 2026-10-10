@@ -105,8 +105,7 @@ body.theatre-mode .stream-page > :is(.room-header, .floating-decorations, .versi
     min-width: 36px;
     padding-inline: 6px;
   }
-  .screen-player.screen-player--theatre .player-menu > summary,
-  .screen-player.screen-player--theatre .subtitle-menu > summary {
+  .screen-player.screen-player--theatre .player-menu > summary {
     width: 40px;
     height: 40px;
   }

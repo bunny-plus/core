@@ -7,7 +7,6 @@ import {
   jellyfinLibrary,
   jellyfinOptions,
   jellyfinRelay,
-  jellyfinSubtitleFile,
   isJellyfinPlayback,
 } from "./jellyfin";
 
@@ -79,39 +78,6 @@ test("Jellyfin library preserves the server base path, searches and paginates wi
   assert.equal(library.items[0].minutes, 90);
   assert.ok(!JSON.stringify(library).includes("/private"));
   assert.ok(!JSON.stringify(library).includes(env.JELLYFIN_API_KEY!));
-});
-
-test("subtitle extraction rejects oversized data and upstream errors without exposing tokens", async (context) => {
-  context.mock.method(globalThis, "fetch", async () => Response.json({ Items: [movie] }));
-  const source = (await jellyfinOptions(env, itemId)).sources[0];
-  const playback = {
-    sessionId: "b".repeat(32),
-    itemId,
-    mediaSourceId: sourceId,
-    startedAt: null,
-    subtitleIndex: 2,
-  };
-  const upstream = context.mock.method(
-    globalThis,
-    "fetch",
-    async () => new Response("secret upstream details", { status: 401 }),
-  );
-  await assert.rejects(
-    jellyfinSubtitleFile(env, playback, source, "track", 2),
-    /Could not extract/,
-  );
-  upstream.mock.mockImplementation(
-    async () => new Response("[Events]", { headers: { "Content-Length": "9000000" } }),
-  );
-  await assert.rejects(
-    jellyfinSubtitleFile(env, playback, source, "track", 2),
-    /Could not extract/,
-  );
-  upstream.mock.mockImplementation(async () => new Response("<html>Login</html>"));
-  await assert.rejects(
-    jellyfinSubtitleFile(env, playback, source, "track", 2),
-    /Could not extract/,
-  );
 });
 
 test("Jellyfin virtual seasons use the TV episode endpoint instead of folder children", async (context) => {
@@ -255,6 +221,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     apiKey: env.JELLYFIN_API_KEY,
     audioIndex: 3,
     subtitleIndex: 2,
+    subtitleFonts: [],
     resolutionIndex: 5,
     hdrTransfer: null,
     title: "Movie night",
@@ -269,6 +236,30 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     subtitleIndex: null,
   });
   assert.equal(disabled.subtitleIndex, null);
+  assert.deepEqual(disabled.subtitleFonts, []);
+});
+
+test("Jellyfin burn-in forwards font attachments only when subtitles are selected", async (context) => {
+  const source = {
+    ...movie.MediaSources[0],
+    MediaAttachments: [
+      { Index: 9, FileName: "Dialogue.ttf" },
+      { Index: 10, FileName: "Signs.otf" },
+      { Index: 11, FileName: "cover.jpg" },
+    ],
+  };
+  context.mock.method(globalThis, "fetch", async () =>
+    Response.json({ Items: [{ ...movie, MediaSources: [source] }] }),
+  );
+  assert.deepEqual(
+    (await jellyfinRelay(env, { itemId, mediaSourceId: sourceId })).subtitleFonts,
+    [9, 10],
+  );
+  assert.deepEqual(
+    (await jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex: null }))
+      .subtitleFonts,
+    [],
+  );
 });
 
 test("subtitle defaults follow the selected media version and reject unavailable formats", async (context) => {
@@ -301,6 +292,10 @@ test("subtitle defaults follow the selected media version and reject unavailable
 test("playback metadata accepts an admin subtitle index or no selection, including older sessions", () => {
   const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
   assert.equal(isJellyfinPlayback(playback), true);
+  for (const subtitlesBurnedIn of [false, true])
+    assert.equal(isJellyfinPlayback({ ...playback, subtitlesBurnedIn }), true);
+  for (const subtitlesBurnedIn of [null, "true", 1])
+    assert.equal(isJellyfinPlayback({ ...playback, subtitlesBurnedIn }), false);
   for (const subtitleIndex of [null, 0, 3])
     assert.equal(isJellyfinPlayback({ ...playback, subtitleIndex }), true);
   for (const subtitleIndex of [-1, 1.5, "3", true])
