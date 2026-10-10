@@ -1078,41 +1078,40 @@ export default function WatchRoom({
                     <strong aria-hidden="true">{reaction.member.name}</strong>
                   </span>
                 ))}
-                {(expandedPlayer || !sidebarOpen) &&
-                  chats.map((chat) =>
-                    chatDisplayMode === "scrolling" ? (
-                      <span
-                        className="room-chat-scroll"
-                        style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
-                        key={chat.id}
-                      >
-                        <strong>{chat.member.name}</strong>
-                        <span aria-hidden="true">: </span>
-                        <ChatMessage message={chat.message} scrolling />
+                {chats.map((chat) =>
+                  chatDisplayMode === "scrolling" ? (
+                    <span
+                      className="room-chat-scroll"
+                      style={roomStyle({ "--chat-y": `${12 + chat.lane * 13}%` })}
+                      key={chat.id}
+                    >
+                      <strong>{chat.member.name}</strong>
+                      <span aria-hidden="true">: </span>
+                      <ChatMessage message={chat.message} scrolling />
+                    </span>
+                  ) : (
+                    <span
+                      className="room-chat"
+                      style={roomStyle({ "--chat-x": `${chat.x}%` })}
+                      key={chat.id}
+                    >
+                      <span className="room-chat-avatar" aria-hidden="true">
+                        {chat.member.avatar ? (
+                          <img src={chat.member.avatar} alt="" />
+                        ) : (
+                          <span>{chat.member.name[0]?.toUpperCase()}</span>
+                        )}
                       </span>
-                    ) : (
-                      <span
-                        className="room-chat"
-                        style={roomStyle({ "--chat-x": `${chat.x}%` })}
-                        key={chat.id}
-                      >
-                        <span className="room-chat-avatar" aria-hidden="true">
-                          {chat.member.avatar ? (
-                            <img src={chat.member.avatar} alt="" />
-                          ) : (
-                            <span>{chat.member.name[0]?.toUpperCase()}</span>
-                          )}
-                        </span>
-                        <span className="room-chat-bubble">
-                          <strong aria-hidden="true">{chat.member.name}</strong>
-                          <span className="sr-only">{chat.member.name} says: </span>
-                          <span>
-                            <ChatMessage message={chat.message} />
-                          </span>
+                      <span className="room-chat-bubble">
+                        <strong aria-hidden="true">{chat.member.name}</strong>
+                        <span className="sr-only">{chat.member.name} says: </span>
+                        <span>
+                          <ChatMessage message={chat.message} />
                         </span>
                       </span>
-                    ),
-                  )}
+                    </span>
+                  ),
+                )}
               </div>
               {shortcutsEnabled && (
                 <span className="reaction-shortcut-hint" aria-hidden="true">
