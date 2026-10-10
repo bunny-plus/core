@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { JellyfinPlayback, JellyfinSubtitles as SubtitleOptions } from "../shared/jellyfin";
 import { apiFetch, apiJson } from "./api";
 import { UiIcon } from "./Icons";
-import { subtitleTime } from "./subtitle-clock";
+import { SubtitleClock, subtitleTime } from "./subtitle-clock";
 import { useDismissibleDetails } from "./useDismissibleDetails";
 
 type Props = {
@@ -79,6 +79,10 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
     canvas.style.visibility = "hidden";
     root.append(canvas);
     let renderer: JASSUB | null = null;
+    let rendererReady = false;
+    let clock = new SubtitleClock();
+    let clockHls: Hls | null = null;
+    let repaint = true;
     let frame = 0;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let disposed = false;
@@ -86,6 +90,23 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
     const observer = new ResizeObserver(resize);
     observer.observe(video);
     video.addEventListener("loadedmetadata", resize);
+    const resumeEvents = ["playing", "seeked", "loadeddata"];
+    const resetEvents = ["seeking", "emptied"];
+    for (const event of resumeEvents) video.addEventListener(event, resync);
+    for (const event of resetEvents) video.addEventListener(event, reset);
+
+    function resync() {
+      repaint = true;
+      if (disposed || !rendererReady) return;
+      video!.cancelVideoFrameCallback(frame);
+      frame = video!.requestVideoFrameCallback(render);
+    }
+
+    function reset(event: Event) {
+      canvas.style.visibility = "hidden";
+      repaint = true;
+      if (event.type === "emptied") clock = new SubtitleClock();
+    }
 
     function resize() {
       const ratio = video!.videoWidth / video!.videoHeight;
@@ -105,6 +126,8 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
       clearTimeout(timeout);
       video!.cancelVideoFrameCallback?.(frame);
       video!.removeEventListener("loadedmetadata", resize);
+      for (const event of resumeEvents) video!.removeEventListener(event, resync);
+      for (const event of resetEvents) video!.removeEventListener(event, reset);
       observer.disconnect();
       canvas.remove();
       if (renderer) {
@@ -123,9 +146,20 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
     function render(now: number, metadata: VideoFrameCallbackMetadata) {
       if (disposed || !renderer) return;
       const hls = hlsRef.current;
-      // playingDate describes currentTime; adjust to the frame being presented.
-      let programDate = hls?.playingDate?.getTime() ?? null;
-      if (programDate !== null) programDate += (metadata.mediaTime - video!.currentTime) * 1_000;
+      if (hls !== clockHls) {
+        clockHls = hls;
+        clock = new SubtitleClock();
+        repaint = true;
+      }
+      // HLS's playingDate can still refer to the pre-seek segment after buffering.
+      // Resolve timing from the segment containing this presented frame instead.
+      let programDate = hls
+        ? clock.programDate(
+            metadata.mediaTime,
+            hls.latestLevelDetails?.fragments ?? [],
+            video!.buffered,
+          )
+        : null;
       if (!hls) {
         // Safari's native HLS exposes the playlist's wall-clock origin here.
         // SAFETY: getStartDate is an optional native WebKit media API.
@@ -144,8 +178,9 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
       }
       if (time !== null && time >= 0) {
         void renderer
-          .manualRender({ ...metadata, mediaTime: time, expectedDisplayTime: now })
+          .manualRender({ ...metadata, mediaTime: time, expectedDisplayTime: now }, repaint)
           .catch(() => fail("Subtitle rendering failed. Try reloading subtitles."));
+        repaint = false;
       }
       frame = video!.requestVideoFrameCallback(render);
     }
@@ -205,7 +240,8 @@ export function JellyfinSubtitles({ playback, videoRef, hlsRef, overlayRef }: Pr
       clearTimeout(timeout);
       if (disposed) return;
       if (missingFont) setError("Some fonts were unavailable; using a fallback font.");
-      frame = video!.requestVideoFrameCallback(render);
+      rendererReady = true;
+      resync();
     }
     void load().catch((reason: Error) =>
       fail(
