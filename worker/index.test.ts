@@ -17,7 +17,7 @@ const env: Env = {
   RELAY_CONTROLLER_URL: "http://controller.test",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
   STREAM_DELAY_SECONDS: "6",
-  STREAM_URL: "https://gon.bunny.plus/bunny-plus/index.m3u8",
+  STREAM_URL: "https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -153,6 +153,69 @@ test("stream info coalesces concurrent upstream probes", async (context) => {
     Array(3).fill({ online: true, running: true, title: "Together", upstreamStatus: 200 }),
   );
   assert.equal(requests, 2);
+});
+
+test("private playback links require a session and availability probes use signed HLS", async (context) => {
+  const inputId = "b6347a6447c0adf72cc2daf521c7f396";
+  const signingEnv = {
+    ...env,
+    RELAY_CONTROLLER_URL: "http://signed-controller.test",
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8?protocol=llhlsbeta`,
+    CLOUDFLARE_STREAM_ACCOUNT_ID: "b".repeat(32),
+    CLOUDFLARE_STREAM_API_TOKEN: "private-playback-api-token",
+  };
+  const signedUrl =
+    "https://customer-test.cloudflarestream.com/header.claims.signature/manifest/video.m3u8?protocol=llhlsbeta";
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === signingEnv.RELAY_CONTROLLER_URL)
+      return Response.json({ running: true, title: "Private screening" });
+    if (url === signedUrl) return new Response("#EXTM3U");
+    if (
+      url ===
+      `https://api.cloudflare.com/client/v4/accounts/${signingEnv.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`
+    )
+      return Response.json({ success: true, result: { token: "header.claims.signature" } });
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const unauthenticated = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-playback"),
+    signingEnv,
+  );
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(requests.length, 0);
+  const viewer = await createSession(
+    { admin: false, avatar: null, id: "signed-viewer", name: "Viewer", permissions: [] },
+    env.SESSION_SECRET,
+  );
+  const headers = { Cookie: `bp_session=${viewer}` };
+  const playback = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-playback", { headers }),
+    signingEnv,
+  );
+  assert.equal(playback.status, 200);
+  assert.equal(playback.headers.get("Cache-Control"), "private, no-store");
+  const body = await playback.json();
+  assert.deepEqual(Object.keys(body).sort(), ["expiresAt", "url"]);
+  assert.equal(body.url, signedUrl);
+  assert.ok(body.expiresAt > Date.now());
+  assert.ok(!JSON.stringify(body).includes(signingEnv.CLOUDFLARE_STREAM_API_TOKEN));
+  const info = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-info", { headers }),
+    signingEnv,
+  );
+  assert.equal(info.status, 200);
+  assert.deepEqual(await info.json(), {
+    online: true,
+    running: true,
+    title: "Private screening",
+    upstreamStatus: 200,
+  });
+  assert.ok(requests.includes(signedUrl));
+  assert.ok(!requests.includes(signingEnv.STREAM_URL));
+  assert.equal(requests.filter((url) => url.startsWith("https://api.cloudflare.com/")).length, 1);
 });
 
 test("Jellyfin routes require stream management permission and protect mutations", async () => {

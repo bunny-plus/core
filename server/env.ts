@@ -1,5 +1,6 @@
 import type { Env } from "../worker/index";
 import { jellyfinBaseUrl } from "./jellyfin";
+import { validateStreamSigning } from "./stream-playback";
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
@@ -91,12 +92,16 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     throw new Error("STREAM_DELAY_SECONDS must be between 0 and 120");
   }
 
-  return {
+  const env: Env = {
     ADMIN_DISCORD_IDS: source.ADMIN_DISCORD_IDS || "",
     APP_VERSION: source.APP_VERSION,
     APP_URL: appUrl,
     API_URL: source.API_URL,
     CHAT_DB_PATH: source.CHAT_DB_PATH,
+    CLOUDFLARE_STREAM_ACCOUNT_ID: source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim(),
+    CLOUDFLARE_STREAM_API_TOKEN: source.CLOUDFLARE_STREAM_API_TOKEN?.trim(),
+    CLOUDFLARE_STREAM_SIGNING_KEY_ID: source.CLOUDFLARE_STREAM_SIGNING_KEY_ID?.trim(),
+    CLOUDFLARE_STREAM_SIGNING_KEY_JWK: source.CLOUDFLARE_STREAM_SIGNING_KEY_JWK?.trim(),
     DEV_USER_JSON: source.DEV_USER_JSON,
     DISCORD_CLIENT_ID: discordClientId,
     DISCORD_CLIENT_SECRET: discordClientSecret,
@@ -118,4 +123,6 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     TMDB_API_TOKEN: source.TMDB_API_TOKEN,
     TORBOX_API_KEY: torBoxApiKey,
   };
+  validateStreamSigning(env);
+  return env;
 }

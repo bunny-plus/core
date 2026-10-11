@@ -12,3 +12,5 @@ data/
 node_modules/
 result
 *.tsbuildinfo
+__pycache__/
+*.pyc

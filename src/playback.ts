@@ -55,9 +55,10 @@ export class PlaybackSynchronizer {
   }
 }
 
-export function playbackConfig(delaySeconds: number, slowConnection: boolean) {
+export function playbackConfig(delaySeconds: number, slowConnection: boolean, streamUrl = "") {
+  const protocol = streamUrl ? new URL(streamUrl).searchParams.get("protocol") : null;
   return {
-    lowLatencyMode: false,
+    lowLatencyMode: protocol === "llhls" || protocol === "llhlsbeta",
     maxLiveSyncPlaybackRate: 1,
     backBufferLength: 10,
     liveSyncDuration: slowConnection ? Math.max(delaySeconds, 18) : delaySeconds,

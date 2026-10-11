@@ -7,6 +7,7 @@ import { cinemaImageMaxBytes } from "../shared/cinema";
 import { isTicketBunny } from "../shared/ticket-bunny";
 import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
+import { streamPlayback } from "../server/stream-playback";
 import {
   JellyfinError,
   jellyfinId,
@@ -25,6 +26,10 @@ export interface Env {
   AUTH_SESSIONS?: AuthSessions;
   CHAT_DB_PATH?: string;
   CINEMA_DIARY?: CinemaDiary;
+  CLOUDFLARE_STREAM_ACCOUNT_ID?: string;
+  CLOUDFLARE_STREAM_API_TOKEN?: string;
+  CLOUDFLARE_STREAM_SIGNING_KEY_ID?: string;
+  CLOUDFLARE_STREAM_SIGNING_KEY_JWK?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   DISCORD_GUILD_ID: string;
@@ -404,10 +409,13 @@ async function streamInfo(env: Env) {
           jellyfin: status.running && !status.error ? status.jellyfin : undefined,
         }))
         .catch(() => ({ running: false, title: null })),
-      fetch(env.STREAM_URL, {
-        headers: { Accept: "application/vnd.apple.mpegurl" },
-        signal: AbortSignal.timeout(5_000),
-      })
+      streamPlayback(env)
+        .then(({ url }) =>
+          fetch(url, {
+            headers: { Accept: "application/vnd.apple.mpegurl" },
+            signal: AbortSignal.timeout(5_000),
+          }),
+        )
         .then(async (response) => {
           await response.body?.cancel();
           return { online: response.ok, upstreamStatus: response.status };
@@ -1142,6 +1150,15 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (authorization instanceof Response) return authorization;
     try {
       return Response.json(await controller(env, "GET"));
+    } catch (error) {
+      return apiError(error instanceof Error ? error : null);
+    }
+  }
+  if (url.pathname === "/api/stream-playback" && request.method === "GET") {
+    const authorization = await authorizeCostly(request, env, metadata, "stream-playback", 60);
+    if (authorization instanceof Response) return authorization;
+    try {
+      return Response.json(await streamPlayback(env));
     } catch (error) {
       return apiError(error instanceof Error ? error : null);
     }

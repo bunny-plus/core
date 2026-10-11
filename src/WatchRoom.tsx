@@ -9,6 +9,7 @@ import { parseChatEffects } from "./chat-effects";
 import { playbackConfig, PlaybackSynchronizer } from "./playback";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
+import type { StreamPlayback } from "../shared/stream";
 import { useDismissibleDetails } from "./useDismissibleDetails";
 import RoomSidebar from "./RoomSidebar";
 
@@ -202,6 +203,8 @@ export default function WatchRoom({
   const volumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
+  const [playbackUrl, setPlaybackUrl] = useState(streamUrl);
+  const signedPlaybackRef = useRef<(StreamPlayback & { source: string }) | null>(null);
   const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
     "loading",
   );
@@ -211,6 +214,7 @@ export default function WatchRoom({
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
+  const idlePlayback = streamOnline === false && relayStatus?.running === false;
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
@@ -447,16 +451,38 @@ export default function WatchRoom({
         // SAFETY: /api/stream-info is produced by the matching RelayStatus server contract.
         const status = (await response.json()) as RelayStatus;
         if (stopped) return;
+        if (status.running && status.online) {
+          let playback = signedPlaybackRef.current;
+          if (
+            !playback ||
+            playback.source !== streamUrl ||
+            (playback.expiresAt !== null && playback.expiresAt - Date.now() < 5 * 60 * 1000)
+          ) {
+            const signed = await apiFetch("/api/stream-playback", {
+              cache: "no-store",
+              signal: AbortSignal.any([request.signal, AbortSignal.timeout(8_000)]),
+            });
+            if (!signed.ok) throw new Error("Could not authorize stream playback");
+            // SAFETY: The authenticated endpoint returns the matching StreamPlayback contract.
+            const result = (await signed.json()) as StreamPlayback;
+            playback = { ...result, source: streamUrl };
+            signedPlaybackRef.current = playback;
+          }
+          if (stopped) return;
+          setPlaybackUrl(playback.url);
+        }
         ticketPlaybackRef.current = status.running && status.online;
         setRelayStatus(status);
         // A failed availability probe must not interrupt media that is still buffered.
         if (
+          status.running &&
           !status.online &&
+          !videoRef.current?.loop &&
           (videoRef.current?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA
         )
           return;
-        setStreamOnline(status.online);
-        if (!status.online) {
+        setStreamOnline(status.running && status.online);
+        if (status.running && !status.online) {
           setPlayerStatus("error");
           setIsBuffering(false);
           setAutoplayBlocked(false);
@@ -478,7 +504,7 @@ export default function WatchRoom({
       request.abort();
       clearTimeout(timer);
     };
-  }, []);
+  }, [streamUrl]);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -682,17 +708,17 @@ export default function WatchRoom({
   useEffect(() => {
     slowConnectionRef.current = slowConnection;
     const hls = hlsRef.current;
-    if (hls) Object.assign(hls.config, playbackConfig(delaySeconds, slowConnection));
+    if (hls) Object.assign(hls.config, playbackConfig(delaySeconds, slowConnection, playbackUrl));
     if (videoRef.current) videoRef.current.playbackRate = 1;
-  }, [delaySeconds, slowConnection]);
+  }, [delaySeconds, slowConnection, playbackUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !streamUrl || streamOnline !== true) return;
+    if (!video || (!idlePlayback && (!streamUrl || streamOnline !== true))) return;
     setPlayerStatus("loading");
     setIsBuffering(false);
     setAutoplayBlocked(false);
-    setSyncLabel("Connecting to the stream");
+    setSyncLabel(idlePlayback ? "Between screenings" : "Connecting to the stream");
     video.volume = volumeRef.current;
     video.muted = volumeRef.current === 0;
     video.defaultMuted = volumeRef.current === 0;
@@ -737,18 +763,20 @@ export default function WatchRoom({
       // Prefer HLS.js even when native HLS is available: Android's native player
       // does not expose the timing needed for live synchronization.
       if (HlsPlayer.isSupported()) {
-        const hls = new HlsPlayer(playbackConfig(delaySeconds, slowConnectionRef.current));
+        const hls = new HlsPlayer(
+          playbackConfig(delaySeconds, slowConnectionRef.current, playbackUrl),
+        );
         attachedHls = hls;
         hlsRef.current = hls;
         hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
           if (data.fatal) failPlayback();
         });
-        hls.loadSource(streamUrl);
+        hls.loadSource(playbackUrl);
         hls.attachMedia(media);
         play();
       } else if (media.canPlayType("application/vnd.apple.mpegurl")) {
         // Keep native playback for browsers without MediaSource support.
-        media.src = streamUrl;
+        media.src = playbackUrl;
         play();
       } else {
         setPlayerStatus("unsupported");
@@ -757,7 +785,13 @@ export default function WatchRoom({
       }
     }
 
-    void attachStream(video).catch(failPlayback);
+    if (idlePlayback) {
+      video.loop = true;
+      video.src = "/offline.mp4";
+      void play();
+    } else {
+      void attachStream(video).catch(failPlayback);
+    }
     return () => {
       disposed = true;
       clearTimeout(retry);
@@ -766,12 +800,14 @@ export default function WatchRoom({
       if (hlsRef.current === attachedHls) hlsRef.current = null;
       video.pause();
       video.playbackRate = 1;
+      video.loop = false;
       video.removeAttribute("src");
       video.load();
     };
-  }, [delaySeconds, streamOnline, streamUrl, playbackAttempt]);
+  }, [delaySeconds, streamOnline, streamUrl, playbackUrl, playbackAttempt, idlePlayback]);
 
   useEffect(() => {
+    if (idlePlayback) return;
     const synchronizer = new PlaybackSynchronizer();
     const timer = setInterval(() => {
       const video = videoRef.current;
@@ -805,7 +841,7 @@ export default function WatchRoom({
         setSyncLabel(correction.label);
     }, 1_000);
     return () => clearInterval(timer);
-  }, [delaySeconds, playerStatus, streamUrl, autoplayBlocked]);
+  }, [delaySeconds, playerStatus, streamUrl, autoplayBlocked, idlePlayback]);
 
   useEffect(() => {
     if (!showStats) return;
@@ -827,11 +863,13 @@ export default function WatchRoom({
       const playingDate = hlsRef.current?.playingDate;
       const liveEdge =
         video.seekable.length > 0 ? video.seekable.end(video.seekable.length - 1) : null;
-      const delay = playingDate
-        ? (Date.now() + clockOffsetRef.current - playingDate.getTime()) / 1_000
-        : liveEdge === null
-          ? null
-          : liveEdge - video.currentTime;
+      const delay = video.loop
+        ? null
+        : playingDate
+          ? (Date.now() + clockOffsetRef.current - playingDate.getTime()) / 1_000
+          : liveEdge === null
+            ? null
+            : liveEdge - video.currentTime;
       const quality = video.getVideoPlaybackQuality?.();
       const hls = hlsRef.current;
 
@@ -987,13 +1025,18 @@ export default function WatchRoom({
                   setIsBuffering(false);
                   setAutoplayBlocked(false);
                   setSyncLabel(
-                    slowConnection ? "Slow connection · sync off" : "Following the live room",
+                    idlePlayback
+                      ? "Between screenings"
+                      : slowConnection
+                        ? "Slow connection · sync off"
+                        : "Following the live room",
                   );
                 }}
                 onError={() => playbackRef.current?.fail()}
                 onStalled={() => {
                   if (
                     playerStatus === "ready" &&
+                    !idlePlayback &&
                     !autoplayBlocked &&
                     (videoRef.current?.readyState ?? 0) < HTMLMediaElement.HAVE_FUTURE_DATA
                   ) {
@@ -1002,7 +1045,7 @@ export default function WatchRoom({
                   }
                 }}
                 onWaiting={() => {
-                  if (playerStatus !== "ready" || autoplayBlocked) return;
+                  if (playerStatus !== "ready" || autoplayBlocked || idlePlayback) return;
                   setIsBuffering(true);
                   setSyncLabel("Buffering the live stream...");
                 }}
@@ -1011,6 +1054,7 @@ export default function WatchRoom({
                 }}
               />
               {(streamOnline === null || playerStatus === "loading") &&
+                !idlePlayback &&
                 streamUrl &&
                 !autoplayBlocked && (
                   <div className="stream-loading" role="status">
@@ -1019,17 +1063,19 @@ export default function WatchRoom({
                     <small>Waiting for the live stream</small>
                   </div>
                 )}
-              {streamOnline === true && autoplayBlocked && playerStatus !== "error" && (
-                <div className="stream-loading">
-                  <button
-                    className="stream-action"
-                    type="button"
-                    onClick={() => playbackRef.current?.play()}
-                  >
-                    Tap to play
-                  </button>
-                </div>
-              )}
+              {(streamOnline === true || idlePlayback) &&
+                autoplayBlocked &&
+                playerStatus !== "error" && (
+                  <div className="stream-loading">
+                    <button
+                      className="stream-action"
+                      type="button"
+                      onClick={() => playbackRef.current?.play()}
+                    >
+                      Tap to play
+                    </button>
+                  </div>
+                )}
               {playerStatus === "ready" && isBuffering && !autoplayBlocked && (
                 <div className="stream-loading buffering-overlay" role="status">
                   <AssetIcon name="carrot" />
@@ -1046,16 +1092,18 @@ export default function WatchRoom({
                 </div>
               )}
               {playerStatus !== "unsupported" &&
-                (!streamUrl || streamOnline === false || playerStatus === "error") && (
+                (!streamUrl ||
+                  (streamOnline === false && !idlePlayback) ||
+                  playerStatus === "error") && (
                   <div className="stream-error" role="status">
                     <span>
                       {!streamUrl
                         ? "Set STREAM_URL to connect the screen."
-                        : streamOnline === false
+                        : streamOnline === false && !idlePlayback
                           ? "The stream is offline. Reconnecting when it returns."
                           : "Couldn't play the video. Reconnecting…"}
                     </span>
-                    {streamUrl && streamOnline === true && (
+                    {streamUrl && (streamOnline === true || idlePlayback) && (
                       <button
                         className="stream-action"
                         type="button"
@@ -1128,11 +1176,13 @@ export default function WatchRoom({
                   <span>
                     {streamOnline === null || relayStatus === null
                       ? "CHECKING"
-                      : !streamOnline
-                        ? "OFFLINE"
-                        : relayStatus.running
-                          ? "LIVE"
-                          : "IDLE"}
+                      : idlePlayback
+                        ? "IDLE"
+                        : !streamOnline
+                          ? "OFFLINE"
+                          : relayStatus.running
+                            ? "LIVE"
+                            : "IDLE"}
                   </span>
                 </span>
                 {relayStatus?.running && (
@@ -1289,7 +1339,7 @@ export default function WatchRoom({
                       Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
                     </button>
                     {streamUrl && (
-                      <a href={streamUrl} target="_blank" rel="noreferrer">
+                      <a href={playbackUrl} target="_blank" rel="noreferrer">
                         Open in own player ↗<small>May not stay in sync</small>
                       </a>
                     )}

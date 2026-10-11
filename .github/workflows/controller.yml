@@ -1,0 +1,38 @@
+name: Relay controller
+
+on:
+  pull_request:
+    paths:
+      - controller/**
+      - nix/**
+      - flake.nix
+      - flake.lock
+      - .github/workflows/controller.yml
+  push:
+    branches: [main]
+    paths:
+      - controller/**
+      - nix/**
+      - flake.nix
+      - flake.lock
+      - .github/workflows/controller.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: controller-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: useblacksmith/checkout@v1 # v4
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: nix fmt -- --check flake.nix controller/default.nix nix/controller-service.nix
+      - run: nix flake check --all-systems --no-build
+      - run: nix build .#bunny-controller --no-link -L

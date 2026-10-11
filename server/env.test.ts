@@ -13,7 +13,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://192.168.1.240:10000",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-  STREAM_URL: "https://gon.bunny.plus/bunny-plus/index.m3u8",
+  STREAM_URL: "https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -57,6 +57,22 @@ test("development environment can run without a relay controller", () => {
     STREAM_URL: "http://localhost:8888/stream.m3u8",
   });
   assert.equal(env.RELAY_CONTROLLER_URL, undefined);
+});
+
+test("environment loads private Cloudflare playback credentials only as complete pairs", () => {
+  const signing = {
+    STREAM_URL:
+      "https://customer-test.cloudflarestream.com/b6347a6447c0adf72cc2daf521c7f396/manifest/video.m3u8",
+    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
+    CLOUDFLARE_STREAM_API_TOKEN: "cloudflare-api-token-secret",
+  };
+  const env = loadEnvironment({ ...validEnvironment, ...signing });
+  assert.equal(env.CLOUDFLARE_STREAM_API_TOKEN, signing.CLOUDFLARE_STREAM_API_TOKEN);
+  assert.throws(
+    () =>
+      loadEnvironment({ ...validEnvironment, ...signing, CLOUDFLARE_STREAM_ACCOUNT_ID: undefined }),
+    /both account ID and API token/,
+  );
 });
 
 test("production environment rejects development authentication", () => {
