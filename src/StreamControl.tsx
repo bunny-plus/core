@@ -89,28 +89,36 @@ export default function StreamControl() {
   const [subtitleIndex, setSubtitleIndex] = useState(-1);
   const [resolutionIndex, setResolutionIndex] = useState(-1);
 
-  async function loadTorrents(refresh = false) {
-    const result = await apiJson<{ torrents: TorBoxTorrent[] }>(
-      `/api/admin/torbox/torrents${refresh ? "?refresh=1" : ""}`,
-    );
-    setTorrents(result.torrents);
-  }
+  useEffect(() => {
+    const request = new AbortController();
+    void apiJson<ControllerStatus>("/api/admin/stream/status", { signal: request.signal })
+      .then((result) => {
+        if (!request.signal.aborted) setStatus(result);
+      })
+      .catch(() => {});
+    return () => request.abort();
+  }, []);
 
   useEffect(() => {
-    Promise.allSettled([
-      apiJson<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1"),
-      apiJson<ControllerStatus>("/api/admin/stream/status"),
-    ])
-      .then(([list, controllerStatus]) => {
-        if (list.status === "fulfilled") setTorrents(list.value.torrents);
-        else
-          setTorboxError(
-            list.reason instanceof Error ? list.reason.message : "Could not load TorBox",
-          );
-        if (controllerStatus.status === "fulfilled") setStatus(controllerStatus.value);
+    if (source !== "torbox") return;
+    const request = new AbortController();
+    setLoading(true);
+    setTorboxError(null);
+    void apiJson<{ torrents: TorBoxTorrent[] }>("/api/admin/torbox/torrents?refresh=1", {
+      signal: request.signal,
+    })
+      .then((result) => {
+        if (!request.signal.aborted) setTorrents(result.torrents);
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((error) => {
+        if (!request.signal.aborted)
+          setTorboxError(error instanceof Error ? error.message : "Could not load TorBox");
+      })
+      .finally(() => {
+        if (!request.signal.aborted) setLoading(false);
+      });
+    return () => request.abort();
+  }, [source]);
 
   const playableTorrents = torrents
     .map((torrent) => ({ torrent, videos: torrent.files.filter(isVideo) }))
@@ -423,16 +431,6 @@ export default function StreamControl() {
           onAdded={async (detail) => {
             setMessage(`${detail}. Pick it from TorBox to choose the file and tracks.`);
             setSource("torbox");
-            setLoading(true);
-            try {
-              await loadTorrents(true);
-            } catch {
-              setMessage(
-                `${detail}. TorBox may need a moment before the movie appears; refresh the page if needed.`,
-              );
-            } finally {
-              setLoading(false);
-            }
           }}
         />
       )}

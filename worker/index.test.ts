@@ -155,6 +155,77 @@ test("stream info coalesces concurrent upstream probes", async (context) => {
   assert.equal(requests, 2);
 });
 
+test("stream info distinguishes playback denial from an unavailable broadcast", async (context) => {
+  const cookie = await adminCookie();
+  for (const status of [204, 401, 403, 404]) {
+    await context.test(`HLS responds with ${status}`, async (probe) => {
+      const isolatedEnv = {
+        ...env,
+        RELAY_CONTROLLER_URL: `http://playback-status-${status}.test`,
+        STREAM_URL: `https://playback-status-${status}.test/index.m3u8`,
+      };
+      probe.mock.method(
+        globalThis,
+        "fetch",
+        async (input: string | URL | Request, init?: RequestInit) => {
+          if (String(input) === isolatedEnv.RELAY_CONTROLLER_URL)
+            return Response.json({ running: true, title: "Private screening" });
+          assert.equal(String(input), isolatedEnv.STREAM_URL);
+          const headers = new Headers(init?.headers);
+          assert.equal(headers.get("Origin"), env.APP_URL);
+          assert.equal(headers.get("Referer"), `${env.APP_URL}/`);
+          return new Response(status === 204 ? null : "private upstream diagnostic", { status });
+        },
+      );
+      const response = await handleRequest(
+        new Request("https://api.bunny.plus/api/stream-info", { headers: { Cookie: cookie } }),
+        isolatedEnv,
+      );
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.online, false);
+      assert.equal(body.running, true);
+      assert.equal(body.title, "Private screening");
+      assert.equal(body.upstreamStatus, status);
+      assert.equal(body.playbackError, [401, 403].includes(status) ? "access-denied" : undefined);
+      assert.ok(!JSON.stringify(body).includes("private upstream diagnostic"));
+    });
+  }
+});
+
+test("stream info reports signing failures without exposing keys or probing unsigned playback", async (context) => {
+  const signingEnv = {
+    ...env,
+    RELAY_CONTROLLER_URL: "http://invalid-signing-controller.test",
+    STREAM_URL:
+      "https://customer-test.cloudflarestream.com/b6347a6447c0adf72cc2daf521c7f396/manifest/video.m3u8",
+    CLOUDFLARE_STREAM_SIGNING_KEY_ID: "invalid-signing-key",
+    CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "invalid-private-jwk-secret",
+  };
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    requests.push(String(input));
+    assert.equal(String(input), signingEnv.RELAY_CONTROLLER_URL);
+    return Response.json({ running: true, title: "Private screening" });
+  });
+  const cookie = await adminCookie();
+  const response = await handleRequest(
+    new Request("https://api.bunny.plus/api/stream-info", { headers: { Cookie: cookie } }),
+    signingEnv,
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body, {
+    online: false,
+    playbackError: "signing-failed",
+    running: true,
+    title: "Private screening",
+    upstreamStatus: null,
+  });
+  assert.ok(!JSON.stringify(body).includes(signingEnv.CLOUDFLARE_STREAM_SIGNING_KEY_JWK));
+  assert.deepEqual(requests, [signingEnv.RELAY_CONTROLLER_URL]);
+});
+
 test("private playback links require a session and availability probes use signed HLS", async (context) => {
   const inputId = "b6347a6447c0adf72cc2daf521c7f396";
   const signingEnv = {

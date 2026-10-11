@@ -8,6 +8,7 @@ import { isTicketBunny } from "../shared/ticket-bunny";
 import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "../server/upstream";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
 import { streamPlayback } from "../server/stream-playback";
+import type { StreamPlaybackError } from "../shared/stream";
 import {
   JellyfinError,
   jellyfinId,
@@ -388,7 +389,42 @@ async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
 }
 
 function streamInfoCacheKey(env: Env) {
-  return `stream-info:${env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL}:${env.STREAM_URL}`;
+  return `stream-info:${env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL}:${env.STREAM_URL}:${env.APP_URL}`;
+}
+
+type StreamPlaybackAvailability = {
+  online: boolean;
+  playbackError?: StreamPlaybackError;
+  upstreamStatus: number | null;
+};
+
+async function probeStreamPlayback(env: Env): Promise<StreamPlaybackAvailability> {
+  let url: string;
+  try {
+    ({ url } = await streamPlayback(env));
+  } catch {
+    return { online: false, playbackError: "signing-failed", upstreamStatus: null };
+  }
+  try {
+    const origin = new URL(env.APP_URL).origin;
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/vnd.apple.mpegurl",
+        Origin: origin,
+        Referer: `${origin}/`,
+      },
+      signal: AbortSignal.timeout(5_000),
+    });
+    await response.body?.cancel();
+    const result: StreamPlaybackAvailability = {
+      online: response.status === 200,
+      upstreamStatus: response.status,
+    };
+    if ([401, 403].includes(response.status)) result.playbackError = "access-denied";
+    return result;
+  } catch {
+    return { online: false, upstreamStatus: null };
+  }
 }
 
 async function streamInfo(env: Env) {
@@ -409,18 +445,7 @@ async function streamInfo(env: Env) {
           jellyfin: status.running && !status.error ? status.jellyfin : undefined,
         }))
         .catch(() => ({ running: false, title: null })),
-      streamPlayback(env)
-        .then(({ url }) =>
-          fetch(url, {
-            headers: { Accept: "application/vnd.apple.mpegurl" },
-            signal: AbortSignal.timeout(5_000),
-          }),
-        )
-        .then(async (response) => {
-          await response.body?.cancel();
-          return { online: response.ok, upstreamStatus: response.status };
-        })
-        .catch(() => ({ online: false, upstreamStatus: null })),
+      probeStreamPlayback(env),
     ]);
     return { ...relay, ...upstream };
   });

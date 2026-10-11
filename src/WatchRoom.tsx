@@ -9,7 +9,7 @@ import { parseChatEffects } from "./chat-effects";
 import { playbackConfig, PlaybackSynchronizer } from "./playback";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
-import type { StreamPlayback } from "../shared/stream";
+import type { StreamPlayback, StreamPlaybackError } from "../shared/stream";
 import { useDismissibleDetails } from "./useDismissibleDetails";
 import RoomSidebar from "./RoomSidebar";
 
@@ -36,6 +36,7 @@ type PlayerStats = {
 
 type RelayStatus = {
   online: boolean;
+  playbackError?: StreamPlaybackError;
   running: boolean;
   title: string | null;
   upstreamStatus: number | null;
@@ -215,6 +216,14 @@ export default function WatchRoom({
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
   const idlePlayback = streamOnline === false && relayStatus?.running === false;
+  const playbackAccessError = relayStatus?.running
+    ? (relayStatus.playbackError ??
+      ([401, 403].includes(relayStatus.upstreamStatus ?? 0) ? "access-denied" : undefined))
+    : undefined;
+  const playbackAccessMessage =
+    playbackAccessError === "signing-failed"
+      ? "Playback could not be authorized. An administrator needs to check playback access."
+      : "Cloudflare denied playback. An administrator needs to check playback access.";
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
@@ -486,7 +495,11 @@ export default function WatchRoom({
           setPlayerStatus("error");
           setIsBuffering(false);
           setAutoplayBlocked(false);
-          setSyncLabel("Stream is offline");
+          setSyncLabel(
+            status.playbackError || [401, 403].includes(status.upstreamStatus ?? 0)
+              ? "Playback access denied"
+              : "Stream is offline",
+          );
         }
       } catch {
         if (!stopped && !request.signal.aborted) {
@@ -1099,9 +1112,11 @@ export default function WatchRoom({
                     <span>
                       {!streamUrl
                         ? "Set STREAM_URL to connect the screen."
-                        : streamOnline === false && !idlePlayback
-                          ? "The stream is offline. Reconnecting when it returns."
-                          : "Couldn't play the video. Reconnecting…"}
+                        : playbackAccessError
+                          ? playbackAccessMessage
+                          : streamOnline === false && !idlePlayback
+                            ? "The stream is offline. Reconnecting when it returns."
+                            : "Couldn't play the video. Reconnecting…"}
                     </span>
                     {streamUrl && (streamOnline === true || idlePlayback) && (
                       <button
@@ -1178,11 +1193,13 @@ export default function WatchRoom({
                       ? "CHECKING"
                       : idlePlayback
                         ? "IDLE"
-                        : !streamOnline
-                          ? "OFFLINE"
-                          : relayStatus.running
-                            ? "LIVE"
-                            : "IDLE"}
+                        : playbackAccessError
+                          ? "LOCKED"
+                          : !streamOnline
+                            ? "OFFLINE"
+                            : relayStatus.running
+                              ? "LIVE"
+                              : "IDLE"}
                   </span>
                 </span>
                 {relayStatus?.running && (
