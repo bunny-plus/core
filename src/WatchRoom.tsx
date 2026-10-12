@@ -6,10 +6,16 @@ import { Link } from "react-router";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiWebSocketUrl } from "./api";
 import { parseChatEffects } from "./chat-effects";
-import { playbackConfig, PlaybackSynchronizer } from "./playback";
+import {
+  mediaProgramDate,
+  playbackConfig,
+  playbackElapsedSeconds,
+  PlaybackSynchronizer,
+} from "./playback";
 import { CinemaTicketCard } from "./CinemaDiary";
 import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
 import type { StreamPlayback, StreamPlaybackError } from "../shared/stream";
+import type { JellyfinPlayback } from "../shared/jellyfin";
 import { useDismissibleDetails } from "./useDismissibleDetails";
 import RoomSidebar from "./RoomSidebar";
 import StreamBackstage from "./StreamBackstage";
@@ -36,6 +42,7 @@ type PlayerStats = {
 };
 
 type RelayStatus = {
+  jellyfin?: JellyfinPlayback | null;
   online: boolean;
   playbackError?: StreamPlaybackError;
   running: boolean;
@@ -218,9 +225,15 @@ export default function WatchRoom({
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
   const [streamInfoRequest, setStreamInfoRequest] = useState(0);
-  const runtimeMinutes = relayStatus?.runtimeSeconds
-    ? Math.max(1, Math.round(relayStatus.runtimeSeconds / 60))
-    : null;
+  const [playbackPosition, setPlaybackPosition] = useState<{
+    sessionId: string;
+    seconds: number;
+  } | null>(null);
+  const playbackSessionId = relayStatus?.running ? relayStatus.jellyfin?.sessionId : undefined;
+  const playbackStartedAt = relayStatus?.jellyfin?.startedAt ?? null;
+  const playbackDuration = relayStatus?.runtimeSeconds ?? null;
+  const elapsedSeconds =
+    playbackPosition?.sessionId === playbackSessionId ? (playbackPosition?.seconds ?? null) : null;
   const idlePlayback = streamOnline === false && relayStatus?.running === false;
   const playbackAccessError = relayStatus?.running
     ? (relayStatus.playbackError ??
@@ -523,6 +536,40 @@ export default function WatchRoom({
       clearTimeout(timer);
     };
   }, [streamConfigured, streamInfoRequest]);
+
+  useEffect(() => {
+    if (!playbackSessionId || playbackStartedAt === null) {
+      setPlaybackPosition(null);
+      return;
+    }
+    const sessionId = playbackSessionId;
+    const video = videoRef.current;
+    function updatePosition() {
+      const seconds =
+        video && !video.loop && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+          ? playbackElapsedSeconds(
+              playbackStartedAt,
+              mediaProgramDate(video, hlsRef.current?.playingDate ?? null),
+              playbackDuration,
+            )
+          : null;
+      setPlaybackPosition((current) => {
+        if (seconds === null) return null;
+        if (current && current.sessionId === sessionId && current.seconds === seconds)
+          return current;
+        return { sessionId, seconds };
+      });
+    }
+    updatePosition();
+    const timer = window.setInterval(updatePosition, 1_000);
+    video?.addEventListener("timeupdate", updatePosition);
+    video?.addEventListener("loadeddata", updatePosition);
+    return () => {
+      window.clearInterval(timer);
+      video?.removeEventListener("timeupdate", updatePosition);
+      video?.removeEventListener("loadeddata", updatePosition);
+    };
+  }, [playbackSessionId, playbackStartedAt, playbackDuration]);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -1212,12 +1259,12 @@ export default function WatchRoom({
                   <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
                     <AssetIcon name="carrot" />
                     <span>{relayStatus.title ?? "TorBox stream"}</span>
-                    {runtimeMinutes !== null && (
-                      <span className="stream-runtime">
+                    {elapsedSeconds !== null && (
+                      <span className="stream-runtime" title="Current playback time">
                         <UiIcon name="clock" />
                         <span>
-                          {runtimeMinutes >= 60 && `${Math.floor(runtimeMinutes / 60)}h `}
-                          {runtimeMinutes % 60}m<span className="sr-only"> runtime</span>
+                          {formatTime(elapsedSeconds)}
+                          <span className="sr-only"> into the screening</span>
                         </span>
                       </span>
                     )}

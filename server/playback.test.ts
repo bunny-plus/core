@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { playbackConfig, PlaybackSynchronizer } from "../src/playback";
+import {
+  mediaProgramDate,
+  playbackConfig,
+  playbackElapsedSeconds,
+  PlaybackSynchronizer,
+} from "../src/playback";
 
 function buffered(...ranges: [number, number][]): TimeRanges {
   return {
@@ -20,6 +25,39 @@ function media() {
     paused: false,
   };
 }
+
+test("elapsed playback follows the film timeline when viewers join or reconnect midway", () => {
+  const startedAt = Date.UTC(2026, 9, 12, 18);
+  // A viewer's short local HLS window must not reset the film's elapsed clock.
+  const video = { currentTime: 20 };
+  const programDate = mediaProgramDate(video, new Date(startedAt + 24 * 60_000 + 13_750));
+  assert.equal(playbackElapsedSeconds(startedAt, programDate, 90 * 60), 24 * 60 + 13);
+  video.currentTime = 4;
+  assert.equal(
+    playbackElapsedSeconds(
+      startedAt,
+      mediaProgramDate(video, new Date(startedAt + 24 * 60_000 + 17_000)),
+    ),
+    24 * 60 + 17,
+  );
+  assert.equal(playbackElapsedSeconds(startedAt, programDate), 24 * 60 + 13);
+});
+
+test("native HLS derives the current program date from its media clock", () => {
+  const startedAt = Date.UTC(2026, 9, 12, 18);
+  const video = { currentTime: 13.75, getStartDate: () => new Date(startedAt + 24 * 60_000) };
+  assert.equal(playbackElapsedSeconds(startedAt, mediaProgramDate(video, null)), 24 * 60 + 13);
+  assert.equal(mediaProgramDate({ currentTime: 30 }, null), null);
+});
+
+test("elapsed playback waits for timing metadata and clamps startup skew and the end of a film", () => {
+  const startedAt = Date.UTC(2026, 9, 12, 18);
+  assert.equal(playbackElapsedSeconds(null, startedAt), null);
+  assert.equal(playbackElapsedSeconds(startedAt, null), null);
+  assert.equal(playbackElapsedSeconds(startedAt, NaN), null);
+  assert.equal(playbackElapsedSeconds(startedAt, startedAt - 1_000), 0);
+  assert.equal(playbackElapsedSeconds(startedAt, startedAt + 91 * 60_000, 90 * 60), 90 * 60);
+});
 
 test("segment jitter and short drift spikes do not trigger seeks or speed changes", () => {
   const sync = new PlaybackSynchronizer();

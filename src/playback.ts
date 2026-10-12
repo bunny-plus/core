@@ -5,6 +5,38 @@ type PlaybackMedia = Pick<
   "currentTime" | "buffered" | "readyState" | "seeking" | "paused"
 >;
 
+type TimedMedia = Pick<HTMLMediaElement, "currentTime">;
+
+function hasStartDate(media: TimedMedia): media is TimedMedia & { getStartDate: () => Date } {
+  return "getStartDate" in media && typeof media.getStartDate === "function";
+}
+
+export function mediaProgramDate(media: TimedMedia, playingDate: Date | null): number | null {
+  if (playingDate) return playingDate.getTime();
+  // Native HLS exposes the date corresponding to media time zero on WebKit.
+  if (hasStartDate(media)) return media.getStartDate().getTime() + media.currentTime * 1_000;
+  return null;
+}
+
+export function playbackElapsedSeconds(
+  startedAt: number | null,
+  programDate: number | null,
+  durationSeconds: number | null = null,
+): number | null {
+  if (
+    startedAt === null ||
+    programDate === null ||
+    !Number.isFinite(startedAt) ||
+    !Number.isFinite(programDate)
+  )
+    return null;
+  const duration =
+    durationSeconds !== null && Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? durationSeconds
+      : Infinity;
+  return Math.floor(Math.max(0, Math.min((programDate - startedAt) / 1_000, duration)));
+}
+
 function bufferedAhead(ranges: TimeRanges, position: number) {
   for (let index = 0; index < ranges.length; index++) {
     if (position >= ranges.start(index) && position <= ranges.end(index))
