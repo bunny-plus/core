@@ -15,6 +15,7 @@ import {
   jellyfinLibrary,
   jellyfinOptions,
   jellyfinRelay,
+  jellyfinRuntime,
   isJellyfinPlayback,
 } from "../server/jellyfin";
 import type { JellyfinPlayback } from "../shared/jellyfin";
@@ -43,6 +44,8 @@ export interface Env {
   NODE_ENV?: string;
   SESSION_SECRET: string;
   STREAM_DELAY_SECONDS: string;
+  STREAM_RECORDING_CLEANUP_ACCOUNT_ID?: string;
+  STREAM_RECORDING_CLEANUP_API_TOKEN?: string;
   RELAY_CONTROLLER_SECRET?: string;
   RELAY_CONTROLLER_URL?: string;
   STREAM_CONTROLLER_SECRET?: string;
@@ -444,10 +447,20 @@ async function streamInfo(env: Env) {
           title: status.title ?? null,
           jellyfin: status.running && !status.error ? status.jellyfin : undefined,
         }))
-        .catch(() => ({ running: false, title: null })),
+        .catch(() => ({ running: false, title: null, jellyfin: undefined })),
       probeStreamPlayback(env),
     ]);
-    return { ...relay, ...upstream };
+    const playback = relay.jellyfin;
+    const runtimeSeconds = playback
+      ? await cachedData(
+          `jellyfin-runtime:${env.JELLYFIN_URL}:${playback.itemId}:${playback.mediaSourceId}`,
+          3_600,
+          () => jellyfinRuntime(env, playback),
+        ).catch(() => null)
+      : null;
+    return runtimeSeconds === null
+      ? { ...relay, ...upstream }
+      : { ...relay, ...upstream, runtimeSeconds };
   });
   if (!env.CINEMA_DIARY) return info;
   try {
@@ -679,7 +692,9 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const response = Response.json({
       delaySeconds: Number(env.STREAM_DELAY_SECONDS || 6),
-      streamUrl: env.STREAM_URL,
+      streamConfigured: Boolean(env.STREAM_URL),
+      // Older clients use this as a playback identity; never send the private source URL.
+      streamUrl: "/api/stream-playback",
       user: {
         admin: viewer.admin,
         avatar: viewer.avatar,

@@ -3,13 +3,18 @@ import test from "node:test";
 
 import { streamPlayback, validateStreamSigning } from "./stream-playback";
 
-const inputId = "b6347a6447c0adf72cc2daf521c7f396";
+const inputId = "a".repeat(32);
 const streamUrl = `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8?protocol=llhlsbeta`;
 const apiEnvironment = {
   CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
   CLOUDFLARE_STREAM_API_TOKEN: "test-cloudflare-api-token",
   STREAM_URL: streamUrl,
 };
+
+test("private playback cannot fall back to exposing its unsigned source URL", async () => {
+  assert.throws(() => validateStreamSigning({ STREAM_URL: streamUrl }), /signing credentials/);
+  await assert.rejects(() => streamPlayback({ STREAM_URL: streamUrl }), /signing credentials/);
+});
 
 test("unsigned feeds retain their URL and signing configuration requires complete pairs", async () => {
   assert.deepEqual(await streamPlayback({ STREAM_URL: "http://localhost/live.m3u8" }), {
@@ -26,7 +31,7 @@ test("unsigned feeds retain their URL and signing configuration requires complet
   );
   assert.throws(
     () => validateStreamSigning({ ...apiEnvironment, STREAM_URL: "https://other.test/live.m3u8" }),
-    /Cloudflare Stream HLS URL/,
+    /private HLS URL/,
   );
   assert.throws(
     () => validateStreamSigning({ ...apiEnvironment, CLOUDFLARE_STREAM_ACCOUNT_ID: "../account" }),
@@ -148,7 +153,7 @@ test("signing failures do not disclose upstream bodies or private credentials an
       : Response.json({ success: true, result: { token: "header.claims.signature" } });
   });
   await assert.rejects(streamPlayback(environment), {
-    message: "Cloudflare Stream playback request failed (403)",
+    message: "Playback authorization request failed (403)",
   });
   assert.ok((await streamPlayback(environment)).url.includes("/header.claims.signature/"));
   assert.equal(attempts, 2);
@@ -158,7 +163,7 @@ test("signing failures do not disclose upstream bodies or private credentials an
       CLOUDFLARE_STREAM_SIGNING_KEY_ID: "invalid-key",
       CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "private-key-material",
     }),
-    { message: "Cloudflare Stream signing key is invalid" },
+    { message: "Playback signing key is invalid" },
   );
 });
 
@@ -174,7 +179,7 @@ test("API signing rejects invalid or unsuccessful token responses", async (conte
         ...apiEnvironment,
         CLOUDFLARE_STREAM_API_TOKEN: `invalid-response-token-${index}`,
       }),
-      { message: "Cloudflare Stream returned an invalid playback token" },
+      { message: "Playback service returned an invalid playback token" },
     );
   }
 });

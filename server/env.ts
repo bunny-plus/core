@@ -1,6 +1,6 @@
 import type { Env } from "../worker/index";
 import { jellyfinBaseUrl } from "./jellyfin";
-import { validateStreamSigning } from "./stream-playback";
+import { streamInputId, validateStreamSigning } from "./stream-playback";
 
 type JsonObject = { [key: string]: JsonValue };
 type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
@@ -92,6 +92,31 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     throw new Error("STREAM_DELAY_SECONDS must be between 0 and 120");
   }
 
+  const dedicatedCleanup = Boolean(
+    source.STREAM_RECORDING_CLEANUP_ACCOUNT_ID?.trim() ||
+    source.STREAM_RECORDING_CLEANUP_API_TOKEN?.trim(),
+  );
+  const existingStreamCredentials = Boolean(
+    source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim() && source.CLOUDFLARE_STREAM_API_TOKEN?.trim(),
+  );
+  const cleanupAccountId = dedicatedCleanup
+    ? source.STREAM_RECORDING_CLEANUP_ACCOUNT_ID?.trim()
+    : existingStreamCredentials
+      ? source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim()
+      : undefined;
+  const cleanupToken = dedicatedCleanup
+    ? source.STREAM_RECORDING_CLEANUP_API_TOKEN?.trim()
+    : existingStreamCredentials
+      ? source.CLOUDFLARE_STREAM_API_TOKEN?.trim()
+      : undefined;
+  if (cleanupAccountId || cleanupToken) {
+    if (!cleanupAccountId || !cleanupToken)
+      throw new Error("Recording cleanup requires both account ID and API token");
+    if (!/^[a-f\d]{32}$/i.test(cleanupAccountId) || !/^[\x21-\x7e]{20,512}$/.test(cleanupToken))
+      throw new Error("Recording cleanup credentials are invalid");
+    streamInputId(streamUrl);
+  }
+
   const env: Env = {
     ADMIN_DISCORD_IDS: source.ADMIN_DISCORD_IDS || "",
     APP_VERSION: source.APP_VERSION,
@@ -118,6 +143,8 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     STREAM_CONTROLLER_SECRET: source.STREAM_CONTROLLER_SECRET,
     STREAM_CONTROLLER_URL: source.STREAM_CONTROLLER_URL,
     STREAM_DELAY_SECONDS: String(delay),
+    STREAM_RECORDING_CLEANUP_ACCOUNT_ID: cleanupAccountId,
+    STREAM_RECORDING_CLEANUP_API_TOKEN: cleanupToken,
     STREAM_URL: streamUrl,
     STREMIO_ADDON_URL: source.STREMIO_ADDON_URL,
     TMDB_API_TOKEN: source.TMDB_API_TOKEN,

@@ -17,7 +17,7 @@ const env: Env = {
   RELAY_CONTROLLER_URL: "http://controller.test",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
   STREAM_DELAY_SECONDS: "6",
-  STREAM_URL: "https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8",
+  STREAM_URL: "https://stream.test/index.m3u8",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -37,6 +37,10 @@ test("authenticated API responses are private and mutation origins are enforced"
   );
   assert.equal(session.status, 200);
   assert.equal(session.headers.get("Cache-Control"), "private, no-store");
+  const sessionBody = await session.json();
+  assert.equal(sessionBody.streamConfigured, true);
+  assert.equal(sessionBody.streamUrl, "/api/stream-playback");
+  assert.ok(!JSON.stringify(sessionBody).includes(env.STREAM_URL));
 
   const rejected = await handleRequest(
     new Request("https://api.bunny.plus/api/admin/movies/add", {
@@ -125,6 +129,122 @@ test("stream info combines relay metadata and HLS availability", async (context)
   assert.equal(removed.status, 404);
 });
 
+test("stream runtime is available to members, caches Jellyfin metadata, and clears for other sources", async (context) => {
+  const runtimeEnv = {
+    ...env,
+    RELAY_CONTROLLER_URL: "http://runtime-controller.test",
+    JELLYFIN_URL: "https://runtime-jellyfin.test",
+    JELLYFIN_API_KEY: "private-runtime-token",
+  };
+  const token = await createSession(
+    { admin: false, avatar: null, id: "runtime-viewer", name: "Viewer", permissions: [] },
+    env.SESSION_SECRET,
+  );
+  const headers = { Cookie: `bp_session=${token}` };
+  const playback = {
+    sessionId: "b".repeat(32),
+    itemId: "a".repeat(32),
+    mediaSourceId: "version-1",
+    startedAt: null,
+  };
+  let jellyfinCalls = 0;
+  let running = true;
+  let jellyfin = true;
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url === runtimeEnv.RELAY_CONTROLLER_URL) {
+      return Response.json({
+        running,
+        title: running ? "Movie night" : null,
+        jellyfin: jellyfin && running ? playback : undefined,
+      });
+    }
+    if (url.startsWith(runtimeEnv.JELLYFIN_URL)) {
+      jellyfinCalls += 1;
+      return Response.json({
+        Items: [{ RunTimeTicks: 54_000_000_000, Path: "/private/movie.mkv" }],
+      });
+    }
+    if (url === env.STREAM_URL) return new Response("#EXTM3U");
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  const info = () =>
+    handleRequest(new Request(`${env.API_URL}/api/stream-info`, { headers }), runtimeEnv);
+  const first = await info();
+  assert.equal(first.status, 200);
+  const result = await first.json();
+  assert.equal(result.runtimeSeconds, 5400);
+  assert.ok(!JSON.stringify(result).includes(runtimeEnv.JELLYFIN_API_KEY));
+  assert.ok(!JSON.stringify(result).includes("/private"));
+  assert.equal((await info()).status, 200);
+  assert.equal(jellyfinCalls, 1);
+  const later = Date.now() + 6_000;
+  context.mock.method(Date, "now", () => later);
+  assert.equal((await (await info()).json()).runtimeSeconds, 5400);
+  assert.equal(jellyfinCalls, 1);
+
+  const adminHeaders = {
+    Cookie: await adminCookie(),
+    Origin: env.APP_URL,
+    "Content-Type": "application/json",
+  };
+  running = false;
+  await handleRequest(
+    new Request(`${env.API_URL}/api/admin/stream/stop`, { headers: adminHeaders, method: "POST" }),
+    runtimeEnv,
+  );
+  assert.equal((await (await info()).json()).runtimeSeconds, undefined);
+  assert.equal(jellyfinCalls, 1);
+
+  jellyfin = false;
+  running = true;
+  await handleRequest(
+    new Request(`${env.API_URL}/api/admin/restream/start`, {
+      headers: adminHeaders,
+      method: "POST",
+      body: JSON.stringify({ source: "https://www.twitch.tv/bunnyplus", quality: "best" }),
+    }),
+    runtimeEnv,
+  );
+  assert.equal((await (await info()).json()).runtimeSeconds, undefined);
+  assert.equal(jellyfinCalls, 1);
+});
+
+test("Jellyfin metadata failure leaves the stream playable without a runtime", async (context) => {
+  const runtimeEnv = {
+    ...env,
+    RELAY_CONTROLLER_URL: "http://runtime-failure-controller.test",
+    JELLYFIN_URL: "https://runtime-failure-jellyfin.test",
+    JELLYFIN_API_KEY: "private-runtime-token",
+  };
+  context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url === runtimeEnv.RELAY_CONTROLLER_URL)
+      return Response.json({
+        running: true,
+        title: "Movie night",
+        jellyfin: {
+          sessionId: "b".repeat(32),
+          itemId: "a".repeat(32),
+          mediaSourceId: "version-1",
+          startedAt: null,
+        },
+      });
+    if (url.startsWith(runtimeEnv.JELLYFIN_URL))
+      return new Response("Unavailable", { status: 503 });
+    return new Response("#EXTM3U");
+  });
+  const response = await handleRequest(
+    new Request(`${env.API_URL}/api/stream-info`, { headers: { Cookie: await adminCookie() } }),
+    runtimeEnv,
+  );
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.online, true);
+  assert.equal(result.running, true);
+  assert.equal(result.runtimeSeconds, undefined);
+});
+
 test("stream info coalesces concurrent upstream probes", async (context) => {
   const cookie = await adminCookie();
   const isolatedEnv = {
@@ -197,8 +317,7 @@ test("stream info reports signing failures without exposing keys or probing unsi
   const signingEnv = {
     ...env,
     RELAY_CONTROLLER_URL: "http://invalid-signing-controller.test",
-    STREAM_URL:
-      "https://customer-test.cloudflarestream.com/b6347a6447c0adf72cc2daf521c7f396/manifest/video.m3u8",
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
     CLOUDFLARE_STREAM_SIGNING_KEY_ID: "invalid-signing-key",
     CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "invalid-private-jwk-secret",
   };
@@ -227,7 +346,7 @@ test("stream info reports signing failures without exposing keys or probing unsi
 });
 
 test("private playback links require a session and availability probes use signed HLS", async (context) => {
-  const inputId = "b6347a6447c0adf72cc2daf521c7f396";
+  const inputId = "a".repeat(32);
   const signingEnv = {
     ...env,
     RELAY_CONTROLLER_URL: "http://signed-controller.test",

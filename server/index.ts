@@ -11,6 +11,7 @@ import { AuthSessions } from "./auth-sessions";
 import { CinemaDiary } from "./cinema";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
+import { startRecordingCleanup } from "./recording-cleanup";
 
 const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
@@ -165,4 +166,5 @@ server.on("upgrade", async (request, socket, head) => {
 
 server.listen(port, () => {
   console.log(`bunny.plus API listening on :${port}`);
+  startRecordingCleanup(env);
 });

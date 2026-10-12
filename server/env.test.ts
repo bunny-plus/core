@@ -13,7 +13,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://192.168.1.240:10000",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-  STREAM_URL: "https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8",
+  STREAM_URL: "https://stream.test/index.m3u8",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -61,8 +61,7 @@ test("development environment can run without a relay controller", () => {
 
 test("environment loads private Cloudflare playback credentials only as complete pairs", () => {
   const signing = {
-    STREAM_URL:
-      "https://customer-test.cloudflarestream.com/b6347a6447c0adf72cc2daf521c7f396/manifest/video.m3u8",
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
     CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
     CLOUDFLARE_STREAM_API_TOKEN: "cloudflare-api-token-secret",
   };
@@ -73,6 +72,41 @@ test("environment loads private Cloudflare playback credentials only as complete
       loadEnvironment({ ...validEnvironment, ...signing, CLOUDFLARE_STREAM_ACCOUNT_ID: undefined }),
     /both account ID and API token/,
   );
+});
+
+test("recording cleanup requires a complete credential pair for a private live input", () => {
+  const configured = {
+    ...validEnvironment,
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
+    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
+    CLOUDFLARE_STREAM_API_TOKEN: "private-playback-api-token",
+    STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "a".repeat(32),
+    STREAM_RECORDING_CLEANUP_API_TOKEN: "private-recording-cleanup-token",
+  };
+  assert.equal(
+    loadEnvironment(configured).STREAM_RECORDING_CLEANUP_API_TOKEN,
+    configured.STREAM_RECORDING_CLEANUP_API_TOKEN,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...configured, STREAM_RECORDING_CLEANUP_API_TOKEN: undefined }),
+    /both account ID and API token/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...configured, STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "invalid" }),
+    /credentials are invalid/,
+  );
+});
+
+test("recording cleanup reuses the existing Stream token and account without separate credentials", () => {
+  const configured = {
+    ...validEnvironment,
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
+    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
+    CLOUDFLARE_STREAM_API_TOKEN: "existing-stream-read-and-edit-token",
+  };
+  const result = loadEnvironment(configured);
+  assert.equal(result.STREAM_RECORDING_CLEANUP_ACCOUNT_ID, configured.CLOUDFLARE_STREAM_ACCOUNT_ID);
+  assert.equal(result.STREAM_RECORDING_CLEANUP_API_TOKEN, configured.CLOUDFLARE_STREAM_API_TOKEN);
 });
 
 test("production environment rejects development authentication", () => {

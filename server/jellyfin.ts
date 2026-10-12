@@ -70,7 +70,7 @@ export function jellyfinId(value: JsonValue | undefined, name = "itemId") {
   return value;
 }
 
-async function jellyfinGet(env: Env, path: string, query: URLSearchParams) {
+async function jellyfinGet(env: Env, path: string, query: URLSearchParams, timeoutMs = 15_000) {
   const config = configuration(env);
   try {
     const { data } = await fetchJson<JsonValue>(`${config.url}/${path}?${query}`, {
@@ -79,7 +79,7 @@ async function jellyfinGet(env: Env, path: string, query: URLSearchParams) {
         Accept: "application/json",
       },
       name: "Jellyfin",
-      timeoutMs: 15_000,
+      timeoutMs,
       maxBytes: 2_000_000,
       redirect: "error",
     });
@@ -295,6 +295,33 @@ export function isJellyfinPlayback(value: JsonValue | undefined): value is Jelly
     (value.subtitlesBurnedIn === undefined || typeof value.subtitlesBurnedIn === "boolean") &&
     (value.startedAt === null || (isNumber(value.startedAt) && value.startedAt > 0))
   );
+}
+
+export async function jellyfinRuntime(
+  env: Env,
+  playback: JellyfinPlayback,
+): Promise<number | null> {
+  const data = await jellyfinGet(
+    env,
+    "Items",
+    new URLSearchParams({
+      Ids: jellyfinId(playback.itemId),
+      Fields: "MediaSources",
+      EnableImages: "false",
+      EnableUserData: "false",
+    }),
+    3_000,
+  );
+  const item = Array.isArray(data.Items) ? data.Items.find(isObject) : undefined;
+  if (!item) return null;
+  const version = Array.isArray(item.MediaSources)
+    ? item.MediaSources.filter(isObject).find((source) => source.Id === playback.mediaSourceId)
+    : undefined;
+  const ticks =
+    isNumber(version?.RunTimeTicks) && version.RunTimeTicks > 0
+      ? version.RunTimeTicks
+      : item.RunTimeTicks;
+  return isNumber(ticks) && ticks >= 10_000_000 ? Math.round(ticks / 10_000_000) : null;
 }
 
 export async function jellyfinOptions(env: Env, id: string): Promise<JellyfinOptions> {

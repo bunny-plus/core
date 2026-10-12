@@ -12,6 +12,7 @@ import type { CinemaProgress, CinemaTicket } from "../shared/cinema";
 import type { StreamPlayback, StreamPlaybackError } from "../shared/stream";
 import { useDismissibleDetails } from "./useDismissibleDetails";
 import RoomSidebar from "./RoomSidebar";
+import StreamBackstage from "./StreamBackstage";
 
 export type User = {
   admin: boolean;
@@ -38,6 +39,7 @@ type RelayStatus = {
   online: boolean;
   playbackError?: StreamPlaybackError;
   running: boolean;
+  runtimeSeconds?: number;
   title: string | null;
   upstreamStatus: number | null;
 };
@@ -170,11 +172,11 @@ function savedTheatreMode() {
 export default function WatchRoom({
   currentUser,
   delaySeconds,
-  streamUrl,
+  streamConfigured,
 }: {
   currentUser: User;
   delaySeconds: number;
-  streamUrl: string;
+  streamConfigured: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
@@ -204,8 +206,8 @@ export default function WatchRoom({
   const volumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
-  const [playbackUrl, setPlaybackUrl] = useState(streamUrl);
-  const signedPlaybackRef = useRef<(StreamPlayback & { source: string }) | null>(null);
+  const [playbackUrl, setPlaybackUrl] = useState("");
+  const signedPlaybackRef = useRef<StreamPlayback | null>(null);
   const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
     "loading",
   );
@@ -215,6 +217,10 @@ export default function WatchRoom({
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [relayStatus, setRelayStatus] = useState<RelayStatus | null>(null);
+  const [streamInfoRequest, setStreamInfoRequest] = useState(0);
+  const runtimeMinutes = relayStatus?.runtimeSeconds
+    ? Math.max(1, Math.round(relayStatus.runtimeSeconds / 60))
+    : null;
   const idlePlayback = streamOnline === false && relayStatus?.running === false;
   const playbackAccessError = relayStatus?.running
     ? (relayStatus.playbackError ??
@@ -223,7 +229,7 @@ export default function WatchRoom({
   const playbackAccessMessage =
     playbackAccessError === "signing-failed"
       ? "Playback could not be authorized. An administrator needs to check playback access."
-      : "Cloudflare denied playback. An administrator needs to check playback access.";
+      : "Playback access was denied. An administrator needs to check playback access.";
   const [members, setMembers] = useState<User[]>([currentUser]);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [reactions, setReactions] = useState<RoomReaction[]>([]);
@@ -386,7 +392,7 @@ export default function WatchRoom({
             (immersivePlayer || screen.matches(":hover")) &&
             !pointerDown &&
             !(quickFade && !touchInteraction && pointerOverControls) &&
-            !screen.querySelector("details[open]") &&
+            !screen.querySelector("details[open], dialog[open]") &&
             !(
               keyboardInteraction &&
               focused?.matches(
@@ -464,7 +470,6 @@ export default function WatchRoom({
           let playback = signedPlaybackRef.current;
           if (
             !playback ||
-            playback.source !== streamUrl ||
             (playback.expiresAt !== null && playback.expiresAt - Date.now() < 5 * 60 * 1000)
           ) {
             const signed = await apiFetch("/api/stream-playback", {
@@ -474,7 +479,7 @@ export default function WatchRoom({
             if (!signed.ok) throw new Error("Could not authorize stream playback");
             // SAFETY: The authenticated endpoint returns the matching StreamPlayback contract.
             const result = (await signed.json()) as StreamPlayback;
-            playback = { ...result, source: streamUrl };
+            playback = result;
             signedPlaybackRef.current = playback;
           }
           if (stopped) return;
@@ -517,7 +522,7 @@ export default function WatchRoom({
       request.abort();
       clearTimeout(timer);
     };
-  }, [streamUrl]);
+  }, [streamConfigured, streamInfoRequest]);
 
   useEffect(() => {
     let socket: WebSocket | undefined;
@@ -727,7 +732,8 @@ export default function WatchRoom({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || (!idlePlayback && (!streamUrl || streamOnline !== true))) return;
+    if (!video || (!idlePlayback && (!streamConfigured || !playbackUrl || streamOnline !== true)))
+      return;
     setPlayerStatus("loading");
     setIsBuffering(false);
     setAutoplayBlocked(false);
@@ -817,7 +823,7 @@ export default function WatchRoom({
       video.removeAttribute("src");
       video.load();
     };
-  }, [delaySeconds, streamOnline, streamUrl, playbackUrl, playbackAttempt, idlePlayback]);
+  }, [delaySeconds, streamOnline, streamConfigured, playbackUrl, playbackAttempt, idlePlayback]);
 
   useEffect(() => {
     if (idlePlayback) return;
@@ -854,7 +860,7 @@ export default function WatchRoom({
         setSyncLabel(correction.label);
     }, 1_000);
     return () => clearInterval(timer);
-  }, [delaySeconds, playerStatus, streamUrl, autoplayBlocked, idlePlayback]);
+  }, [delaySeconds, playerStatus, streamConfigured, autoplayBlocked, idlePlayback]);
 
   useEffect(() => {
     if (!showStats) return;
@@ -1068,7 +1074,7 @@ export default function WatchRoom({
               />
               {(streamOnline === null || playerStatus === "loading") &&
                 !idlePlayback &&
-                streamUrl &&
+                streamConfigured &&
                 !autoplayBlocked && (
                   <div className="stream-loading" role="status">
                     <AssetIcon name="carrot" />
@@ -1105,20 +1111,20 @@ export default function WatchRoom({
                 </div>
               )}
               {playerStatus !== "unsupported" &&
-                (!streamUrl ||
+                (!streamConfigured ||
                   (streamOnline === false && !idlePlayback) ||
                   playerStatus === "error") && (
                   <div className="stream-error" role="status">
                     <span>
-                      {!streamUrl
-                        ? "Set STREAM_URL to connect the screen."
+                      {!streamConfigured
+                        ? "Playback is not connected yet."
                         : playbackAccessError
                           ? playbackAccessMessage
                           : streamOnline === false && !idlePlayback
                             ? "The stream is offline. Reconnecting when it returns."
                             : "Couldn't play the video. Reconnecting…"}
                     </span>
-                    {streamUrl && (streamOnline === true || idlePlayback) && (
+                    {streamConfigured && (streamOnline === true || idlePlayback) && (
                       <button
                         className="stream-action"
                         type="button"
@@ -1206,6 +1212,15 @@ export default function WatchRoom({
                   <span className="stream-title" title={relayStatus.title ?? "TorBox stream"}>
                     <AssetIcon name="carrot" />
                     <span>{relayStatus.title ?? "TorBox stream"}</span>
+                    {runtimeMinutes !== null && (
+                      <span className="stream-runtime">
+                        <UiIcon name="clock" />
+                        <span>
+                          {runtimeMinutes >= 60 && `${Math.floor(runtimeMinutes / 60)}h `}
+                          {runtimeMinutes % 60}m<span className="sr-only"> runtime</span>
+                        </span>
+                      </span>
+                    )}
                   </span>
                 )}
                 <span className="sync-copy">{syncLabel}</span>
@@ -1322,6 +1337,12 @@ export default function WatchRoom({
                   <UiIcon name="fullscreen" />
                   <span>{fullscreen ? "Exit fullscreen" : "Fullscreen"}</span>
                 </button>
+                {currentUser.admin && (
+                  <StreamBackstage
+                    status={relayStatus}
+                    onStreamChange={() => setStreamInfoRequest((request) => request + 1)}
+                  />
+                )}
                 <details className="player-menu" ref={playerMenuRef} name="bunny-popover">
                   <summary aria-label="More player options" title="More player options">
                     <UiIcon name="gear" />
@@ -1355,7 +1376,7 @@ export default function WatchRoom({
                     <button type="button" aria-pressed={shortcutsEnabled} onClick={toggleShortcuts}>
                       Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
                     </button>
-                    {streamUrl && (
+                    {playbackUrl && streamOnline === true && (
                       <a href={playbackUrl} target="_blank" rel="noreferrer">
                         Open in own player ↗<small>May not stay in sync</small>
                       </a>

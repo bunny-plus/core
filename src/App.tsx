@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 
 import WatchRoom, { type User } from "./WatchRoom";
-import StreamControl from "./StreamControl";
 import CinemaDiary from "./CinemaDiary";
 import CinemaTicketAdmin from "./CinemaTicketAdmin";
 import { AssetIcon, UiIcon } from "./Icons";
@@ -11,7 +10,7 @@ import { useDismissibleDetails } from "./useDismissibleDetails";
 
 type Session = {
   delaySeconds: number;
-  streamUrl: string;
+  streamConfigured?: boolean;
   user: User;
 };
 
@@ -148,9 +147,13 @@ export default function App() {
     session.user.admin || session.user.permissions?.includes("chloe.chat") === true;
   const page =
     path === "/stream" ? (
-      <WatchRoom {...session} currentUser={session.user} />
+      <WatchRoom
+        {...session}
+        streamConfigured={session.streamConfigured ?? true}
+        currentUser={session.user}
+      />
     ) : path === "/admin" && canManageStream ? (
-      <AdminPage />
+      <AdminPage admin={session.user.admin} />
     ) : path === "/chloe" && canChatChloe ? (
       <ChloePage />
     ) : path === "/diary" ? (
@@ -243,7 +246,7 @@ function AdminPouch({ locked = false }: { locked?: boolean }) {
       <span className="pouch-bow" aria-hidden="true" />
       <div className="pouch-label">
         <h2>admin burrow</h2>
-        <p>{locked ? "staff only" : "stream & tickets"}</p>
+        <p>{locked ? "staff only" : "cinema tickets"}</p>
       </div>
     </>
   );
@@ -370,14 +373,23 @@ function ChloePage() {
   );
 }
 
-function AdminPage() {
+function AdminPage({ admin }: { admin: boolean }) {
   return (
     <section className="admin-page">
       <div className="admin-page-heading">
         <UiIcon name="wrench" />
-        <h1>Stream control</h1>
+        <h1>Admin burrow</h1>
       </div>
-      <StreamControl />
+      {admin && (
+        <Link className="admin-stream-link" to="/stream#backstage">
+          <UiIcon name="broadcast" />
+          <span>
+            <strong>Stream control moved into the cinema</strong>
+            <small>Open the backstage popup on the stream page.</small>
+          </span>
+          <span aria-hidden="true">↗</span>
+        </Link>
+      )}
       <CinemaTicketAdmin />
     </section>
   );

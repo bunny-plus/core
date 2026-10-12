@@ -10,7 +10,13 @@ const qualities = [
   { label: "Up to 480p", value: "480p" },
 ] as const;
 
-export default function RestreamControl({ onStarted }: { onStarted: (title: string) => void }) {
+export default function RestreamControl({
+  onStarted,
+  onBusyChange,
+}: {
+  onStarted: (title: string) => void;
+  onBusyChange: (busy: boolean) => void;
+}) {
   const [source, setSource] = useState("");
   const [quality, setQuality] = useState("best");
   const [busy, setBusy] = useState(false);
@@ -19,6 +25,7 @@ export default function RestreamControl({ onStarted }: { onStarted: (title: stri
   async function start(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    onBusyChange(true);
     setMessage(null);
     try {
       const result = await apiJson<{ detail: string; title: string }>("/api/admin/restream/start", {
@@ -32,6 +39,7 @@ export default function RestreamControl({ onStarted }: { onStarted: (title: stri
       setMessage(error instanceof Error ? error.message : "Could not start the restream");
     } finally {
       setBusy(false);
+      onBusyChange(false);
     }
   }
 
@@ -54,12 +62,17 @@ export default function RestreamControl({ onStarted }: { onStarted: (title: stri
             autoComplete="off"
             required
             spellCheck={false}
+            disabled={busy}
             onChange={(event) => setSource(event.target.value)}
           />
         </label>
         <label className="restream-quality">
           <span>Input quality</span>
-          <select value={quality} onChange={(event) => setQuality(event.target.value)}>
+          <select
+            value={quality}
+            disabled={busy}
+            onChange={(event) => setQuality(event.target.value)}
+          >
             {qualities.map((option) => (
               <option value={option.value} key={option.value}>
                 {option.label}
@@ -71,7 +84,11 @@ export default function RestreamControl({ onStarted }: { onStarted: (title: stri
           {busy ? "Connecting..." : "Start restream"}
         </button>
       </form>
-      {message && <p className="stream-message">{message}</p>}
+      {message && (
+        <p className="stream-message" role="status">
+          {message}
+        </p>
+      )}
     </div>
   );
 }

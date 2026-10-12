@@ -16,6 +16,7 @@ type AssetName =
 type IconName =
   | "broadcast"
   | "chat"
+  | "clock"
   | "disc"
   | "film"
   | "fullscreen"
@@ -104,6 +105,12 @@ export function UiIcon({ className = "", name }: { className?: string; name: Ico
     ),
     chat: (
       <path d="M4 5.5A3.5 3.5 0 0 1 7.5 2h9A3.5 3.5 0 0 1 20 5.5v7a3.5 3.5 0 0 1-3.5 3.5H10l-5.5 4v-4.6A3.5 3.5 0 0 1 4 13.5v-8Z" />
+    ),
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </>
     ),
     disc: (
       <>

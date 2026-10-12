@@ -7,6 +7,7 @@ import {
   jellyfinLibrary,
   jellyfinOptions,
   jellyfinRelay,
+  jellyfinRuntime,
   isJellyfinPlayback,
 } from "./jellyfin";
 
@@ -203,6 +204,43 @@ test("Jellyfin playback options preserve stream indexes, media versions and pref
     [1, 3],
   );
   assert.ok(!JSON.stringify(options).includes("Path"));
+});
+
+test("runtime uses the selected Jellyfin version and falls back to valid item metadata", async (context) => {
+  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  const cases = [
+    {
+      item: { ...movie, MediaSources: [{ Id: sourceId, RunTimeTicks: 57_000_000_000 }] },
+      seconds: 5700,
+    },
+    {
+      item: { ...movie, MediaSources: [{ Id: "other-version", RunTimeTicks: 57_000_000_000 }] },
+      seconds: 5400,
+    },
+    { item: { ...movie, MediaSources: [{ Id: sourceId, RunTimeTicks: -1 }] }, seconds: 5400 },
+    { item: { ...movie, RunTimeTicks: null }, seconds: null },
+    { item: { ...movie, RunTimeTicks: 0 }, seconds: null },
+    { item: { ...movie, RunTimeTicks: -10_000_000 }, seconds: null },
+  ];
+  let index = 0;
+  context.mock.method(
+    globalThis,
+    "fetch",
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      assert.equal(url.pathname, "/jellyfin/Items");
+      assert.equal(url.searchParams.get("Ids"), itemId);
+      assert.equal(url.searchParams.get("Fields"), "MediaSources");
+      assert.equal(
+        new Headers(init?.headers).get("Authorization"),
+        `MediaBrowser Token="${env.JELLYFIN_API_KEY}"`,
+      );
+      return Response.json({ Items: [cases[index].item] });
+    },
+  );
+  for (; index < cases.length; index++) {
+    assert.equal(await jellyfinRuntime(env, playback), cases[index].seconds);
+  }
 });
 
 test("Jellyfin relay resolves title and URL on the server and forwards the selected tracks", async (context) => {

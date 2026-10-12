@@ -26,7 +26,7 @@ type TorBoxTorrent = {
   size: number;
 };
 
-type ControllerStatus = {
+export type StreamStatus = {
   running: boolean;
   title: string | null;
 };
@@ -71,14 +71,19 @@ function trackLabel(track: MediaTrack, fallback: string) {
   return `${name}${details ? ` (${details})` : ""}${track.default ? " · default" : ""}`;
 }
 
-export default function StreamControl() {
+export default function StreamControl({
+  status,
+  onStreamChange,
+}: {
+  status: StreamStatus | null;
+  onStreamChange: () => void;
+}) {
   const [source, setSource] = useState<"discover" | "jellyfin" | "restream" | "torbox">("jellyfin");
   const [torrents, setTorrents] = useState<TorBoxTorrent[]>([]);
-  const [status, setStatus] = useState<ControllerStatus | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
-  const [jellyfinBusy, setJellyfinBusy] = useState(false);
+  const [sourceBusy, setSourceBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [torboxError, setTorboxError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ file: TorBoxFile; torrent: TorBoxTorrent } | null>(
@@ -88,16 +93,6 @@ export default function StreamControl() {
   const [audioIndex, setAudioIndex] = useState(0);
   const [subtitleIndex, setSubtitleIndex] = useState(-1);
   const [resolutionIndex, setResolutionIndex] = useState(-1);
-
-  useEffect(() => {
-    const request = new AbortController();
-    void apiJson<ControllerStatus>("/api/admin/stream/status", { signal: request.signal })
-      .then((result) => {
-        if (!request.signal.aborted) setStatus(result);
-      })
-      .catch(() => {});
-    return () => request.abort();
-  }, []);
 
   useEffect(() => {
     if (source !== "torbox") return;
@@ -174,7 +169,7 @@ export default function StreamControl() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      setStatus({ running: true, title: selected.file.short_name || selected.file.name });
+      onStreamChange();
       setMessage(result.detail);
       setSelected(null);
       setOptions(null);
@@ -190,7 +185,7 @@ export default function StreamControl() {
     setMessage(null);
     try {
       await apiJson("/api/admin/stream/stop", { method: "POST" });
-      setStatus({ running: false, title: null });
+      onStreamChange();
       setMessage("Stream stopped");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not stop stream");
@@ -200,7 +195,7 @@ export default function StreamControl() {
   }
 
   return (
-    <section className="stream-modal admin-stream-panel" aria-labelledby="stream-control-title">
+    <section className="stream-modal backstage-controls" aria-labelledby="stream-control-title">
       <h2 id="stream-control-title" className="sr-only">
         Stream source
       </h2>
@@ -209,15 +204,11 @@ export default function StreamControl() {
         <div className="current-stream">
           <div>
             <i />
-            <span>Now relaying</span>
+            <span>On air</span>
             <strong>{status.title || "Room stream"}</strong>
           </div>
-          <button
-            type="button"
-            disabled={busy !== null || jellyfinBusy}
-            onClick={() => void stop()}
-          >
-            {busy === "stop" ? "Stopping..." : "Stop"}
+          <button type="button" disabled={busy !== null || sourceBusy} onClick={() => void stop()}>
+            {busy === "stop" ? "Stopping..." : "Stop stream"}
           </button>
         </div>
       )}
@@ -226,7 +217,7 @@ export default function StreamControl() {
         {/*
         <button
           className={source === "torbox" ? "active" : ""}
-          disabled={jellyfinBusy}
+          disabled={sourceBusy || busy !== null}
           type="button"
           aria-pressed={source === "torbox"}
           onClick={() => setSource("torbox")}
@@ -239,7 +230,7 @@ export default function StreamControl() {
         </button>
         <button
           className={source === "discover" ? "active" : ""}
-          disabled={jellyfinBusy}
+          disabled={sourceBusy || busy !== null}
           type="button"
           aria-pressed={source === "discover"}
           onClick={() => setSource("discover")}
@@ -253,23 +244,29 @@ export default function StreamControl() {
         */}
         <button
           className={source === "restream" ? "active" : ""}
-          disabled={jellyfinBusy}
+          disabled={sourceBusy || busy !== null}
           type="button"
           aria-pressed={source === "restream"}
           onClick={() => setSource("restream")}
         >
           <UiIcon name="broadcast" />
-          <strong>Restream</strong>
+          <span>
+            <strong>Restream</strong>
+            <small>YouTube + Twitch</small>
+          </span>
         </button>
         <button
           className={source === "jellyfin" ? "active" : ""}
-          disabled={jellyfinBusy || busy !== null}
+          disabled={sourceBusy || busy !== null}
           type="button"
           aria-pressed={source === "jellyfin"}
           onClick={() => setSource("jellyfin")}
         >
           <UiIcon name="server" />
-          <strong>Jellyfin</strong>
+          <span>
+            <strong>Jellyfin</strong>
+            <small>Movies + shows</small>
+          </span>
         </button>
       </div>
 
@@ -436,17 +433,18 @@ export default function StreamControl() {
       )}
       {source === "restream" && (
         <RestreamControl
-          onStarted={(title) => {
-            setStatus({ running: true, title });
+          onBusyChange={setSourceBusy}
+          onStarted={() => {
+            onStreamChange();
             setMessage(null);
           }}
         />
       )}
       {source === "jellyfin" && (
         <JellyfinControl
-          onBusyChange={setJellyfinBusy}
-          onStarted={(title) => {
-            setStatus({ running: true, title });
+          onBusyChange={setSourceBusy}
+          onStarted={() => {
+            onStreamChange();
             setMessage(null);
           }}
         />

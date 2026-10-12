@@ -138,9 +138,9 @@ test("slow connection disables HLS latency seeking and keeps buffer memory bound
   assert.deepEqual(config, playbackConfig(6, false));
 });
 
-test("Cloudflare low-latency URLs enable LL-HLS without speeding up playback", () => {
+test("low-latency playback URLs enable LL-HLS without speeding up playback", () => {
   for (const protocol of ["llhls", "llhlsbeta"]) {
-    const url = `https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8?protocol=${protocol}`;
+    const url = `https://playback.test/live/manifest/video.m3u8?protocol=${protocol}`;
     for (const slow of [false, true]) {
       const config = playbackConfig(6, slow, url);
       assert.equal(config.lowLatencyMode, true);
@@ -149,11 +149,11 @@ test("Cloudflare low-latency URLs enable LL-HLS without speeding up playback", (
     }
   }
   assert.equal(
-    playbackConfig(
-      6,
-      false,
-      "https://customer-test.cloudflarestream.com/live-input/manifest/video.m3u8",
-    ).lowLatencyMode,
+    playbackConfig(6, false, "https://playback.test/live/manifest/video.m3u8").lowLatencyMode,
     false,
   );
+});
+
+test("relative playback URLs support low-latency playback", () => {
+  assert.equal(playbackConfig(6, false, "/api/playback.m3u8?protocol=llhls").lowLatencyMode, true);
 });

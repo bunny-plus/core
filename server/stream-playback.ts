@@ -13,6 +13,7 @@ type StreamEnvironment = Pick<
 >;
 
 const playbackCache = new TtlCache(50);
+export const streamApiBaseUrl = "https://api.cloudflare.com/client/v4/accounts";
 
 function isObject(value: JsonValue): value is JsonObject {
   return value !== null && !Array.isArray(value) && typeof value === "object";
@@ -31,9 +32,13 @@ function liveInput(url: URL) {
     url.password ||
     !match
   ) {
-    throw new Error("Signed playback requires a Cloudflare Stream HLS URL with a live input ID");
+    throw new Error("Signed playback requires a private HLS URL with a live input ID");
   }
   return match[1];
+}
+
+export function streamInputId(source: string) {
+  return liveInput(new URL(source));
 }
 
 export function validateStreamSigning(env: StreamEnvironment) {
@@ -41,11 +46,16 @@ export function validateStreamSigning(env: StreamEnvironment) {
   const key = Boolean(
     env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK,
   );
-  if (!api && !key) return;
-  liveInput(new URL(env.STREAM_URL));
+  const url = new URL(env.STREAM_URL);
+  if (!api && !key) {
+    if (url.hostname.endsWith(".cloudflarestream.com"))
+      throw new Error("Private playback requires signing credentials");
+    return;
+  }
+  liveInput(url);
   if (api) {
     if (!env.CLOUDFLARE_STREAM_ACCOUNT_ID || !env.CLOUDFLARE_STREAM_API_TOKEN)
-      throw new Error("Cloudflare Stream API signing requires both account ID and API token");
+      throw new Error("Playback API signing requires both account ID and API token");
     if (!/^[a-f\d]{32}$/i.test(env.CLOUDFLARE_STREAM_ACCOUNT_ID))
       throw new Error("CLOUDFLARE_STREAM_ACCOUNT_ID must be a 32-character account ID");
     if (!/^[\x21-\x7e]{20,512}$/.test(env.CLOUDFLARE_STREAM_API_TOKEN))
@@ -53,9 +63,7 @@ export function validateStreamSigning(env: StreamEnvironment) {
   }
   if (key) {
     if (!env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
-      throw new Error(
-        "Cloudflare Stream local signing requires both signing key ID and private JWK",
-      );
+      throw new Error("Local playback signing requires both signing key ID and private JWK");
     if (!/^[a-z\d_-]{1,128}$/i.test(env.CLOUDFLARE_STREAM_SIGNING_KEY_ID))
       throw new Error("CLOUDFLARE_STREAM_SIGNING_KEY_ID is invalid");
   }
@@ -114,7 +122,7 @@ async function signLocally(inputId: string, keyId: string, encodedKey: string, e
     const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoder.encode(message));
     return `${message}.${base64Url(new Uint8Array(signature))}`;
   } catch {
-    throw new Error("Cloudflare Stream signing key is invalid");
+    throw new Error("Playback signing key is invalid");
   }
 }
 
@@ -144,7 +152,7 @@ export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlay
       );
     } else {
       const { data } = await fetchJson<JsonValue>(
-        `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`,
+        `${streamApiBaseUrl}/${env.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`,
         {
           body: JSON.stringify({ exp: expires }),
           headers: {
@@ -153,7 +161,7 @@ export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlay
           },
           method: "POST",
           maxBytes: 32_000,
-          name: "Cloudflare Stream playback",
+          name: "Playback authorization",
           timeoutMs: 5_000,
         },
       );
@@ -165,7 +173,7 @@ export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlay
         !isString(data.result.token) ||
         !/^[a-z\d_-]+\.[a-z\d_-]+\.[a-z\d_-]+$/i.test(data.result.token)
       )
-        throw new UpstreamError("Cloudflare Stream returned an invalid playback token");
+        throw new UpstreamError("Playback service returned an invalid playback token");
       token = data.result.token;
     }
     url.pathname = `/${token}/manifest/video.m3u8`;
