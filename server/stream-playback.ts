@@ -6,8 +6,8 @@ import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "./ups
 type StreamEnvironment = Pick<
   Env,
   | "STREAM_URL"
-  | "CLOUDFLARE_STREAM_ACCOUNT_ID"
-  | "CLOUDFLARE_STREAM_API_TOKEN"
+  | "CF_ACCOUNT_ID"
+  | "CF_TOKEN"
   | "CLOUDFLARE_STREAM_SIGNING_KEY_ID"
   | "CLOUDFLARE_STREAM_SIGNING_KEY_JWK"
 >;
@@ -42,7 +42,7 @@ export function streamInputId(source: string) {
 }
 
 export function validateStreamSigning(env: StreamEnvironment) {
-  const api = Boolean(env.CLOUDFLARE_STREAM_ACCOUNT_ID || env.CLOUDFLARE_STREAM_API_TOKEN);
+  const api = Boolean(env.CF_ACCOUNT_ID || env.CF_TOKEN);
   const key = Boolean(
     env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK,
   );
@@ -54,12 +54,12 @@ export function validateStreamSigning(env: StreamEnvironment) {
   }
   liveInput(url);
   if (api) {
-    if (!env.CLOUDFLARE_STREAM_ACCOUNT_ID || !env.CLOUDFLARE_STREAM_API_TOKEN)
+    if (!env.CF_ACCOUNT_ID || !env.CF_TOKEN)
       throw new Error("Playback API signing requires both account ID and API token");
-    if (!/^[a-f\d]{32}$/i.test(env.CLOUDFLARE_STREAM_ACCOUNT_ID))
-      throw new Error("CLOUDFLARE_STREAM_ACCOUNT_ID must be a 32-character account ID");
-    if (!/^[\x21-\x7e]{20,512}$/.test(env.CLOUDFLARE_STREAM_API_TOKEN))
-      throw new Error("CLOUDFLARE_STREAM_API_TOKEN must be a valid API token");
+    if (!/^[a-f\d]{32}$/i.test(env.CF_ACCOUNT_ID))
+      throw new Error("CF_ACCOUNT_ID must be a 32-character account ID");
+    if (!/^[\x21-\x7e]{20,512}$/.test(env.CF_TOKEN))
+      throw new Error("CF_TOKEN must be a valid API token");
   }
   if (key) {
     if (!env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
@@ -128,13 +128,13 @@ async function signLocally(inputId: string, keyId: string, encodedKey: string, e
 
 export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlayback> {
   validateStreamSigning(env);
-  if (!env.CLOUDFLARE_STREAM_API_TOKEN && !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
+  if (!env.CF_TOKEN && !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
     return { expiresAt: null, url: env.STREAM_URL };
 
   const cacheKey = JSON.stringify([
     env.STREAM_URL,
-    env.CLOUDFLARE_STREAM_ACCOUNT_ID,
-    env.CLOUDFLARE_STREAM_API_TOKEN,
+    env.CF_ACCOUNT_ID,
+    env.CF_TOKEN,
     env.CLOUDFLARE_STREAM_SIGNING_KEY_ID,
     env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK,
   ]);
@@ -152,11 +152,11 @@ export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlay
       );
     } else {
       const { data } = await fetchJson<JsonValue>(
-        `${streamApiBaseUrl}/${env.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`,
+        `${streamApiBaseUrl}/${env.CF_ACCOUNT_ID}/stream/${inputId}/token`,
         {
           body: JSON.stringify({ exp: expires }),
           headers: {
-            Authorization: `Bearer ${env.CLOUDFLARE_STREAM_API_TOKEN}`,
+            Authorization: `Bearer ${env.CF_TOKEN}`,
             "Content-Type": "application/json",
           },
           method: "POST",

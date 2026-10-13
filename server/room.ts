@@ -14,6 +14,8 @@ export type RoomMember = {
 };
 
 type RoomSession = {
+  pending: Promise<void>;
+  queuedMessages: number;
   authorizationExpires: number;
   reauthorize?: () => Promise<{ member: RoomMember; expires: number } | null>;
   connectionId: string;
@@ -105,26 +107,46 @@ export class WatchRoom {
       member,
       messageCount: 0,
       messageWindowStarted: now,
+      pending: Promise.resolve(),
+      queuedMessages: 0,
+    });
+    const session = this.sessions.get(socket)!;
+    session.pending = this.welcome(socket, member).catch(() => {
+      socket.close(4002, "Room history unavailable");
     });
     socket.on("message", (value, isBinary) => {
       if (isBinary) {
         socket.close(1003, "Text messages only");
         return;
       }
-      this.message(socket, value.toString());
+      if (session.queuedMessages >= maxMessagesPerWindow) {
+        socket.close(4008, "Room message limit exceeded");
+        return;
+      }
+      session.queuedMessages++;
+      session.pending = session.pending
+        .then(() => this.message(socket, value.toString()))
+        .finally(() => {
+          session.queuedMessages--;
+        });
     });
     socket.on("close", () => this.disconnect(socket));
     socket.on("error", () => this.disconnect(socket));
+  }
+
+  private async welcome(socket: WebSocket, member: RoomMember) {
+    const chats = await this.chatHistory.all();
+    if (!this.sessions.has(socket)) return;
     this.send(
       socket,
       JSON.stringify({
-        chats: this.chatHistory.all(),
+        chats,
         members: this.members(),
         serverTime: Date.now(),
         type: "welcome",
       }),
     );
-    this.sendCinemaProgress(socket, member.id);
+    await this.sendCinemaProgress(socket, member.id);
     this.broadcastPresence();
   }
 
@@ -160,7 +182,7 @@ export class WatchRoom {
     }
   }
 
-  private message(socket: WebSocket, value: string) {
+  private async message(socket: WebSocket, value: string) {
     try {
       const session = this.sessions.get(socket);
       if (!session) return;
@@ -187,7 +209,7 @@ export class WatchRoom {
       if (message.type === "watching") {
         session.lastSeen = now;
         try {
-          const progress = this.cinema?.watching(
+          const progress = await this.cinema?.watching(
             session.member.id,
             session.connectionId,
             message.screeningId,
@@ -232,7 +254,7 @@ export class WatchRoom {
           x: 18 + Math.round(Math.random() * 64),
         };
         try {
-          this.chatHistory.append(chat);
+          await this.chatHistory.append(chat);
         } catch (error) {
           console.error("Could not persist room chat", error);
           return;
@@ -279,9 +301,9 @@ export class WatchRoom {
     ];
   }
 
-  private sendCinemaProgress(socket: WebSocket, memberId: string) {
+  private async sendCinemaProgress(socket: WebSocket, memberId: string) {
     try {
-      const progress = this.cinema?.progress(memberId);
+      const progress = await this.cinema?.progress(memberId);
       if (progress) this.send(socket, JSON.stringify({ type: "cinema-progress", progress }));
     } catch (error) {
       console.error("Could not read cinema watch progress", error);

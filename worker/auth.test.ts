@@ -5,8 +5,7 @@ import { AuthSessions } from "../server/auth-sessions";
 import { handleRequest, authenticateRoomMember, type Env } from "./index";
 import { discordCheckInterval } from "./discord";
 import { createSession, readCookie, readSession } from "./session";
-
-const day = 24 * 60 * 60 * 1_000;
+const day = 24 * 60 * 60 * 1000;
 const viewer = {
   admin: true,
   avatar: null,
@@ -96,18 +95,18 @@ test("Discord login creates a persistent opaque session without exposing OAuth c
   );
   assert.ok(token);
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);
-  assert.equal(store.read(token)?.viewer.admin, true);
+  assert.equal((await store.read(token))?.viewer.admin, true);
   const session = await handleRequest(request(token), env);
   assert.equal(session.status, 200);
   assert.doesNotMatch(await session.text(), /access-private|refresh-private|expiresAt/);
 });
 
 test("returning after twenty-nine days refreshes Discord once and renews the sign-in", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   context.mock.timers.tick(29 * day);
   let refreshes = 0;
   let membershipChecks = 0;
@@ -141,16 +140,16 @@ test("returning after twenty-nine days refreshes Discord once and renews the sig
   );
   assert.equal(refreshes, 1);
   assert.equal(membershipChecks, 1);
-  assert.equal(store.read(token)?.viewer.expires, Date.now() + 30 * day);
-  assert.equal(store.read(token)?.credentials.refreshToken, "new-refresh");
+  assert.equal((await store.read(token))?.viewer.expires, Date.now() + 30 * day);
+  assert.equal((await store.read(token))?.credentials?.refreshToken, "new-refresh");
 });
 
 test("hourly checks remove obsolete admin permissions from API and room authorization", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   let calls = 0;
   context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
     calls += 1;
@@ -161,7 +160,7 @@ test("hourly checks remove obsolete admin permissions from API and room authoriz
   context.mock.timers.tick(discordCheckInterval);
   const response = await handleRequest(request(token), env);
   assert.deepEqual((await response.json()).user.permissions, []);
-  assert.equal(store.read(token)?.viewer.admin, false);
+  assert.equal((await store.read(token))?.viewer.admin, false);
   assert.equal((await handleRequest(request(token, "/api/admin/jellyfin/items"), env)).status, 403);
   assert.equal(
     (await authenticateRoomMember(request(token, "/api/room"), env))?.member.admin,
@@ -171,11 +170,11 @@ test("hourly checks remove obsolete admin permissions from API and room authoriz
 });
 
 test("leaving the Discord guild revokes the session instead of renewing it", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   context.mock.timers.tick(discordCheckInterval);
   context.mock.method(globalThis, "fetch", async (input: string | URL | Request) =>
     String(input).endsWith("/users/@me")
@@ -185,17 +184,17 @@ test("leaving the Discord guild revokes the session instead of renewing it", asy
   const response = await handleRequest(request(token), env);
   assert.equal(response.status, 401);
   assert.equal(response.headers.get("Set-Cookie"), null);
-  assert.equal(store.read(token), null);
+  assert.equal(await store.read(token), null);
   assert.equal(await authenticateRoomMember(request(token, "/api/room"), env), null);
 });
 
 test("Discord failures preserve the cookie and rotated credentials for a later retry", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
-  const originalExpiry = store.read(token)?.viewer.expires;
+  const token = await store.create(viewer, credentials());
+  const originalExpiry = (await store.read(token))?.viewer.expires;
   context.mock.timers.tick(8 * day);
   let unavailable = true;
   let refreshes = 0;
@@ -220,39 +219,39 @@ test("Discord failures preserve the cookie and rotated credentials for a later r
   const failed = await handleRequest(request(token), env);
   assert.equal(failed.status, 503);
   assert.equal(failed.headers.get("Set-Cookie"), null);
-  assert.equal(store.read(token)?.viewer.expires, originalExpiry);
-  assert.equal(store.read(token)?.credentials.refreshToken, "rotated-refresh");
+  assert.equal((await store.read(token))?.viewer.expires, originalExpiry);
+  assert.equal((await store.read(token))?.credentials?.refreshToken, "rotated-refresh");
   unavailable = false;
   assert.equal((await handleRequest(request(token), env)).status, 200);
   assert.equal(refreshes, 1);
 });
 
 test("revoked Discord refresh grants require a fresh login", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   context.mock.timers.tick(8 * day);
   context.mock.method(globalThis, "fetch", async () =>
     Response.json({ error: "invalid_grant" }, { status: 400 }),
   );
   const response = await handleRequest(request(token), env);
   assert.equal(response.status, 401);
-  assert.equal(store.read(token), null);
+  assert.equal(await store.read(token), null);
 });
 
 test("logout requires the app origin and revokes copied cookies on the server", async (context) => {
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   assert.equal(
     (await handleRequest(request(token, "/api/logout", "POST", "https://foreign.test"), env))
       .status,
     403,
   );
-  assert.ok(store.read(token));
+  assert.ok(await store.read(token));
   const response = await handleRequest(request(token, "/api/logout", "POST"), env);
   assert.equal(response.status, 204);
   assert.match(response.headers.get("Set-Cookie") ?? "", /Max-Age=0/);
@@ -260,11 +259,11 @@ test("logout requires the app origin and revokes copied cookies on the server", 
 });
 
 test("expired sessions cannot be renewed and legacy signed cookies retain their expiry", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const expired = store.create(viewer, credentials());
+  const expired = await store.create(viewer, credentials());
   const legacy = await createSession(viewer, env.SESSION_SECRET);
   const original = await readSession(request(legacy), env.SESSION_SECRET);
   assert.ok(original);
@@ -278,11 +277,11 @@ test("expired sessions cannot be renewed and legacy signed cookies retain their 
 });
 
 test("a Discord check already in flight cannot restore a logged-out session", async (context) => {
-  context.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  context.mock.timers.enable({ apis: ["Date"], now: 1800000000000 });
   const store = new AuthSessions(":memory:");
   context.after(() => store.close());
   const env = environment(store);
-  const token = store.create(viewer, credentials());
+  const token = await store.create(viewer, credentials());
   context.mock.timers.tick(discordCheckInterval);
   let release = () => {};
   let started = () => {};
@@ -304,5 +303,5 @@ test("a Discord check already in flight cannot restore a logged-out session", as
   const response = await refreshing;
   assert.equal(response.status, 401);
   assert.equal(response.headers.get("Set-Cookie"), null);
-  assert.equal(store.read(token), null);
+  assert.equal(await store.read(token), null);
 });

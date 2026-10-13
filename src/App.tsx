@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router";
 import WatchRoom, { type User } from "./WatchRoom";
 import CinemaDiary from "./CinemaDiary";
 import CinemaTicketAdmin from "./CinemaTicketAdmin";
+import DiscordLogin from "./DiscordLogin";
 import { AssetIcon, UiIcon } from "./Icons";
 import { apiFetch, apiUrl } from "./api";
 import { useDismissibleDetails } from "./useDismissibleDetails";
@@ -15,6 +16,20 @@ type Session = {
 };
 
 export default function App() {
+  const route = useLocation();
+  if (route.pathname.replace(/\/$/, "") === "/login") {
+    return (
+      <main className="login-shell">
+        <FloatingDecorations />
+        <DiscordLogin key={route.hash} />
+        <VersionBadge />
+      </main>
+    );
+  }
+  return <BunnyApp />;
+}
+
+function BunnyApp() {
   const route = useLocation();
   const path = route.pathname.replace(/\/$/, "") || "/";
   const previousLocation = useRef(route.key);

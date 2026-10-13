@@ -1,5 +1,5 @@
 import { readCookie, readSession, sessionCookie, type Viewer } from "./session";
-import { discordViewer, exchangeDiscordToken, persistentViewer } from "./discord";
+import { discordBotViewer, discordViewer, exchangeDiscordToken, persistentViewer } from "./discord";
 import type { AuthSessions } from "../server/auth-sessions";
 import { TtlCache } from "../server/cache";
 import type { CinemaDiary, CinemaImage } from "../server/cinema";
@@ -28,15 +28,18 @@ export interface Env {
   AUTH_SESSIONS?: AuthSessions;
   CHAT_DB_PATH?: string;
   CINEMA_DIARY?: CinemaDiary;
-  CLOUDFLARE_STREAM_ACCOUNT_ID?: string;
-  CLOUDFLARE_STREAM_API_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  CF_TOKEN?: string;
   CLOUDFLARE_STREAM_SIGNING_KEY_ID?: string;
   CLOUDFLARE_STREAM_SIGNING_KEY_JWK?: string;
+  DISCORD_BOT_TOKEN?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   DISCORD_GUILD_ID: string;
   DISCORD_ROLE_PERMISSIONS: string;
   DEV_USER_JSON?: string;
+  D1_DATABASE_URL?: string;
+  D1_DATABASE_SECRET?: string;
   ENABLE_DEV_AUTH?: string;
   JELLYFIN_URL?: string;
   JELLYFIN_STREAM_URL?: string;
@@ -44,8 +47,6 @@ export interface Env {
   NODE_ENV?: string;
   SESSION_SECRET: string;
   STREAM_DELAY_SECONDS: string;
-  STREAM_RECORDING_CLEANUP_ACCOUNT_ID?: string;
-  STREAM_RECORDING_CLEANUP_API_TOKEN?: string;
   RELAY_CONTROLLER_SECRET?: string;
   RELAY_CONTROLLER_URL?: string;
   STREAM_CONTROLLER_SECRET?: string;
@@ -145,7 +146,7 @@ function ticketImage(input: JsonValue | undefined): CinemaImage | null {
   if (!["image/png", "image/jpeg", "image/webp"].includes(input.mimeType))
     throw new ClientError("Upload a PNG, JPEG, or WebP image", 400);
   if (input.data.length > Math.ceil(cinemaImageMaxBytes / 3) * 4)
-    throw new ClientError("Ticket images must be 2 MiB or smaller", 413);
+    throw new ClientError("Ticket images must be 1.9 MB or smaller", 413);
   if (!input.data || input.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(input.data))
     throw new ClientError("The uploaded image is not valid base64", 400);
   let decoded: string;
@@ -157,7 +158,7 @@ function ticketImage(input: JsonValue | undefined): CinemaImage | null {
   if (btoa(decoded) !== input.data)
     throw new ClientError("The uploaded image is not valid base64", 400);
   if (decoded.length > cinemaImageMaxBytes)
-    throw new ClientError("Ticket images must be 2 MiB or smaller", 413);
+    throw new ClientError("Ticket images must be 1.9 MB or smaller", 413);
   const data = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
   const validImage =
     (input.mimeType === "image/png" && hasSignature(data, [137, 80, 78, 71, 13, 10, 26, 10])) ||
@@ -219,7 +220,13 @@ function isStremioStream(stream: JsonValue): stream is StremioStream {
 }
 
 const cache = new TtlCache(500);
-const rateLimits = new Map<string, { count: number; started: number }>();
+const rateLimits = new Map<
+  string,
+  {
+    count: number;
+    started: number;
+  }
+>();
 let controllerQueue: Promise<void> = Promise.resolve();
 
 class ClientError extends Error {
@@ -290,7 +297,7 @@ async function viewerForRequest(request: Request, env: Env, metadata?: RequestMe
     return {
       admin: configured.admin ?? true,
       avatar: configured.avatar ?? null,
-      expires: Date.now() + 8 * 60 * 60 * 1_000,
+      expires: Date.now() + 8 * 60 * 60 * 1000,
       id: configured.id ?? "local-dev",
       name: configured.name ?? "Local Bunny",
       permissions: configured.permissions ?? ["admin", "stream.manage", "chloe.chat"],
@@ -303,9 +310,9 @@ async function viewerForRequest(request: Request, env: Env, metadata?: RequestMe
 async function torBox<T>(path: string, env: Env) {
   const { data: result } = await fetchJson<TorBoxResponse<T>>(`https://api.torbox.app${path}`, {
     headers: { Authorization: `Bearer ${env.TORBOX_API_KEY}` },
-    maxBytes: 4_000_000,
+    maxBytes: 4000000,
     name: "TorBox",
-    timeoutMs: 10_000,
+    timeoutMs: 10000,
   });
   if (result.success !== true) {
     throw new Error("TorBox request failed");
@@ -322,7 +329,7 @@ async function tmdb<T>(path: string, env: Env) {
   const { data } = await fetchJson<T>(`https://api.themoviedb.org/3${path}`, {
     headers: { Authorization: `Bearer ${env.TMDB_API_TOKEN}` },
     name: "TMDB",
-    timeoutMs: 10_000,
+    timeoutMs: 10000,
   });
   return data;
 }
@@ -378,14 +385,10 @@ async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
       "Content-Type": "application/json",
     },
     method,
-    maxBytes: 256_000,
+    maxBytes: 256000,
     name: "Stream controller",
     timeoutMs:
-      action === "jellyfin"
-        ? 90_000
-        : action === "probe" || action === "restream"
-          ? 30_000
-          : 10_000,
+      action === "jellyfin" ? 90000 : action === "probe" || action === "restream" ? 30000 : 10000,
   });
   if (!isControllerResponse(result)) throw new Error("Stream controller returned invalid data");
   return result;
@@ -416,7 +419,7 @@ async function probeStreamPlayback(env: Env): Promise<StreamPlaybackAvailability
         Origin: origin,
         Referer: `${origin}/`,
       },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(5000),
     });
     await response.body?.cancel();
     const result: StreamPlaybackAvailability = {
@@ -436,7 +439,7 @@ async function streamInfo(env: Env) {
       serializedController(async () => {
         const status = await controller(env, "GET").catch(() => null);
         try {
-          env.CINEMA_DIARY?.observe(status?.running === true && !status.error, status?.title);
+          await env.CINEMA_DIARY?.observe(status?.running === true && !status.error, status?.title);
         } catch (error) {
           console.error("Could not update cinema screening", error);
         }
@@ -454,7 +457,7 @@ async function streamInfo(env: Env) {
     const runtimeSeconds = playback
       ? await cachedData(
           `jellyfin-runtime:${env.JELLYFIN_URL}:${playback.itemId}:${playback.mediaSourceId}`,
-          3_600,
+          3600,
           () => jellyfinRuntime(env, playback),
         ).catch(() => null)
       : null;
@@ -464,7 +467,7 @@ async function streamInfo(env: Env) {
   });
   if (!env.CINEMA_DIARY) return info;
   try {
-    return { ...info, screening: env.CINEMA_DIARY.current() };
+    return { ...info, screening: await env.CINEMA_DIARY.current() };
   } catch (error) {
     console.error("Could not read cinema screening", error);
     return info;
@@ -480,10 +483,10 @@ async function mutateController(env: Env, body: JsonObject) {
           ["start", "restream", "jellyfin"].includes(String(body.action)) &&
           result.running === true
         )
-          env.CINEMA_DIARY?.start(
+          await env.CINEMA_DIARY?.start(
             result.title?.trim() || (isString(body.title) ? body.title : null),
           );
-        if (body.action === "stop" && result.running === false) env.CINEMA_DIARY?.stop();
+        if (body.action === "stop" && result.running === false) await env.CINEMA_DIARY?.stop();
       }
     } catch (error) {
       console.error("Could not update cinema screening", error);
@@ -499,13 +502,12 @@ function apiError(error: Error | null) {
     { status: error instanceof ClientError || error instanceof JellyfinError ? error.status : 502 },
   );
 }
-
-function rateLimit(viewer: Viewer, bucket: string, limit: number, windowMs = 60_000) {
+function rateLimit(viewer: Viewer, bucket: string, limit: number, windowMs = 60000) {
   const key = `${viewer.id}:${bucket}`;
   const now = Date.now();
   const current = rateLimits.get(key);
   if (!current || now - current.started >= windowMs) {
-    if (rateLimits.size > 5_000) {
+    if (rateLimits.size > 5000) {
       for (const [entryKey, entry] of rateLimits) {
         if (now - entry.started >= windowMs) rateLimits.delete(entryKey);
       }
@@ -515,7 +517,7 @@ function rateLimit(viewer: Viewer, bucket: string, limit: number, windowMs = 60_
   }
   current.count += 1;
   if (current.count <= limit) return null;
-  const retryAfter = Math.max(1, Math.ceil((current.started + windowMs - now) / 1_000));
+  const retryAfter = Math.max(1, Math.ceil((current.started + windowMs - now) / 1000));
   return Response.json(
     { error: "Too many requests" },
     { headers: { "Retry-After": String(retryAfter) }, status: 429 },
@@ -573,6 +575,7 @@ function mutationGuard(request: Request, env: Env, pathname: string) {
     return Response.json({ error: "Forbidden origin" }, { status: 403 });
   }
   const jsonRoutes = new Set([
+    "/api/login/discord",
     "/api/cinema/screening/ticket",
     "/api/cinema/screening/counting",
     "/api/admin/movies/add",
@@ -603,7 +606,7 @@ async function temporaryDownload(env: Env, torrentId: number, fileId: number) {
     `https://api.torbox.app/v1/api/torrents/requestdl?${query}`,
     {
       name: "TorBox download",
-      timeoutMs: 10_000,
+      timeoutMs: 10000,
     },
   );
   if (result.success !== true) throw new Error("Could not create TorBox download URL");
@@ -653,12 +656,60 @@ async function finishLogin(request: Request, env: Env) {
 
     if (!env.AUTH_SESSIONS) throw new Error("Session storage is unavailable");
     const previousToken = readCookie(request, "bp_session");
-    if (previousToken) env.AUTH_SESSIONS.revoke(previousToken);
-    const session = env.AUTH_SESSIONS.create(viewer, credentials);
+    if (previousToken) await env.AUTH_SESSIONS.revoke(previousToken);
+    const session = await env.AUTH_SESSIONS.create(viewer, credentials);
     return redirect(env.APP_URL, sessionCookie(session, undefined, isSecure(request)));
   } catch {
     return redirect(`${env.APP_URL.replace(/\/$/, "")}/?error=oauth`, oauthCookie("", request, 0));
   }
+}
+async function redeemDiscordLogin(request: Request, env: Env) {
+  const store = env.AUTH_SESSIONS;
+  if (!store || !env.DISCORD_BOT_TOKEN)
+    return Response.json(
+      { error: "Discord login is temporarily unavailable. Please try again." },
+      { status: 503 },
+    );
+  const body = await jsonObject(request);
+  if (!isString(body.token) || !/^[A-Za-z0-9_-]{43}$/.test(body.token))
+    return Response.json(
+      { error: "This login link is invalid. Run /login in Discord for a new one." },
+      { status: 400 },
+    );
+  const userId = await store.loginUser(body.token);
+  if (!userId)
+    return Response.json(
+      {
+        error:
+          "This login link has expired or was already used. Run /login in Discord for a new one.",
+      },
+      { status: 410 },
+    );
+  const viewer = await discordBotViewer(userId, env);
+  if (!viewer) {
+    await store.revokeLoginLink(body.token);
+    return Response.json(
+      { error: "Join Bunny's Discord and finish its membership checks before signing in." },
+      { status: 403 },
+    );
+  }
+  const session = await store.redeemLoginLink(body.token, viewer);
+  if (!session)
+    return Response.json(
+      {
+        error:
+          "This login link has expired or was already used. Run /login in Discord for a new one.",
+      },
+      { status: 410 },
+    );
+  const previousToken = readCookie(request, "bp_session");
+  if (previousToken) await store.revoke(previousToken);
+  return Response.json(
+    { ok: true },
+    {
+      headers: { "Set-Cookie": sessionCookie(session, undefined, isSecure(request)) },
+    },
+  );
 }
 
 export async function authenticateRoomMember(
@@ -686,6 +737,8 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
   if (url.pathname === "/auth/discord" && request.method === "GET") return beginLogin(request, env);
   if (url.pathname === "/auth/callback" && request.method === "GET")
     return finishLogin(request, env);
+  if (url.pathname === "/api/login/discord" && request.method === "POST")
+    return redeemDiscordLogin(request, env);
 
   if (url.pathname === "/api/session" && request.method === "GET") {
     const viewer = await viewerForRequest(request, env, metadata);
@@ -704,13 +757,13 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       },
     });
     const token = readCookie(request, "bp_session");
-    if (token && env.AUTH_SESSIONS?.renew(token))
+    if (token && (await env.AUTH_SESSIONS?.renew(token)))
       response.headers.set("Set-Cookie", sessionCookie(token, undefined, isSecure(request)));
     return response;
   }
   if (url.pathname === "/api/logout" && request.method === "POST") {
     const token = readCookie(request, "bp_session");
-    if (token) env.AUTH_SESSIONS?.revoke(token);
+    if (token) await env.AUTH_SESSIONS?.revoke(token);
     return new Response(null, {
       headers: { "Set-Cookie": sessionCookie("", 0, isSecure(request)) },
       status: 204,
@@ -722,7 +775,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (!env.CINEMA_DIARY)
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
     try {
-      return Response.json(env.CINEMA_DIARY.collection(authorization.id));
+      return Response.json(await env.CINEMA_DIARY.collection(authorization.id));
     } catch (error) {
       console.error("Could not read cinema tickets", error);
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
@@ -742,7 +795,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
     try {
       await streamInfo(env);
-      return Response.json({ screening: env.CINEMA_DIARY.current() });
+      return Response.json({ screening: await env.CINEMA_DIARY.current() });
     } catch (error) {
       console.error("Could not read cinema screening", error);
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
@@ -767,8 +820,8 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       if (input.enabled !== true && input.enabled !== false)
         throw new ClientError("enabled must be a boolean", 400);
       const { screeningId, enabled } = input;
-      const screening = await serializedController(async () =>
-        diary.setTicketCounting(screeningId, enabled),
+      const screening = await serializedController(
+        async () => await diary.setTicketCounting(screeningId, enabled),
       );
       if (!screening)
         return Response.json(
@@ -807,8 +860,8 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         throw new ClientError("Choose valid bunny parts", 400);
       const bunny = input.bunny;
       if (bunny && image) throw new ClientError("Choose a bunny or an uploaded image", 400);
-      const screening = await serializedController(async () =>
-        diary.createTicket(screeningId, title, image, Date.now(), bunny),
+      const screening = await serializedController(
+        async () => await diary.createTicket(screeningId, title, image, Date.now(), bunny),
       );
       if (!screening)
         return Response.json(
@@ -829,7 +882,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
     if (!env.CINEMA_DIARY)
       return Response.json({ error: "Cinema diary is unavailable" }, { status: 503 });
     try {
-      const image = env.CINEMA_DIARY.image(cinemaImageMatch[1]);
+      const image = await env.CINEMA_DIARY.image(cinemaImageMatch[1]);
       if (!image) return Response.json({ error: "Ticket image not found" }, { status: 404 });
       return new Response(Uint8Array.from(image.data).buffer, {
         headers: { "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" },
@@ -856,7 +909,9 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
         : "tmdb/trending/week";
       const maxAge = query ? 6 * 60 * 60 : 24 * 60 * 60;
       const result = await cachedData(cacheKey, maxAge, () =>
-        tmdb<{ results: JsonValue[] }>(
+        tmdb<{
+          results: JsonValue[];
+        }>(
           query
             ? `/search/movie?query=${encodeURIComponent(query)}&include_adult=false&language=en-US&page=1`
             : "/trending/movie/week?language=en-US",
@@ -890,7 +945,10 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
       const external = await cachedData(
         `tmdb/movie/${movieId}/external-ids`,
         7 * 24 * 60 * 60,
-        () => tmdb<{ imdb_id: string | null }>(`/movie/${movieId}/external_ids`, env),
+        () =>
+          tmdb<{
+            imdb_id: string | null;
+          }>(`/movie/${movieId}/external_ids`, env),
       );
       if (!external.imdb_id || !/^tt\d+$/.test(external.imdb_id))
         throw new Error("This movie has no IMDb ID");
@@ -900,9 +958,9 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           `${addonBase(env)}/stream/movie/${external.imdb_id}.json`,
           {
             headers: { Accept: "application/json" },
-            maxBytes: 2_000_000,
+            maxBytes: 2000000,
             name: "Movie addon",
-            timeoutMs: 15_000,
+            timeoutMs: 15000,
           },
         );
         if (!isJsonObject(data) || (data.streams !== undefined && !Array.isArray(data.streams))) {
@@ -994,7 +1052,7 @@ async function routeRequest(request: Request, env: Env, metadata?: RequestMetada
           headers: { Authorization: `Bearer ${env.TORBOX_API_KEY}` },
           method: "POST",
           name: "TorBox create",
-          timeoutMs: 15_000,
+          timeoutMs: 15000,
         },
       );
       if (!result.success) throw new Error("Could not add movie to TorBox");
@@ -1223,7 +1281,7 @@ export async function handleRequest(request: Request, env: Env, metadata?: Reque
   } catch (error) {
     if (!(error instanceof UpstreamError)) throw error;
     response = Response.json(
-      { error: "Discord could not check your session. Please try again." },
+      { error: "The session service is temporarily unavailable. Please try again." },
       { status: 503 },
     );
   }

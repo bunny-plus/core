@@ -6,7 +6,8 @@
   "scripts": {
     "build": "pnpm typecheck && pnpm build:client && pnpm build:server",
     "build:client": "vite build",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs && esbuild server/migrate-data.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/migrate-data.cjs",
+    "database:import": "node --env-file-if-exists=.dev.vars --import tsx server/migrate-data.ts",
     "deploy": "pnpm format:check && pnpm lint && pnpm test && pnpm typecheck && VITE_API_URL=https://api.bunny.plus pnpm build:client && wrangler deploy --config wrangler.jsonc",
     "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.dev.vars --import tsx server/index.ts\" \"vite\"",
     "format": "oxfmt . --write",
@@ -18,6 +19,7 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
+    "discord.js": "^14.27.0",
     "hls.js": "^1.6.16",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -25,6 +27,7 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261011.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -32,6 +35,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.0",
+    "miniflare": "5.20260801.0-alpha",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.78.0",
     "oxlint-plugin-anti-slop": "github:dmmulroy/anti-slop#446268e5d15baa968eaec669ff65358d36ae6259",

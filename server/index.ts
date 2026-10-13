@@ -9,6 +9,8 @@ import { authenticateRoomMember, handleRequest, type Env } from "../worker/index
 import { ChatHistory } from "./chat-history";
 import { AuthSessions } from "./auth-sessions";
 import { CinemaDiary } from "./cinema";
+import { startDiscordBot } from "./discord-bot";
+import { D1Database } from "./database";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
 import { startRecordingCleanup } from "./recording-cleanup";
@@ -17,13 +19,16 @@ const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
 const appOrigin = new URL(env.APP_URL || "http://localhost:5173").origin;
 const chatDatabasePath = env.CHAT_DB_PATH || "data/chat.sqlite";
-env.AUTH_SESSIONS = new AuthSessions(join(dirname(chatDatabasePath), "sessions.sqlite"));
-try {
-  env.CINEMA_DIARY = new CinemaDiary(join(dirname(chatDatabasePath), "cinema.sqlite"));
-} catch (error) {
-  console.error("Cinema diary is unavailable", error);
-}
-const room = new WatchRoom(new ChatHistory(chatDatabasePath, 200), env.CINEMA_DIARY);
+const database =
+  env.D1_DATABASE_URL && env.D1_DATABASE_SECRET
+    ? new D1Database(env.D1_DATABASE_URL, env.D1_DATABASE_SECRET)
+    : null;
+env.AUTH_SESSIONS = new AuthSessions(
+  database ?? join(dirname(chatDatabasePath), "sessions.sqlite"),
+);
+env.CINEMA_DIARY = new CinemaDiary(database ?? join(dirname(chatDatabasePath), "cinema.sqlite"));
+const chatHistory = new ChatHistory(database ?? chatDatabasePath, 200);
+const room = new WatchRoom(chatHistory, env.CINEMA_DIARY);
 const webSockets = new WebSocketServer({
   maxPayload: 16 * 1_024,
   noServer: true,
@@ -164,7 +169,15 @@ server.on("upgrade", async (request, socket, head) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`bunny.plus API listening on :${port}`);
-  startRecordingCleanup(env);
-});
+void Promise.all([env.AUTH_SESSIONS.ready, env.CINEMA_DIARY.ready, chatHistory.ready])
+  .then(() =>
+    server.listen(port, () => {
+      console.log(`bunny.plus API listening on :${port}`);
+      startRecordingCleanup(env);
+      void startDiscordBot(env);
+    }),
+  )
+  .catch(() => {
+    console.error("Could not initialize persistent storage; API startup stopped");
+    process.exitCode = 1;
+  });

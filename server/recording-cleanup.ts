@@ -2,26 +2,7 @@ import type { Env } from "../worker/index";
 import { streamApiBaseUrl, streamInputId } from "./stream-playback";
 import { fetchJson, readBoundedBytes, type JsonObject, type JsonValue } from "./upstream";
 
-type CleanupEnvironment = Pick<
-  Env,
-  | "STREAM_URL"
-  | "STREAM_RECORDING_CLEANUP_ACCOUNT_ID"
-  | "STREAM_RECORDING_CLEANUP_API_TOKEN"
-  | "CLOUDFLARE_STREAM_ACCOUNT_ID"
-  | "CLOUDFLARE_STREAM_API_TOKEN"
->;
-
-function cleanupCredentials(env: CleanupEnvironment) {
-  const dedicated = Boolean(
-    env.STREAM_RECORDING_CLEANUP_ACCOUNT_ID || env.STREAM_RECORDING_CLEANUP_API_TOKEN,
-  );
-  return {
-    accountId: dedicated
-      ? env.STREAM_RECORDING_CLEANUP_ACCOUNT_ID
-      : env.CLOUDFLARE_STREAM_ACCOUNT_ID,
-    token: dedicated ? env.STREAM_RECORDING_CLEANUP_API_TOKEN : env.CLOUDFLARE_STREAM_API_TOKEN,
-  };
-}
+type CleanupEnvironment = Pick<Env, "STREAM_URL" | "CF_ACCOUNT_ID" | "CF_TOKEN">;
 
 function isObject(value: JsonValue | undefined): value is JsonObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -69,15 +50,17 @@ async function deleteRecording(url: string, token: string) {
     await response.body?.cancel();
     throw new Error(`Recording deletion failed (${response.status})`);
   }
-  const data: JsonValue = JSON.parse(
-    new TextDecoder().decode(await readBoundedBytes(response, 32_000, "Recording deletion")),
-  );
+  // Stream deletions can succeed with an empty 200 response as well as a 204.
+  if (response.status === 200 && !response.body) return;
+  const bytes = await readBoundedBytes(response, 32_000, "Recording deletion");
+  if (response.status === 200 && bytes.length === 0) return;
+  const data: JsonValue = JSON.parse(new TextDecoder().decode(bytes));
   if (!isObject(data) || data.success !== true)
     throw new Error("Recording deletion was not confirmed");
 }
 
 export async function purgeRecordings(env: CleanupEnvironment) {
-  const { accountId, token } = cleanupCredentials(env);
+  const { CF_ACCOUNT_ID: accountId, CF_TOKEN: token } = env;
   if (!accountId || !token) throw new Error("Recording cleanup credentials are not configured");
   if (!/^[a-f\d]{32}$/i.test(accountId)) throw new Error("Recording cleanup account ID is invalid");
   const inputId = streamInputId(env.STREAM_URL);
@@ -108,7 +91,7 @@ export async function purgeRecordings(env: CleanupEnvironment) {
 }
 
 export function startRecordingCleanup(env: CleanupEnvironment) {
-  const { accountId, token } = cleanupCredentials(env);
+  const { CF_ACCOUNT_ID: accountId, CF_TOKEN: token } = env;
   if (!accountId || !token) {
     console.warn(
       "Automatic recording cleanup is disabled: configure its account ID and API token.",

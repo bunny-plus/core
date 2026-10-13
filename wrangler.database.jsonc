@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "bunny-plus-database",
+  "main": "storage-worker/index.ts",
+  "compatibility_date": "2026-07-30",
+  "d1_databases": [
+    {
+      "binding": "db",
+      "database_name": "bunny-plus",
+      "database_id": "df82ca03-92b9-4b76-a5f1-5a4bcc87b3ba",
+    },
+  ],
+}

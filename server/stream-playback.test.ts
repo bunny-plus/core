@@ -6,8 +6,8 @@ import { streamPlayback, validateStreamSigning } from "./stream-playback";
 const inputId = "a".repeat(32);
 const streamUrl = `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8?protocol=llhlsbeta`;
 const apiEnvironment = {
-  CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
-  CLOUDFLARE_STREAM_API_TOKEN: "test-cloudflare-api-token",
+  CF_ACCOUNT_ID: "a".repeat(32),
+  CF_TOKEN: "test-cloudflare-api-token",
   STREAM_URL: streamUrl,
 };
 
@@ -22,7 +22,7 @@ test("unsigned feeds retain their URL and signing configuration requires complet
     url: "http://localhost/live.m3u8",
   });
   assert.throws(
-    () => validateStreamSigning({ STREAM_URL: streamUrl, CLOUDFLARE_STREAM_API_TOKEN: "token" }),
+    () => validateStreamSigning({ STREAM_URL: streamUrl, CF_TOKEN: "token" }),
     /both account ID and API token/,
   );
   assert.throws(
@@ -34,12 +34,11 @@ test("unsigned feeds retain their URL and signing configuration requires complet
     /private HLS URL/,
   );
   assert.throws(
-    () => validateStreamSigning({ ...apiEnvironment, CLOUDFLARE_STREAM_ACCOUNT_ID: "../account" }),
+    () => validateStreamSigning({ ...apiEnvironment, CF_ACCOUNT_ID: "../account" }),
     /32-character account ID/,
   );
   assert.throws(
-    () =>
-      validateStreamSigning({ ...apiEnvironment, CLOUDFLARE_STREAM_API_TOKEN: "bad\r\nheader" }),
+    () => validateStreamSigning({ ...apiEnvironment, CF_TOKEN: "bad\r\nheader" }),
     /valid API token/,
   );
 });
@@ -76,12 +75,12 @@ test("API signing coalesces requests, ignores unrelated environment fields, and 
   );
   assert.equal(
     requests[0].url,
-    `https://api.cloudflare.com/client/v4/accounts/${apiEnvironment.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`,
+    `https://api.cloudflare.com/client/v4/accounts/${apiEnvironment.CF_ACCOUNT_ID}/stream/${inputId}/token`,
   );
   assert.equal(requests[0].init?.method, "POST");
   assert.equal(
     new Headers(requests[0].init?.headers).get("Authorization"),
-    `Bearer ${apiEnvironment.CLOUDFLARE_STREAM_API_TOKEN}`,
+    `Bearer ${apiEnvironment.CF_TOKEN}`,
   );
   assert.deepEqual(JSON.parse(String(requests[0].init?.body)), { exp: now / 1000 + 3600 });
   now += 44 * 60 * 1000;
@@ -143,13 +142,13 @@ test("local signing produces a verifiable RSA token from raw and base64 JWKs wit
 test("signing failures do not disclose upstream bodies or private credentials and can be retried", async (context) => {
   const environment = {
     ...apiEnvironment,
-    CLOUDFLARE_STREAM_API_TOKEN: "another-secret-api-token",
+    CF_TOKEN: "another-secret-api-token",
   };
   let attempts = 0;
   context.mock.method(globalThis, "fetch", async () => {
     attempts += 1;
     return attempts === 1
-      ? Response.json({ secret: environment.CLOUDFLARE_STREAM_API_TOKEN }, { status: 403 })
+      ? Response.json({ secret: environment.CF_TOKEN }, { status: 403 })
       : Response.json({ success: true, result: { token: "header.claims.signature" } });
   });
   await assert.rejects(streamPlayback(environment), {
@@ -177,7 +176,7 @@ test("API signing rejects invalid or unsuccessful token responses", async (conte
     await assert.rejects(
       streamPlayback({
         ...apiEnvironment,
-        CLOUDFLARE_STREAM_API_TOKEN: `invalid-response-token-${index}`,
+        CF_TOKEN: `invalid-response-token-${index}`,
       }),
       { message: "Playback service returned an invalid playback token" },
     );

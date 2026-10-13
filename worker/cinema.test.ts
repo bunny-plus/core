@@ -53,7 +53,7 @@ test("ticket creation validates bunny parts and returns the saved design", async
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("bunny-design", diary);
-    const screening = diary.start("Bunny screening");
+    const screening = await diary.start("Bunny screening");
     const bunny = generateTicketBunny("api-bunny");
     const invalid = [
       null,
@@ -77,7 +77,7 @@ test("ticket creation validates bunny parts and returns the saved design", async
         env,
       );
       assert.equal(response.status, 400);
-      assert.equal(diary.current()?.ticketDesign, null);
+      assert.equal((await diary.current())?.ticketDesign, null);
     }
     const admin = await viewerCookie(env, "bunny-admin", true);
     const both = await handleRequest(
@@ -121,17 +121,17 @@ test("ticket collections require authentication and cannot read another viewer's
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("collection", diary);
-    const screening = diary.start("Perfect Blue", 0);
-    assert.ok(diary.createTicket(screening.id, "Perfect Blue", null, 0));
-    for (let elapsed = 0; elapsed <= 600_000; elapsed += 10_000)
-      diary.watching("owner", "tab", screening.id, true, elapsed);
+    const screening = await diary.start("Perfect Blue", 0);
+    assert.ok(await diary.createTicket(screening.id, "Perfect Blue", null, 0));
+    for (let elapsed = 0; elapsed <= 600000; elapsed += 10000)
+      await diary.watching("owner", "tab", screening.id, true, elapsed);
     const unauthorized = await handleRequest(request(env, "/api/cinema/tickets", ""), env);
     assert.equal(unauthorized.status, 401);
     const ownerCookie = await viewerCookie(env, "owner");
     const owner = await handleRequest(request(env, "/api/cinema/tickets", ownerCookie), env);
     assert.equal(owner.status, 200);
     assert.equal(owner.headers.get("Cache-Control"), "private, no-store");
-    assert.deepEqual(await owner.json(), diary.collection("owner"));
+    assert.deepEqual(await owner.json(), await diary.collection("owner"));
     const guestCookie = await viewerCookie(env, "guest");
     const guest = await handleRequest(
       request(env, "/api/cinema/tickets?viewerId=owner", guestCookie),
@@ -165,29 +165,29 @@ test("successful repeated controller starts each open a screening and successful
       env,
     );
     assert.equal(firstResponse.status, 200);
-    const first = diary.current();
+    const first = await diary.current();
     assert.ok(first);
     const secondResponse = await handleRequest(
       request(env, "/api/admin/restream/start", cookie, restreamBody),
       env,
     );
     assert.equal(secondResponse.status, 200);
-    const second = diary.current();
+    const second = await diary.current();
     assert.ok(second);
     assert.notEqual(second.id, first.id);
     assert.equal(second.title, first.title);
     running = false;
     await handleRequest(request(env, "/api/admin/restream/start", cookie, restreamBody), env);
-    assert.deepEqual(diary.current(), second);
+    assert.deepEqual(await diary.current(), second);
     running = true;
     error = "Relay failed";
     await handleRequest(request(env, "/api/admin/restream/start", cookie, restreamBody), env);
-    assert.deepEqual(diary.current(), second);
+    assert.deepEqual(await diary.current(), second);
     running = false;
     error = "";
     const stop = await handleRequest(request(env, "/api/admin/stream/stop", cookie, "{}"), env);
     assert.equal(stop.status, 200);
-    assert.equal(diary.current(), null);
+    assert.equal(await diary.current(), null);
   } finally {
     diary.close();
   }
@@ -204,14 +204,14 @@ test("controller status adopts an existing stream but failed polls do not split 
       return new Response("#EXTM3U");
     });
     const response = await handleRequest(request(env, "/api/stream-info", cookie), env);
-    const current = diary.current();
+    const current = await diary.current();
     assert.ok(current);
     const info = await response.json();
     assert.deepEqual(info.screening, current);
     assert.equal(current.title, "Already playing");
-    diary.watching("viewer", "tab", current.id, true, 0);
-    diary.watching("viewer", "tab", current.id, true, 10_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 10);
+    await diary.watching("viewer", "tab", current.id, true, 0);
+    await diary.watching("viewer", "tab", current.id, true, 10000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 10);
     const failureEnv = {
       ...env,
       RELAY_CONTROLLER_URL: "http://failed-controller.test",
@@ -226,10 +226,10 @@ test("controller status adopts an existing stream but failed polls do not split 
     assert.equal(failedInfo.running, false);
     assert.equal(failedInfo.online, false);
     assert.deepEqual(failedInfo.screening, current);
-    assert.deepEqual(diary.current(), current);
-    diary.watching("viewer", "tab", current.id, true, 20_000);
-    diary.watching("viewer", "tab", current.id, true, 30_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 10);
+    assert.deepEqual(await diary.current(), current);
+    await diary.watching("viewer", "tab", current.id, true, 20000);
+    await diary.watching("viewer", "tab", current.id, true, 30000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 10);
   } finally {
     diary.close();
   }
@@ -240,7 +240,7 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
   try {
     const env = cinemaEnv("racing-probe", diary);
     const cookie = await viewerCookie(env, "racing-admin", true);
-    diary.start("Old title");
+    await diary.start("Old title");
     let releaseHls!: (response: Response) => void;
     const hls = new Promise<Response>((resolve) => {
       releaseHls = resolve;
@@ -277,7 +277,7 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
       env,
     );
     assert.equal(started.status, 200);
-    const current = diary.current();
+    const current = await diary.current();
     assert.ok(current);
     assert.equal(current.title, "New title");
     releaseHls(new Response("#EXTM3U"));
@@ -288,7 +288,7 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
     assert.equal(freshInfo.title, "New title");
     assert.deepEqual(freshInfo.screening, current);
     assert.equal(probes, 2);
-    assert.deepEqual(diary.current(), current);
+    assert.deepEqual(await diary.current(), current);
   } finally {
     diary.close();
   }
@@ -301,7 +301,7 @@ test("ticket counting requires management permission, same-origin JSON, and a cu
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("counting-permissions", diary);
-    const screening = diary.start("Together");
+    const screening = await diary.start("Together");
     const path = "/api/cinema/screening/counting";
     const body = JSON.stringify({ screeningId: screening.id, enabled: false });
     const viewer = await viewerCookie(env, "counting-viewer");
@@ -328,23 +328,23 @@ test("ticket counting requires management permission, same-origin JSON, and a cu
       JSON.stringify({ screeningId: screening.id, enabled: "false" }),
     ])
       assert.equal((await handleRequest(request(env, path, admin, invalid), env)).status, 400);
-    assert.deepEqual(diary.current(), screening);
+    assert.deepEqual(await diary.current(), screening);
     const stopped = await handleRequest(request(env, path, admin, body), env);
     assert.equal(stopped.status, 200);
     assert.equal(stopped.headers.get("Cache-Control"), "private, no-store");
     assert.deepEqual(await stopped.json(), {
       screening: { ...screening, ticketCountingEnabled: false },
     });
-    assert.equal(diary.observe(true, "Together")?.ticketCountingEnabled, false);
+    assert.equal((await diary.observe(true, "Together"))?.ticketCountingEnabled, false);
     const resumed = await handleRequest(
       request(env, path, admin, JSON.stringify({ screeningId: screening.id, enabled: true })),
       env,
     );
     assert.equal(resumed.status, 200);
-    assert.deepEqual(diary.current(), screening);
-    const next = diary.start("Next screening");
+    assert.deepEqual(await diary.current(), screening);
+    const next = await diary.start("Next screening");
     assert.equal((await handleRequest(request(env, path, admin, body), env)).status, 409);
-    assert.deepEqual(diary.current(), next);
+    assert.deepEqual(await diary.current(), next);
     const unavailable = cinemaEnv("counting-unavailable");
     assert.equal(
       (await handleRequest(request(unavailable, path, admin, body), unavailable)).status,
@@ -364,9 +364,9 @@ test("idle and failed controller status cannot count idle-video playback", async
     try {
       const env = cinemaEnv(`counting-${id}`, diary);
       const cookie = await viewerCookie(env, `counting-${id}-viewer`);
-      const screening = diary.start("Together");
-      diary.watching("viewer", "tab", screening.id, true, 0);
-      diary.watching("viewer", "tab", screening.id, true, 10_000);
+      const screening = await diary.start("Together");
+      await diary.watching("viewer", "tab", screening.id, true, 0);
+      await diary.watching("viewer", "tab", screening.id, true, 10000);
       context.mock.method(globalThis, "fetch", async (input: string | URL | Request) =>
         String(input) === env.RELAY_CONTROLLER_URL
           ? Response.json(status)
@@ -376,10 +376,10 @@ test("idle and failed controller status cannot count idle-video playback", async
         (await handleRequest(request(env, "/api/stream-info", cookie), env)).status,
         200,
       );
-      diary.watching("viewer", "tab", screening.id, true, 20_000);
-      diary.watching("viewer", "tab", screening.id, true, 30_000);
-      assert.equal(diary.progress("viewer").watchedSeconds, 10);
-      assert.equal(diary.current()?.id, screening.id);
+      await diary.watching("viewer", "tab", screening.id, true, 20000);
+      await diary.watching("viewer", "tab", screening.id, true, 30000);
+      assert.equal((await diary.progress("viewer")).watchedSeconds, 10);
+      assert.equal((await diary.current())?.id, screening.id);
     } finally {
       diary.close();
     }
@@ -390,7 +390,7 @@ test("screening ticket creation requires management permission, same-origin JSON
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("design-permissions", diary);
-    const screening = diary.start("Stream title");
+    const screening = await diary.start("Stream title");
     const body = JSON.stringify({ screeningId: screening.id, title: "Collectible title" });
     const viewer = await viewerCookie(env, "design-viewer");
     const admin = await viewerCookie(env, "design-admin", true);
@@ -441,7 +441,7 @@ test("screening ticket creation requires management permission, same-origin JSON
       env,
     );
     assert.equal(stale.status, 409);
-    assert.equal(diary.current()?.ticketDesign, null);
+    assert.equal((await diary.current())?.ticketDesign, null);
     const roleToken = await createSession(
       {
         admin: false,
@@ -462,7 +462,7 @@ test("screening ticket creation requires management permission, same-origin JSON
       env,
     );
     assert.equal(repeated.status, 409);
-    assert.equal(diary.current()?.ticketDesign?.title, "Collectible title");
+    assert.equal((await diary.current())?.ticketDesign?.title, "Collectible title");
   } finally {
     diary.close();
   }
@@ -472,11 +472,11 @@ test("an uploaded image stays private, preserves validated bytes, and appears on
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("design-image", diary);
-    const screening = diary.start("Stream title", 0);
-    for (let elapsed = 0; elapsed <= 600_000; elapsed += 10_000)
-      diary.watching("watcher", "tab", screening.id, true, elapsed);
-    diary.watching("watcher", "tab", screening.id, false, 610_000);
-    assert.equal(diary.progress("watcher").ticket, null);
+    const screening = await diary.start("Stream title", 0);
+    for (let elapsed = 0; elapsed <= 600000; elapsed += 10000)
+      await diary.watching("watcher", "tab", screening.id, true, elapsed);
+    await diary.watching("watcher", "tab", screening.id, false, 610000);
+    assert.equal((await diary.progress("watcher")).ticket, null);
     const admin = await viewerCookie(env, "image-admin", true);
     const created = await handleRequest(
       request(
@@ -496,11 +496,11 @@ test("an uploaded image stays private, preserves validated bytes, and appears on
     assert.equal(designed.ticketDesign.title, "A night in the burrow");
     const path = designed.ticketDesign.imagePath;
     assert.equal(path, `/api/cinema/screenings/${screening.id}/image`);
-    const ticket = diary.watching("watcher", "tab", screening.id, false, 620_000).ticket;
+    const ticket = (await diary.watching("watcher", "tab", screening.id, false, 620000)).ticket;
     assert.ok(ticket);
     assert.equal(ticket.title, "A night in the burrow");
     assert.equal(ticket.imagePath, path);
-    assert.equal(diary.collection("watcher").total, 1);
+    assert.equal((await diary.collection("watcher")).total, 1);
     const unauthorized = await handleRequest(request(env, path, ""), env);
     assert.equal(unauthorized.status, 401);
     const viewer = await viewerCookie(env, "image-viewer");
@@ -527,7 +527,7 @@ test("ticket designs reject invalid titles, remote images, malformed base64, typ
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("design-validation", diary);
-    const screening = diary.start("Stream title");
+    const screening = await diary.start("Stream title");
     const tooLarge = Buffer.alloc(cinemaImageMaxBytes + 1);
     Buffer.from(pngData, "base64").copy(tooLarge);
     const cases = [
@@ -562,7 +562,7 @@ test("ticket designs reject invalid titles, remote images, malformed base64, typ
         env,
       );
       assert.equal(response.status, invalid.status);
-      assert.equal(diary.current()?.ticketDesign, null);
+      assert.equal((await diary.current())?.ticketDesign, null);
     }
   } finally {
     diary.close();
@@ -582,7 +582,7 @@ test("supported JPEG and WebP images are accepted and their exact MIME is preser
       },
     ];
     for (const image of images) {
-      const screening = diary.start("New stream");
+      const screening = await diary.start("New stream");
       const response = await handleRequest(
         request(
           env,
@@ -614,14 +614,14 @@ test("concurrent creation is immutable and a queued stream switch rejects the pr
   try {
     const env = cinemaEnv("design-race", diary);
     const cookie = await viewerCookie(env, "race-design-admin", true);
-    const screening = diary.start("First stream");
+    const screening = await diary.start("First stream");
     const body = JSON.stringify({ screeningId: screening.id, title: "First ticket" });
     const responses = await Promise.all([
       handleRequest(request(env, "/api/cinema/screening/ticket", cookie, body), env),
       handleRequest(request(env, "/api/cinema/screening/ticket", cookie, body), env),
     ]);
     assert.deepEqual(responses.map((response) => response.status).sort(), [201, 409]);
-    const second = diary.start("Second stream");
+    const second = await diary.start("Second stream");
     let controllerStarted!: () => void;
     const started = new Promise<void>((resolve) => {
       controllerStarted = resolve;
@@ -651,8 +651,8 @@ test("concurrent creation is immutable and a queued stream switch rejects the pr
     releaseController(Response.json({ running: true, title: "Third stream" }));
     assert.equal((await switchStream).status, 200);
     assert.equal((await oldDraft).status, 409);
-    assert.equal(diary.current()?.title, "Third stream");
-    assert.equal(diary.current()?.ticketDesign, null);
+    assert.equal((await diary.current())?.title, "Third stream");
+    assert.equal((await diary.current())?.ticketDesign, null);
   } finally {
     diary.close();
   }

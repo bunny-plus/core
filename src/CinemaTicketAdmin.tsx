@@ -168,7 +168,7 @@ export default function CinemaTicketAdmin() {
     }
     if (file.size > cinemaImageMaxBytes) {
       setReadingImage(false);
-      setImageError("Choose an image up to 2 MiB.");
+      setImageError("Choose an image up to 1.9 MB.");
       if (imageInput.current) imageInput.current.value = "";
       return;
     }
@@ -461,7 +461,7 @@ export default function CinemaTicketAdmin() {
                   Ticket artwork <span>optional</span>
                 </label>
                 <p className="cinema-ticket-admin-image-help" id={`${formId}-image-help`}>
-                  PNG, JPG or WebP · up to 2 MiB
+                  PNG, JPG or WebP · up to 1.9 MB
                 </p>
                 <input
                   ref={imageInput}

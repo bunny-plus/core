@@ -15,110 +15,110 @@ import { generateTicketBunny } from "../shared/ticket-bunny";
 
 const startTime = Date.parse("2026-09-30T17:00:00.000Z");
 
-function watchFor(
+async function watchFor(
   diary: CinemaDiary,
   memberId: string,
   screeningId: string,
   seconds: number,
   start = startTime,
 ) {
-  diary.watching(memberId, memberId, screeningId, true, start);
+  await diary.watching(memberId, memberId, screeningId, true, start);
   for (let elapsed = 10; elapsed <= seconds; elapsed += 10)
-    diary.watching(memberId, memberId, screeningId, true, start + elapsed * 1_000);
+    await diary.watching(memberId, memberId, screeningId, true, start + elapsed * 1000);
 }
 
-test("tickets require ten minutes of playback and are issued only once", () => {
+test("tickets require ten minutes of playback and are issued only once", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("Perfect Blue", startTime);
-    assert.ok(diary.createTicket(screening.id, "Perfect Blue", null, startTime));
-    watchFor(diary, "viewer", screening.id, 590);
-    assert.equal(diary.progress("viewer").watchedSeconds, 590);
-    assert.equal(diary.progress("viewer").ticket, null);
-    const earned = diary.watching("viewer", "viewer", screening.id, true, startTime + 600_000);
+    const screening = await diary.start("Perfect Blue", startTime);
+    assert.ok(await diary.createTicket(screening.id, "Perfect Blue", null, startTime));
+    await watchFor(diary, "viewer", screening.id, 590);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 590);
+    assert.equal((await diary.progress("viewer")).ticket, null);
+    const earned = await diary.watching("viewer", "viewer", screening.id, true, startTime + 600000);
     assert.equal(earned.watchedSeconds, 600);
     assert.equal(earned.ticket?.number, 1);
     assert.equal(earned.ticket?.title, "Perfect Blue");
     assert.equal(earned.ticket?.screenedAt, screening.startedAt);
-    assert.equal(earned.ticket?.earnedAt, new Date(startTime + 600_000).toISOString());
+    assert.equal(earned.ticket?.earnedAt, new Date(startTime + 600000).toISOString());
     for (let elapsed = 610; elapsed <= 660; elapsed += 10)
-      diary.watching("viewer", "viewer", screening.id, true, startTime + elapsed * 1_000);
-    assert.equal(diary.collection("viewer").total, 1);
-    assert.deepEqual(diary.progress("viewer").ticket, earned.ticket);
-    assert.equal(diary.progress("viewer").watchedSeconds, 600);
+      await diary.watching("viewer", "viewer", screening.id, true, startTime + elapsed * 1000);
+    assert.equal((await diary.collection("viewer")).total, 1);
+    assert.deepEqual((await diary.progress("viewer")).ticket, earned.ticket);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 600);
   } finally {
     diary.close();
   }
 });
 
-test("pauses, long gaps, and stale screening IDs cannot earn viewing time", () => {
+test("pauses, long gaps, and stale screening IDs cannot earn viewing time", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("A livestream", startTime);
-    diary.watching("viewer", "tab", screening.id, true, startTime);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 10_000);
-    diary.watching("viewer", "tab", screening.id, false, startTime + 20_000);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 300_000);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 310_000);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 341_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 20);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 351_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 30);
-    const next = diary.start("Another livestream", startTime + 360_000);
-    diary.watching("viewer", "tab", screening.id, true, startTime + 370_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 0);
-    diary.watching("viewer", "tab", next.id, true, startTime + 380_000);
-    diary.watching("viewer", "tab", next.id, true, startTime + 390_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 10);
-    diary.stop(startTime + 400_000);
+    const screening = await diary.start("A livestream", startTime);
+    await diary.watching("viewer", "tab", screening.id, true, startTime);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 10000);
+    await diary.watching("viewer", "tab", screening.id, false, startTime + 20000);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 300000);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 310000);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 341000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 20);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 351000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 30);
+    const next = await diary.start("Another livestream", startTime + 360000);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 370000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 0);
+    await diary.watching("viewer", "tab", next.id, true, startTime + 380000);
+    await diary.watching("viewer", "tab", next.id, true, startTime + 390000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 10);
+    await diary.stop(startTime + 400000);
     assert.equal(
-      diary.watching("viewer", "tab", next.id, true, startTime + 410_000).screening,
+      (await diary.watching("viewer", "tab", next.id, true, startTime + 410000)).screening,
       null,
     );
-    assert.equal(diary.collection("viewer").total, 0);
+    assert.equal((await diary.collection("viewer")).total, 0);
   } finally {
     diary.close();
   }
 });
 
-test("overlapping tabs count the union of playback intervals", () => {
+test("overlapping tabs count the union of playback intervals", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("Together", startTime);
-    diary.watching("viewer", "a", screening.id, true, startTime);
-    diary.watching("viewer", "b", screening.id, true, startTime + 5_000);
-    diary.watching("viewer", "a", screening.id, true, startTime + 10_000);
-    diary.watching("viewer", "b", screening.id, true, startTime + 15_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 15);
-    diary.watching("viewer", "a", screening.id, false, startTime + 20_000);
-    diary.watching("viewer", "b", screening.id, true, startTime + 25_000);
+    const screening = await diary.start("Together", startTime);
+    await diary.watching("viewer", "a", screening.id, true, startTime);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 5000);
+    await diary.watching("viewer", "a", screening.id, true, startTime + 10000);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 15000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 15);
+    await diary.watching("viewer", "a", screening.id, false, startTime + 20000);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 25000);
     diary.disconnect("a");
-    diary.watching("viewer", "b", screening.id, true, startTime + 35_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 35);
-    diary.watching("other-viewer", "c", screening.id, true, startTime + 35_000);
-    diary.watching("other-viewer", "c", screening.id, true, startTime + 45_000);
-    assert.equal(diary.progress("other-viewer").watchedSeconds, 10);
-    assert.equal(diary.progress("viewer").watchedSeconds, 35);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 35000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 35);
+    await diary.watching("other-viewer", "c", screening.id, true, startTime + 35000);
+    await diary.watching("other-viewer", "c", screening.id, true, startTime + 45000);
+    assert.equal((await diary.progress("other-viewer")).watchedSeconds, 10);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 35);
   } finally {
     diary.close();
   }
 });
 
-test("idle relay pulses cannot earn tickets and recovery excludes the outage", () => {
+test("idle relay pulses cannot earn tickets and recovery excludes the outage", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("Together", startTime);
-    diary.createTicket(screening.id, "Together", null, startTime);
-    watchFor(diary, "viewer", screening.id, 590);
-    assert.deepEqual(diary.observe(false, null), diary.current());
-    watchFor(diary, "viewer", screening.id, 60, startTime + 590_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 590);
-    assert.equal(diary.collection("viewer").total, 0);
-    diary.observe(true, "Together");
-    diary.watching("viewer", "viewer", screening.id, true, startTime + 660_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 590);
-    diary.watching("viewer", "viewer", screening.id, true, startTime + 670_000);
-    assert.equal(diary.progress("viewer").ticket?.number, 1);
+    const screening = await diary.start("Together", startTime);
+    await diary.createTicket(screening.id, "Together", null, startTime);
+    await watchFor(diary, "viewer", screening.id, 590);
+    assert.deepEqual(await diary.observe(false, null), await diary.current());
+    await watchFor(diary, "viewer", screening.id, 60, startTime + 590000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 590);
+    assert.equal((await diary.collection("viewer")).total, 0);
+    await diary.observe(true, "Together");
+    await diary.watching("viewer", "viewer", screening.id, true, startTime + 660000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 590);
+    await diary.watching("viewer", "viewer", screening.id, true, startTime + 670000);
+    assert.equal((await diary.progress("viewer")).ticket?.number, 1);
   } finally {
     diary.close();
   }
@@ -128,56 +128,56 @@ test("stopping ticket counting survives restarts and preserves progress, tickets
   const directory = await mkdtemp(join(tmpdir(), "bunny-cinema-counting-"));
   const file = join(directory, "cinema.sqlite");
   const diary = new CinemaDiary(file);
-  const screening = diary.start("Together", startTime);
+  const screening = await diary.start("Together", startTime);
   const image = { mimeType: "image/png", data: new Uint8Array([1, 2, 3]) };
-  diary.createTicket(screening.id, "Collectible", image, startTime);
-  watchFor(diary, "collector", screening.id, 600);
-  watchFor(diary, "viewer", screening.id, 590);
-  const collected = diary.collection("collector");
-  const stopped = diary.setTicketCounting(screening.id, false);
+  await diary.createTicket(screening.id, "Collectible", image, startTime);
+  await watchFor(diary, "collector", screening.id, 600);
+  await watchFor(diary, "viewer", screening.id, 590);
+  const collected = await diary.collection("collector");
+  const stopped = await diary.setTicketCounting(screening.id, false);
   assert.equal(stopped?.ticketCountingEnabled, false);
   // Even a stop/resume entirely between pulses must exclude that interval.
-  diary.setTicketCounting(screening.id, true);
-  diary.watching("viewer", "viewer", screening.id, true, startTime + 600_000);
-  assert.equal(diary.progress("viewer").watchedSeconds, 590);
-  diary.setTicketCounting(screening.id, false);
+  await diary.setTicketCounting(screening.id, true);
+  await diary.watching("viewer", "viewer", screening.id, true, startTime + 600000);
+  assert.equal((await diary.progress("viewer")).watchedSeconds, 590);
+  await diary.setTicketCounting(screening.id, false);
   diary.close();
   const restored = new CinemaDiary(file);
   try {
-    assert.equal(restored.current()?.ticketCountingEnabled, false);
-    restored.observe(true, "Together");
-    watchFor(restored, "viewer", screening.id, 60, startTime + 610_000);
-    assert.equal(restored.progress("viewer").watchedSeconds, 590);
-    assert.equal(restored.progress("viewer").ticket, null);
-    assert.deepEqual(restored.collection("collector"), collected);
-    assert.deepEqual(restored.image(screening.id), image);
-    restored.setTicketCounting(screening.id, true);
-    restored.watching("viewer", "viewer", screening.id, true, startTime + 680_000);
-    assert.equal(restored.progress("viewer").watchedSeconds, 590);
-    restored.watching("viewer", "viewer", screening.id, true, startTime + 690_000);
-    assert.equal(restored.progress("viewer").ticket?.title, "Collectible");
-    restored.setTicketCounting(screening.id, false);
-    const next = restored.start("Next screening", startTime + 700_000);
+    assert.equal((await restored.current())?.ticketCountingEnabled, false);
+    await restored.observe(true, "Together");
+    await watchFor(restored, "viewer", screening.id, 60, startTime + 610000);
+    assert.equal((await restored.progress("viewer")).watchedSeconds, 590);
+    assert.equal((await restored.progress("viewer")).ticket, null);
+    assert.deepEqual(await restored.collection("collector"), collected);
+    assert.deepEqual(await restored.image(screening.id), image);
+    await restored.setTicketCounting(screening.id, true);
+    await restored.watching("viewer", "viewer", screening.id, true, startTime + 680000);
+    assert.equal((await restored.progress("viewer")).watchedSeconds, 590);
+    await restored.watching("viewer", "viewer", screening.id, true, startTime + 690000);
+    assert.equal((await restored.progress("viewer")).ticket?.title, "Collectible");
+    await restored.setTicketCounting(screening.id, false);
+    const next = await restored.start("Next screening", startTime + 700000);
     assert.equal(next.ticketCountingEnabled, true);
-    assert.equal(restored.setTicketCounting(screening.id, false), null);
-    assert.deepEqual(restored.current(), next);
+    assert.equal(await restored.setTicketCounting(screening.id, false), null);
+    assert.deepEqual(await restored.current(), next);
   } finally {
     restored.close();
   }
 });
 
-test("a later tab can fill a gap without counting already covered time twice", () => {
+test("a later tab can fill a gap without counting already covered time twice", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("Together", startTime);
-    diary.watching("viewer", "a", screening.id, true, startTime);
-    diary.watching("viewer", "a", screening.id, true, startTime + 10_000);
-    diary.watching("viewer", "a", screening.id, false, startTime + 11_000);
-    diary.watching("viewer", "b", screening.id, true, startTime + 15_000);
-    diary.watching("viewer", "a", screening.id, true, startTime + 20_000);
-    diary.watching("viewer", "a", screening.id, true, startTime + 30_000);
-    diary.watching("viewer", "b", screening.id, true, startTime + 31_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 26);
+    const screening = await diary.start("Together", startTime);
+    await diary.watching("viewer", "a", screening.id, true, startTime);
+    await diary.watching("viewer", "a", screening.id, true, startTime + 10000);
+    await diary.watching("viewer", "a", screening.id, false, startTime + 11000);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 15000);
+    await diary.watching("viewer", "a", screening.id, true, startTime + 20000);
+    await diary.watching("viewer", "a", screening.id, true, startTime + 30000);
+    await diary.watching("viewer", "b", screening.id, true, startTime + 31000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 26);
   } finally {
     diary.close();
   }
@@ -187,60 +187,60 @@ test("reconnect and process restart retain totals without counting disconnected 
   const directory = await mkdtemp(join(tmpdir(), "bunny-cinema-"));
   const file = join(directory, "cinema.sqlite");
   const original = new CinemaDiary(file);
-  const screening = original.createTicket(
-    original.start("Perfect Blue", startTime).id,
+  const screening = await original.createTicket(
+    (await original.start("Perfect Blue", startTime)).id,
     "Perfect Blue",
     null,
     startTime,
   );
   assert.ok(screening);
-  watchFor(original, "viewer", screening.id, 300);
+  await watchFor(original, "viewer", screening.id, 300);
   original.disconnect("viewer");
-  original.watching("viewer", "new-tab", screening.id, true, startTime + 310_000);
-  assert.equal(original.progress("viewer").watchedSeconds, 300);
-  original.watching("viewer", "new-tab", screening.id, true, startTime + 320_000);
+  await original.watching("viewer", "new-tab", screening.id, true, startTime + 310000);
+  assert.equal((await original.progress("viewer")).watchedSeconds, 300);
+  await original.watching("viewer", "new-tab", screening.id, true, startTime + 320000);
   original.close();
   const restored = new CinemaDiary(file);
   try {
-    assert.deepEqual(restored.current(), screening);
-    watchFor(restored, "viewer", screening.id, 10, startTime + 320_000);
-    assert.equal(restored.progress("viewer").watchedSeconds, 310);
-    assert.deepEqual(restored.observe(true, "Perfect Blue"), screening);
-    assert.equal(restored.progress("viewer").watchedSeconds, 310);
-    restored.watching("viewer", "new-tab", screening.id, true, startTime + 330_000);
-    assert.equal(restored.progress("viewer").watchedSeconds, 310);
-    watchFor(restored, "viewer", screening.id, 290, startTime + 340_000);
-    assert.equal(restored.progress("viewer").ticket?.number, 1);
+    assert.deepEqual(await restored.current(), screening);
+    await watchFor(restored, "viewer", screening.id, 10, startTime + 320000);
+    assert.equal((await restored.progress("viewer")).watchedSeconds, 310);
+    assert.deepEqual(await restored.observe(true, "Perfect Blue"), screening);
+    assert.equal((await restored.progress("viewer")).watchedSeconds, 310);
+    await restored.watching("viewer", "new-tab", screening.id, true, startTime + 330000);
+    assert.equal((await restored.progress("viewer")).watchedSeconds, 310);
+    await watchFor(restored, "viewer", screening.id, 290, startTime + 340000);
+    assert.equal((await restored.progress("viewer")).ticket?.number, 1);
   } finally {
     restored.close();
   }
   const reopened = new CinemaDiary(file);
   try {
-    assert.equal(reopened.collection("viewer").total, 1);
-    assert.equal(reopened.progress("viewer").ticket?.number, 1);
+    assert.equal((await reopened.collection("viewer")).total, 1);
+    assert.equal((await reopened.progress("viewer")).ticket?.number, 1);
   } finally {
     reopened.close();
   }
 });
 
-test("repeat starts create collectible screenings while temporary outages keep the current one", () => {
+test("repeat starts create collectible screenings while temporary outages keep the current one", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    assert.equal(diary.observe(false, null), null);
-    const adopted = diary.observe(true, "Perfect Blue");
+    assert.equal(await diary.observe(false, null), null);
+    const adopted = await diary.observe(true, "Perfect Blue");
     assert.ok(adopted);
-    assert.deepEqual(diary.observe(false, null), adopted);
-    assert.deepEqual(diary.observe(true, "Perfect Blue"), adopted);
-    const changed = diary.observe(true, "Paprika");
+    assert.deepEqual(await diary.observe(false, null), adopted);
+    assert.deepEqual(await diary.observe(true, "Perfect Blue"), adopted);
+    const changed = await diary.observe(true, "Paprika");
     assert.notEqual(changed?.id, adopted.id);
-    const first = diary.start("Perfect Blue", startTime);
-    assert.ok(diary.createTicket(first.id, "Perfect Blue", null, startTime));
-    watchFor(diary, "viewer", first.id, 600);
-    const second = diary.start("Perfect Blue", startTime + 700_000);
-    assert.ok(diary.createTicket(second.id, "Perfect Blue", null, startTime + 700_000));
+    const first = await diary.start("Perfect Blue", startTime);
+    assert.ok(await diary.createTicket(first.id, "Perfect Blue", null, startTime));
+    await watchFor(diary, "viewer", first.id, 600);
+    const second = await diary.start("Perfect Blue", startTime + 700000);
+    assert.ok(await diary.createTicket(second.id, "Perfect Blue", null, startTime + 700000));
     assert.notEqual(first.id, second.id);
-    watchFor(diary, "viewer", second.id, 600, startTime + 700_000);
-    const collection = diary.collection("viewer");
+    await watchFor(diary, "viewer", second.id, 600, startTime + 700000);
+    const collection = await diary.collection("viewer");
     assert.equal(collection.total, 2);
     assert.deepEqual(
       collection.tickets.map((ticket) => ticket.number),
@@ -250,22 +250,22 @@ test("repeat starts create collectible screenings while temporary outages keep t
       collection.tickets.map((ticket) => ticket.screeningId),
       [second.id, first.id],
     );
-    assert.deepEqual(diary.collection("someone-else"), { tickets: [], total: 0 });
+    assert.deepEqual(await diary.collection("someone-else"), { tickets: [], total: 0 });
   } finally {
     diary.close();
   }
 });
 
-test("collections are bounded while total and ticket numbering remain accurate", () => {
+test("collections are bounded while total and ticket numbering remain accurate", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
     for (let index = 0; index < 102; index += 1) {
-      const at = startTime + index * 700_000;
-      const screening = diary.start(`Screening ${index}`, at);
-      assert.ok(diary.createTicket(screening.id, screening.title, null, at));
-      watchFor(diary, "viewer", screening.id, 600, at);
+      const at = startTime + index * 700000;
+      const screening = await diary.start(`Screening ${index}`, at);
+      assert.ok(await diary.createTicket(screening.id, screening.title, null, at));
+      await watchFor(diary, "viewer", screening.id, 600, at);
     }
-    const collection = diary.collection("viewer");
+    const collection = await diary.collection("viewer");
     assert.equal(collection.total, 102);
     assert.equal(collection.tickets.length, 100);
     assert.equal(collection.tickets[0].number, 102);
@@ -281,57 +281,59 @@ test("a failed write does not mark unpersisted playback as already counted", asy
   const diary = new CinemaDiary(file);
   const competing = new DatabaseSync(file);
   try {
-    const screening = diary.start("Together", startTime);
-    diary.watching("viewer", "tab", screening.id, true, startTime);
+    const screening = await diary.start("Together", startTime);
+    await diary.watching("viewer", "tab", screening.id, true, startTime);
     competing.exec("BEGIN IMMEDIATE");
-    assert.throws(() => diary.watching("viewer", "tab", screening.id, true, startTime + 10_000));
-    assert.equal(diary.progress("viewer").watchedSeconds, 0);
+    await assert.rejects(
+      async () => await diary.watching("viewer", "tab", screening.id, true, startTime + 10000),
+    );
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 0);
     competing.exec("COMMIT");
-    diary.watching("viewer", "tab", screening.id, true, startTime + 20_000);
-    assert.equal(diary.progress("viewer").watchedSeconds, 20);
+    await diary.watching("viewer", "tab", screening.id, true, startTime + 20000);
+    assert.equal((await diary.progress("viewer")).watchedSeconds, 20);
   } finally {
     competing.close();
     diary.close();
   }
 });
 
-test("watching without a design saves progress and late creation awards every eligible viewer once", () => {
+test("watching without a design saves progress and late creation awards every eligible viewer once", async () => {
   const diary = new CinemaDiary(":memory:");
   try {
-    const screening = diary.start("Livestream", startTime);
+    const screening = await diary.start("Livestream", startTime);
     assert.equal(screening.ticketDesign, null);
-    watchFor(diary, "first", screening.id, 600);
-    watchFor(diary, "second", screening.id, 600);
-    watchFor(diary, "almost", screening.id, 590);
-    assert.equal(diary.progress("first").watchedSeconds, 600);
-    assert.equal(diary.progress("first").ticket, null);
-    assert.equal(diary.collection("first").total, 0);
-    diary.watching("first", "first", screening.id, false, startTime + 610_000);
-    const designed = diary.createTicket(
+    await watchFor(diary, "first", screening.id, 600);
+    await watchFor(diary, "second", screening.id, 600);
+    await watchFor(diary, "almost", screening.id, 590);
+    assert.equal((await diary.progress("first")).watchedSeconds, 600);
+    assert.equal((await diary.progress("first")).ticket, null);
+    assert.equal((await diary.collection("first")).total, 0);
+    await diary.watching("first", "first", screening.id, false, startTime + 610000);
+    const designed = await diary.createTicket(
       screening.id,
       "The burrow's premiere",
       null,
-      startTime + 620_000,
+      startTime + 620000,
     );
     assert.ok(designed);
     assert.deepEqual(designed.ticketDesign, {
       title: "The burrow's premiere",
       imagePath: null,
-      createdAt: new Date(startTime + 620_000).toISOString(),
+      createdAt: new Date(startTime + 620000).toISOString(),
     });
     for (const member of ["first", "second"]) {
-      assert.equal(diary.progress(member).ticket?.title, "The burrow's premiere");
-      assert.equal(diary.collection(member).total, 1);
+      assert.equal((await diary.progress(member)).ticket?.title, "The burrow's premiere");
+      assert.equal((await diary.collection(member)).total, 1);
     }
-    assert.equal(diary.progress("almost").ticket, null);
-    assert.equal(diary.createTicket(screening.id, "Replacement", null), null);
-    assert.equal(diary.collection("first").total, 1);
-    diary.watching("almost", "almost", screening.id, true, startTime + 600_000);
-    assert.equal(diary.progress("almost").ticket?.number, 1);
-    const next = diary.start("Next livestream", startTime + 700_000);
+    assert.equal((await diary.progress("almost")).ticket, null);
+    assert.equal(await diary.createTicket(screening.id, "Replacement", null), null);
+    assert.equal((await diary.collection("first")).total, 1);
+    await diary.watching("almost", "almost", screening.id, true, startTime + 600000);
+    assert.equal((await diary.progress("almost")).ticket?.number, 1);
+    const next = await diary.start("Next livestream", startTime + 700000);
     assert.equal(next.ticketDesign, null);
-    assert.equal(diary.createTicket(screening.id, "Old draft", null), null);
-    assert.equal(diary.current()?.ticketDesign, null);
+    assert.equal(await diary.createTicket(screening.id, "Old draft", null), null);
+    assert.equal((await diary.current())?.ticketDesign, null);
   } finally {
     diary.close();
   }
@@ -341,24 +343,24 @@ test("design images and immutable earned artwork survive restart and screening c
   const directory = await mkdtemp(join(tmpdir(), "bunny-cinema-image-"));
   const file = join(directory, "cinema.sqlite");
   const diary = new CinemaDiary(file);
-  const screening = diary.start("Stream title", startTime);
+  const screening = await diary.start("Stream title", startTime);
   const image = { mimeType: "image/png", data: Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]) };
-  const designed = diary.createTicket(screening.id, "Collectible title", image, startTime);
+  const designed = await diary.createTicket(screening.id, "Collectible title", image, startTime);
   assert.ok(designed);
-  watchFor(diary, "viewer", screening.id, 600);
-  const ticket = diary.progress("viewer").ticket;
+  await watchFor(diary, "viewer", screening.id, 600);
+  const ticket = (await diary.progress("viewer")).ticket;
   assert.ok(ticket);
   assert.equal(ticket.title, "Collectible title");
   assert.equal(ticket.imagePath, `/api/cinema/screenings/${screening.id}/image`);
   diary.close();
   const restored = new CinemaDiary(file);
   try {
-    assert.deepEqual(restored.current(), designed);
-    assert.deepEqual(restored.image(screening.id), image);
-    assert.equal(restored.createTicket(screening.id, "Changed title", null), null);
-    restored.start("Next stream", startTime + 700_000);
-    assert.deepEqual(restored.collection("viewer").tickets, [ticket]);
-    assert.deepEqual(restored.image(screening.id), image);
+    assert.deepEqual(await restored.current(), designed);
+    assert.deepEqual(await restored.image(screening.id), image);
+    assert.equal(await restored.createTicket(screening.id, "Changed title", null), null);
+    await restored.start("Next stream", startTime + 700000);
+    assert.deepEqual((await restored.collection("viewer")).tickets, [ticket]);
+    assert.deepEqual(await restored.image(screening.id), image);
   } finally {
     restored.close();
   }
@@ -389,15 +391,15 @@ test("migration preserves legacy tickets even when a design is later added to th
       imagePath: null,
       bunny: generateTicketBunny("legacy-screening"),
     };
-    assert.equal(diary.current()?.ticketDesign, null);
-    assert.deepEqual(diary.collection("legacy-viewer").tickets, [expected]);
-    diary.createTicket("legacy-screening", "New artwork title", null, startTime);
-    assert.deepEqual(diary.collection("legacy-viewer").tickets, [expected]);
-    const next = diary.start("New stream", startTime);
-    diary.createTicket(next.id, "New ticket", null, startTime);
-    watchFor(diary, "legacy-viewer", next.id, 600);
-    assert.equal(diary.progress("legacy-viewer").ticket?.number, 8);
-    assert.deepEqual(diary.collection("legacy-viewer").tickets[1], expected);
+    assert.equal((await diary.current())?.ticketDesign, null);
+    assert.deepEqual((await diary.collection("legacy-viewer")).tickets, [expected]);
+    await diary.createTicket("legacy-screening", "New artwork title", null, startTime);
+    assert.deepEqual((await diary.collection("legacy-viewer")).tickets, [expected]);
+    const next = await diary.start("New stream", startTime);
+    await diary.createTicket(next.id, "New ticket", null, startTime);
+    await watchFor(diary, "legacy-viewer", next.id, 600);
+    assert.equal((await diary.progress("legacy-viewer")).ticket?.number, 8);
+    assert.deepEqual((await diary.collection("legacy-viewer")).tickets[1], expected);
   } finally {
     diary.close();
   }
@@ -421,7 +423,7 @@ function nextCinemaMessage(socket: WebSocket) {
 
 test(
   "the room welcomes viewers with progress and counts only valid playing pulses",
-  { timeout: 5_000 },
+  { timeout: 5000 },
   async (context) => {
     const directory = await mkdtemp(join(tmpdir(), "bunny-cinema-room-"));
     const diary = new CinemaDiary(join(directory, "cinema.sqlite"));
@@ -440,7 +442,7 @@ test(
           id: "viewer",
           name: "Viewer",
         },
-        startTime + 3_600_000,
+        startTime + 3600000,
       ),
     );
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -453,7 +455,7 @@ test(
         type: "cinema-progress",
         progress: { screening: null, watchedSeconds: 0, requiredSeconds: 600, ticket: null },
       });
-      const screening = diary.start("Together", now);
+      const screening = await diary.start("Together", now);
       const discovered = nextCinemaMessage(socket);
       socket.send(JSON.stringify({ type: "watching", screeningId: "", playing: false }));
       assert.deepEqual(JSON.parse(await discovered).progress.screening, screening);
@@ -467,11 +469,11 @@ test(
         }),
       );
       assert.equal(JSON.parse(await first).progress.watchedSeconds, 0);
-      now += 10_000;
+      now += 10000;
       const second = nextCinemaMessage(socket);
       socket.send(JSON.stringify({ type: "watching", screeningId: screening.id, playing: true }));
       assert.equal(JSON.parse(await second).progress.watchedSeconds, 10);
-      now += 10_000;
+      now += 10000;
       const paused = nextCinemaMessage(socket);
       socket.send(JSON.stringify({ type: "watching", screeningId: screening.id, playing: false }));
       assert.equal(JSON.parse(await paused).progress.watchedSeconds, 10);
@@ -480,7 +482,7 @@ test(
         JSON.stringify({ type: "watching", screeningId: "another-screening", playing: true }),
       );
       assert.equal(JSON.parse(await stale).progress.watchedSeconds, 10);
-      assert.equal(diary.collection("viewer").total, 0);
+      assert.equal((await diary.collection("viewer")).total, 0);
     } finally {
       socket.terminate();
       for (const connection of webSockets.clients) connection.terminate();

@@ -6,19 +6,19 @@ import { purgeRecordings } from "./recording-cleanup";
 const inputId = "a".repeat(32);
 const env = {
   STREAM_URL: `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8`,
-  STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "f".repeat(32),
-  STREAM_RECORDING_CLEANUP_API_TOKEN: "private-recording-cleanup-token",
+  CF_ACCOUNT_ID: "f".repeat(32),
+  CF_TOKEN: "private-recording-cleanup-token",
 };
 
 function recording(uid: string, state: string, liveInput = inputId) {
   return { uid, liveInput, status: { state } };
 }
 
-test("cleanup uses the existing Stream credential pair and never mixes partial overrides", async (context) => {
+test("cleanup uses the generic Cloudflare credentials and rejects an incomplete pair", async (context) => {
   const existing = {
     STREAM_URL: env.STREAM_URL,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: "c".repeat(32),
-    CLOUDFLARE_STREAM_API_TOKEN: "existing-stream-read-and-edit-token",
+    CF_ACCOUNT_ID: "c".repeat(32),
+    CF_TOKEN: "existing-stream-read-and-edit-token",
   };
   let requests = 0;
   context.mock.method(
@@ -28,22 +28,16 @@ test("cleanup uses the existing Stream credential pair and never mixes partial o
       requests += 1;
       assert.ok(
         new URL(String(input)).pathname.startsWith(
-          `/client/v4/accounts/${existing.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream`,
+          `/client/v4/accounts/${existing.CF_ACCOUNT_ID}/stream`,
         ),
       );
-      assert.equal(
-        new Headers(init?.headers).get("Authorization"),
-        `Bearer ${existing.CLOUDFLARE_STREAM_API_TOKEN}`,
-      );
+      assert.equal(new Headers(init?.headers).get("Authorization"), `Bearer ${existing.CF_TOKEN}`);
       return Response.json({ success: true, result: [] });
     },
   );
   assert.deepEqual(await purgeRecordings(existing), { deleted: 0, failed: 0 });
   assert.equal(requests, 1);
-  await assert.rejects(
-    purgeRecordings({ ...existing, STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "d".repeat(32) }),
-    /not configured/,
-  );
+  await assert.rejects(purgeRecordings({ ...existing, CF_TOKEN: undefined }), /not configured/);
   assert.equal(requests, 1);
 });
 
@@ -62,10 +56,7 @@ test("cleanup deletes this input's finished videos and rechecks status before to
     "fetch",
     async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input));
-      assert.equal(
-        new Headers(init?.headers).get("Authorization"),
-        `Bearer ${env.STREAM_RECORDING_CLEANUP_API_TOKEN}`,
-      );
+      assert.equal(new Headers(init?.headers).get("Authorization"), `Bearer ${env.CF_TOKEN}`);
       assert.equal(init?.redirect, "error");
       if (url.search) {
         assert.equal(url.searchParams.get("live_input_id"), inputId);
@@ -138,8 +129,26 @@ test("cleanup fails closed when authorization or provider metadata cannot be tru
   await assert.rejects(purgeRecordings(env), /invalid metadata/);
   response = () => Response.json({ success: true, result: {} });
   await assert.rejects(purgeRecordings(env), /invalid video list/);
-  await assert.rejects(
-    purgeRecordings({ ...env, STREAM_RECORDING_CLEANUP_API_TOKEN: undefined }),
-    /not configured/,
+  await assert.rejects(purgeRecordings({ ...env, CF_TOKEN: undefined }), /not configured/);
+});
+
+test("cleanup accepts empty successful deletions and rejects an explicit provider failure", async (context) => {
+  const video = recording("1".repeat(32), "ready");
+  let deletion = () => new Response(null, { status: 200 });
+  context.mock.method(
+    globalThis,
+    "fetch",
+    async (input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "DELETE") return deletion();
+      return Response.json({
+        success: true,
+        result: new URL(String(input)).search ? [video] : video,
+      });
+    },
   );
+  assert.deepEqual(await purgeRecordings(env), { deleted: 1, failed: 0 });
+  deletion = () => new Response("", { status: 200 });
+  assert.deepEqual(await purgeRecordings(env), { deleted: 1, failed: 0 });
+  deletion = () => Response.json({ success: false });
+  assert.deepEqual(await purgeRecordings(env), { deleted: 0, failed: 1 });
 });

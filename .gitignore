@@ -4,6 +4,9 @@
 !.env.example
 .dev.vars
 .dev.vars.*
+discord-token
+cf-token
+secret-token
 !.dev.vars.example
 .wrangler/
 .next/

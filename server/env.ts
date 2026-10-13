@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import type { Env } from "../worker/index";
 import { jellyfinBaseUrl } from "./jellyfin";
 import { streamInputId, validateStreamSigning } from "./stream-playback";
@@ -47,6 +49,17 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   const discordClientId = required(source, "DISCORD_CLIENT_ID");
   const discordClientSecret = required(source, "DISCORD_CLIENT_SECRET");
   const discordGuildId = required(source, "DISCORD_GUILD_ID");
+  let discordBotToken = source.DISCORD_BOT_TOKEN?.trim();
+  if (!discordBotToken && source.DISCORD_BOT_TOKEN_FILE?.trim()) {
+    try {
+      discordBotToken = readFileSync(source.DISCORD_BOT_TOKEN_FILE.trim(), "utf8").trim();
+    } catch {
+      throw new Error("DISCORD_BOT_TOKEN_FILE could not be read");
+    }
+  }
+  discordBotToken = discordBotToken?.replace(/^Bot /, "") || undefined;
+  if (discordBotToken && !/^[A-Za-z\d._-]{20,256}$/.test(discordBotToken))
+    throw new Error("DISCORD_BOT_TOKEN must be a valid bot token");
   const sessionSecret = required(source, "SESSION_SECRET");
   const streamUrl = required(source, "STREAM_URL");
   const torBoxApiKey = required(source, "TORBOX_API_KEY");
@@ -63,6 +76,18 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   }
 
   validUrl(appUrl, "APP_URL", production);
+  const databaseUrl = source.D1_DATABASE_URL?.trim();
+  const databaseSecret = source.D1_DATABASE_SECRET?.trim();
+  if (databaseUrl || databaseSecret) {
+    if (!databaseUrl || !databaseSecret)
+      throw new Error("D1 database URL and secret must be configured together");
+    validUrl(databaseUrl, "D1_DATABASE_URL", production);
+    const url = new URL(databaseUrl);
+    if (url.username || url.password || url.search || url.hash || url.pathname !== "/query")
+      throw new Error("D1_DATABASE_URL must point to the private /query endpoint");
+    if (!/^[A-Za-z\d_-]{43,256}$/.test(databaseSecret))
+      throw new Error("D1_DATABASE_SECRET must contain at least 32 random bytes in base64url");
+  }
   validUrl(streamUrl, "STREAM_URL", production);
   if (controllerUrl) validUrl(controllerUrl, "RELAY_CONTROLLER_URL");
   const jellyfinUrl = source.JELLYFIN_URL?.trim();
@@ -92,28 +117,16 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     throw new Error("STREAM_DELAY_SECONDS must be between 0 and 120");
   }
 
-  const dedicatedCleanup = Boolean(
-    source.STREAM_RECORDING_CLEANUP_ACCOUNT_ID?.trim() ||
-    source.STREAM_RECORDING_CLEANUP_API_TOKEN?.trim(),
-  );
-  const existingStreamCredentials = Boolean(
-    source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim() && source.CLOUDFLARE_STREAM_API_TOKEN?.trim(),
-  );
-  const cleanupAccountId = dedicatedCleanup
-    ? source.STREAM_RECORDING_CLEANUP_ACCOUNT_ID?.trim()
-    : existingStreamCredentials
-      ? source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim()
-      : undefined;
-  const cleanupToken = dedicatedCleanup
-    ? source.STREAM_RECORDING_CLEANUP_API_TOKEN?.trim()
-    : existingStreamCredentials
-      ? source.CLOUDFLARE_STREAM_API_TOKEN?.trim()
-      : undefined;
-  if (cleanupAccountId || cleanupToken) {
-    if (!cleanupAccountId || !cleanupToken)
-      throw new Error("Recording cleanup requires both account ID and API token");
-    if (!/^[a-f\d]{32}$/i.test(cleanupAccountId) || !/^[\x21-\x7e]{20,512}$/.test(cleanupToken))
-      throw new Error("Recording cleanup credentials are invalid");
+  const cloudflareAccountId = source.CF_ACCOUNT_ID?.trim();
+  const cloudflareToken = source.CF_TOKEN?.trim();
+  if (cloudflareAccountId || cloudflareToken) {
+    if (!cloudflareAccountId || !cloudflareToken)
+      throw new Error("Cloudflare requires both account ID and API token");
+    if (
+      !/^[a-f\d]{32}$/i.test(cloudflareAccountId) ||
+      !/^[\x21-\x7e]{20,512}$/.test(cloudflareToken)
+    )
+      throw new Error("Cloudflare credentials are invalid");
     streamInputId(streamUrl);
   }
 
@@ -123,11 +136,14 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     APP_URL: appUrl,
     API_URL: source.API_URL,
     CHAT_DB_PATH: source.CHAT_DB_PATH,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: source.CLOUDFLARE_STREAM_ACCOUNT_ID?.trim(),
-    CLOUDFLARE_STREAM_API_TOKEN: source.CLOUDFLARE_STREAM_API_TOKEN?.trim(),
+    CF_ACCOUNT_ID: cloudflareAccountId,
+    CF_TOKEN: cloudflareToken,
     CLOUDFLARE_STREAM_SIGNING_KEY_ID: source.CLOUDFLARE_STREAM_SIGNING_KEY_ID?.trim(),
     CLOUDFLARE_STREAM_SIGNING_KEY_JWK: source.CLOUDFLARE_STREAM_SIGNING_KEY_JWK?.trim(),
     DEV_USER_JSON: source.DEV_USER_JSON,
+    D1_DATABASE_URL: databaseUrl,
+    D1_DATABASE_SECRET: databaseSecret,
+    DISCORD_BOT_TOKEN: discordBotToken,
     DISCORD_CLIENT_ID: discordClientId,
     DISCORD_CLIENT_SECRET: discordClientSecret,
     DISCORD_GUILD_ID: discordGuildId,
@@ -143,8 +159,6 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     STREAM_CONTROLLER_SECRET: source.STREAM_CONTROLLER_SECRET,
     STREAM_CONTROLLER_URL: source.STREAM_CONTROLLER_URL,
     STREAM_DELAY_SECONDS: String(delay),
-    STREAM_RECORDING_CLEANUP_ACCOUNT_ID: cleanupAccountId,
-    STREAM_RECORDING_CLEANUP_API_TOKEN: cleanupToken,
     STREAM_URL: streamUrl,
     STREMIO_ADDON_URL: source.STREMIO_ADDON_URL,
     TMDB_API_TOKEN: source.TMDB_API_TOKEN,

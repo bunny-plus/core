@@ -10,9 +10,11 @@
     "moduleDetection": "force",
     "noEmit": true,
     "strict": true,
+    // Miniflare's published declarations reference internal modules; app and test types remain checked.
+    "skipLibCheck": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "types": ["node"]
   },
-  "include": ["worker", "server"]
+  "include": ["worker", "server", "storage-worker"]
 }

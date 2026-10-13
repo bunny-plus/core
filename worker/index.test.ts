@@ -351,8 +351,8 @@ test("private playback links require a session and availability probes use signe
     ...env,
     RELAY_CONTROLLER_URL: "http://signed-controller.test",
     STREAM_URL: `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8?protocol=llhlsbeta`,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: "b".repeat(32),
-    CLOUDFLARE_STREAM_API_TOKEN: "private-playback-api-token",
+    CF_ACCOUNT_ID: "b".repeat(32),
+    CF_TOKEN: "private-playback-api-token",
   };
   const signedUrl =
     "https://customer-test.cloudflarestream.com/header.claims.signature/manifest/video.m3u8?protocol=llhlsbeta";
@@ -365,7 +365,7 @@ test("private playback links require a session and availability probes use signe
     if (url === signedUrl) return new Response("#EXTM3U");
     if (
       url ===
-      `https://api.cloudflare.com/client/v4/accounts/${signingEnv.CLOUDFLARE_STREAM_ACCOUNT_ID}/stream/${inputId}/token`
+      `https://api.cloudflare.com/client/v4/accounts/${signingEnv.CF_ACCOUNT_ID}/stream/${inputId}/token`
     )
       return Response.json({ success: true, result: { token: "header.claims.signature" } });
     throw new Error(`Unexpected request: ${url}`);
@@ -391,7 +391,7 @@ test("private playback links require a session and availability probes use signe
   assert.deepEqual(Object.keys(body).sort(), ["expiresAt", "url"]);
   assert.equal(body.url, signedUrl);
   assert.ok(body.expiresAt > Date.now());
-  assert.ok(!JSON.stringify(body).includes(signingEnv.CLOUDFLARE_STREAM_API_TOKEN));
+  assert.ok(!JSON.stringify(body).includes(signingEnv.CF_TOKEN));
   const info = await handleRequest(
     new Request("https://api.bunny.plus/api/stream-info", { headers }),
     signingEnv,

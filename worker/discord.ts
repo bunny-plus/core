@@ -2,8 +2,7 @@ import type { AuthSessions, DiscordCredentials, StoredSession } from "../server/
 import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "../server/upstream";
 import type { Env } from "./index";
 import type { Viewer } from "./session";
-
-export const discordCheckInterval = 60 * 60 * 1_000;
+export const discordCheckInterval = 60 * 60 * 1000;
 const checks = new WeakMap<AuthSessions, Map<string, Promise<Viewer | null>>>();
 
 type DiscordUser = {
@@ -12,10 +11,18 @@ type DiscordUser = {
   id: string;
   username: string;
 };
-
-type DiscordMember = { roles: string[] };
-type RolePermissions = { [roleId: string]: string[] };
-type DiscordToken = { access_token: string; refresh_token: string; expires_in: number };
+type DiscordMember = {
+  roles: string[];
+  pending?: boolean;
+};
+type RolePermissions = {
+  [roleId: string]: string[];
+};
+type DiscordToken = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+};
 
 class DiscordAccessError extends Error {}
 
@@ -46,7 +53,11 @@ function isDiscordUser(value: JsonValue): value is DiscordUser {
 }
 
 function isDiscordMember(value: JsonValue): value is DiscordMember {
-  return isObject(value) && isStringList(value.roles);
+  return (
+    isObject(value) &&
+    isStringList(value.roles) &&
+    (value.pending === undefined || typeof value.pending === "boolean")
+  );
 }
 
 function isDiscordToken(value: JsonValue): value is DiscordToken {
@@ -72,7 +83,7 @@ export async function exchangeDiscordToken(body: URLSearchParams, env: Env) {
     method: "POST",
     name: "Discord OAuth",
     requireOk: false,
-    timeoutMs: 10_000,
+    timeoutMs: 10000,
   });
   if (response.status === 400 && isObject(data) && data.error === "invalid_grant") return null;
   if (!response.ok) throw new UpstreamError("Discord token exchange failed", response.status);
@@ -81,7 +92,7 @@ export async function exchangeDiscordToken(body: URLSearchParams, env: Env) {
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + data.expires_in * 1_000,
+    expiresAt: Date.now() + data.expires_in * 1000,
   } satisfies DiscordCredentials;
 }
 
@@ -92,11 +103,11 @@ export async function discordViewer(accessToken: string, env: Env) {
       headers,
       name: "Discord API",
       requireOk: false,
-      timeoutMs: 10_000,
+      timeoutMs: 10000,
     }),
     fetchJson<JsonValue>(
       `https://discord.com/api/users/@me/guilds/${env.DISCORD_GUILD_ID}/member`,
-      { headers, name: "Discord API", requireOk: false, timeoutMs: 10_000 },
+      { headers, name: "Discord API", requireOk: false, timeoutMs: 10000 },
     ),
   ]);
   if (userResult.response.status === 401 || memberResult.response.status === 401)
@@ -108,10 +119,14 @@ export async function discordViewer(accessToken: string, env: Env) {
   const member = memberResult.data;
   if (!isDiscordUser(user) || !isDiscordMember(member))
     throw new UpstreamError("Discord API returned invalid data");
+  if (member.pending) return null;
+  return viewerFromDiscord(user, member.roles, env);
+}
+function viewerFromDiscord(user: DiscordUser, roles: string[], env: Env) {
   const rolePermissions: JsonValue = JSON.parse(env.DISCORD_ROLE_PERMISSIONS || "{}");
   if (!isRolePermissions(rolePermissions))
     throw new Error("DISCORD_ROLE_PERMISSIONS must map Discord role IDs to permission arrays");
-  const permissions = [...new Set(member.roles.flatMap((id) => rolePermissions[id] ?? []))];
+  const permissions = [...new Set(roles.flatMap((id) => rolePermissions[id] ?? []))];
   const admins = env.ADMIN_DISCORD_IDS.split(",").map((id) => id.trim());
   const admin = admins.includes(user.id) || permissions.includes("admin");
   if (admin) {
@@ -128,8 +143,37 @@ export async function discordViewer(accessToken: string, env: Env) {
     permissions,
   } satisfies Omit<Viewer, "expires">;
 }
+export async function discordBotViewer(userId: string, env: Env) {
+  if (!env.DISCORD_BOT_TOKEN) throw new UpstreamError("Discord bot is unavailable");
+  const { data, response } = await fetchJson<JsonValue>(
+    `https://discord.com/api/v10/guilds/${encodeURIComponent(env.DISCORD_GUILD_ID)}/members/${encodeURIComponent(userId)}`,
+    {
+      headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+      name: "Discord membership",
+      requireOk: false,
+      timeoutMs: 10000,
+    },
+  );
+  if (response.status === 404 && isObject(data) && data.code === 10007) return null;
+  if (!response.ok)
+    throw new UpstreamError("Discord membership could not be checked", response.status);
+  const user = isObject(data) ? data.user : undefined;
+  if (!isDiscordMember(data) || !user || !isDiscordUser(user) || user.id !== userId)
+    throw new UpstreamError("Discord API returned invalid membership data");
+  if (data.pending) return null;
+  return viewerFromDiscord(user, data.roles, env);
+}
 
 async function recheckSession(token: string, stored: StoredSession, store: AuthSessions, env: Env) {
+  if (!stored.credentials) {
+    const viewer = await discordBotViewer(stored.viewer.id, env);
+    if (!viewer) {
+      await store.revoke(token);
+      return null;
+    }
+    const result = { ...viewer, expires: stored.viewer.expires };
+    return (await store.update(token, result, null)) ? result : null;
+  }
   let credentials = stored.credentials;
   async function refresh() {
     return exchangeDiscordToken(
@@ -137,15 +181,15 @@ async function recheckSession(token: string, stored: StoredSession, store: AuthS
       env,
     );
   }
-  if (credentials.expiresAt <= Date.now() + 60_000) {
+  if (credentials.expiresAt <= Date.now() + 60000) {
     const renewed = await refresh();
     if (!renewed) {
-      store.revoke(token);
+      await store.revoke(token);
       return null;
     }
     credentials = renewed;
     // Keep rotated credentials even if the subsequent Discord API request fails.
-    if (!store.update(token, stored.viewer, credentials, stored.checkedAt)) return null;
+    if (!(await store.update(token, stored.viewer, credentials, stored.checkedAt))) return null;
   }
   let viewer: Omit<Viewer, "expires"> | null;
   try {
@@ -154,11 +198,11 @@ async function recheckSession(token: string, stored: StoredSession, store: AuthS
     if (!(error instanceof DiscordAccessError)) throw error;
     const renewed = await refresh();
     if (!renewed) {
-      store.revoke(token);
+      await store.revoke(token);
       return null;
     }
     credentials = renewed;
-    if (!store.update(token, stored.viewer, credentials, stored.checkedAt)) return null;
+    if (!(await store.update(token, stored.viewer, credentials, stored.checkedAt))) return null;
     try {
       viewer = await discordViewer(credentials.accessToken, env);
     } catch (retryError) {
@@ -167,17 +211,17 @@ async function recheckSession(token: string, stored: StoredSession, store: AuthS
     }
   }
   if (!viewer || viewer.id !== stored.viewer.id) {
-    store.revoke(token);
+    await store.revoke(token);
     return null;
   }
   const result = { ...viewer, expires: stored.viewer.expires };
-  return store.update(token, result, credentials) ? result : null;
+  return (await store.update(token, result, credentials)) ? result : null;
 }
 
 export async function persistentViewer(token: string, env: Env): Promise<Viewer | null> {
   const store = env.AUTH_SESSIONS;
   if (!store) return null;
-  const stored = store.read(token);
+  const stored = await store.read(token);
   if (!stored) return null;
   if (Date.now() - stored.checkedAt < discordCheckInterval) return stored.viewer;
   let pending = checks.get(store);

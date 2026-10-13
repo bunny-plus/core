@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { loadEnvironment } from "./env";
@@ -62,51 +65,39 @@ test("development environment can run without a relay controller", () => {
 test("environment loads private Cloudflare playback credentials only as complete pairs", () => {
   const signing = {
     STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
-    CLOUDFLARE_STREAM_API_TOKEN: "cloudflare-api-token-secret",
+    CF_ACCOUNT_ID: "a".repeat(32),
+    CF_TOKEN: "cloudflare-api-token-secret",
   };
   const env = loadEnvironment({ ...validEnvironment, ...signing });
-  assert.equal(env.CLOUDFLARE_STREAM_API_TOKEN, signing.CLOUDFLARE_STREAM_API_TOKEN);
+  assert.equal(env.CF_TOKEN, signing.CF_TOKEN);
   assert.throws(
-    () =>
-      loadEnvironment({ ...validEnvironment, ...signing, CLOUDFLARE_STREAM_ACCOUNT_ID: undefined }),
+    () => loadEnvironment({ ...validEnvironment, ...signing, CF_ACCOUNT_ID: undefined }),
     /both account ID and API token/,
   );
 });
 
-test("recording cleanup requires a complete credential pair for a private live input", () => {
+test("generic Cloudflare credentials validate the account and token", () => {
   const configured = {
     ...validEnvironment,
     STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
-    CLOUDFLARE_STREAM_API_TOKEN: "private-playback-api-token",
-    STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "a".repeat(32),
-    STREAM_RECORDING_CLEANUP_API_TOKEN: "private-recording-cleanup-token",
-  };
-  assert.equal(
-    loadEnvironment(configured).STREAM_RECORDING_CLEANUP_API_TOKEN,
-    configured.STREAM_RECORDING_CLEANUP_API_TOKEN,
-  );
-  assert.throws(
-    () => loadEnvironment({ ...configured, STREAM_RECORDING_CLEANUP_API_TOKEN: undefined }),
-    /both account ID and API token/,
-  );
-  assert.throws(
-    () => loadEnvironment({ ...configured, STREAM_RECORDING_CLEANUP_ACCOUNT_ID: "invalid" }),
-    /credentials are invalid/,
-  );
-});
-
-test("recording cleanup reuses the existing Stream token and account without separate credentials", () => {
-  const configured = {
-    ...validEnvironment,
-    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
-    CLOUDFLARE_STREAM_ACCOUNT_ID: "a".repeat(32),
-    CLOUDFLARE_STREAM_API_TOKEN: "existing-stream-read-and-edit-token",
+    CF_ACCOUNT_ID: "a".repeat(32),
+    CF_TOKEN: "private-cloudflare-api-token",
   };
   const result = loadEnvironment(configured);
-  assert.equal(result.STREAM_RECORDING_CLEANUP_ACCOUNT_ID, configured.CLOUDFLARE_STREAM_ACCOUNT_ID);
-  assert.equal(result.STREAM_RECORDING_CLEANUP_API_TOKEN, configured.CLOUDFLARE_STREAM_API_TOKEN);
+  assert.equal(result.CF_ACCOUNT_ID, configured.CF_ACCOUNT_ID);
+  assert.equal(result.CF_TOKEN, configured.CF_TOKEN);
+  assert.throws(
+    () => loadEnvironment({ ...configured, CF_TOKEN: undefined }),
+    /both account ID and API token/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...configured, CF_ACCOUNT_ID: "invalid" }),
+    /credentials are invalid/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...configured, CF_TOKEN: "cloudflare-api-token-secret\r\nheader" }),
+    /credentials are invalid/,
+  );
 });
 
 test("production environment rejects development authentication", () => {
@@ -148,5 +139,63 @@ test("environment keeps Jellyfin optional and validates configured connection de
         JELLYFIN_API_KEY: "a".repeat(32) + "\r\nInjected: yes",
       }),
     /valid API token/,
+  );
+});
+test("Discord bot credentials are optional and can be loaded from a private token file", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "bunny-bot-token-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const file = join(directory, "discord-token");
+  const token = "private-discord-bot-token";
+  await writeFile(file, `Bot ${token}\n`, { mode: 0o600 });
+  assert.equal(loadEnvironment(validEnvironment).DISCORD_BOT_TOKEN, undefined);
+  assert.equal(
+    loadEnvironment({ ...validEnvironment, DISCORD_BOT_TOKEN_FILE: file }).DISCORD_BOT_TOKEN,
+    token,
+  );
+  assert.equal(
+    loadEnvironment({ ...validEnvironment, DISCORD_BOT_TOKEN: token }).DISCORD_BOT_TOKEN,
+    token,
+  );
+  assert.throws(
+    () =>
+      loadEnvironment({ ...validEnvironment, DISCORD_BOT_TOKEN_FILE: join(directory, "missing") }),
+    /could not be read/,
+  );
+  assert.throws(
+    () => loadEnvironment({ ...validEnvironment, DISCORD_BOT_TOKEN: token + "\r\nInjected: yes" }),
+    /valid bot token/,
+  );
+});
+
+test("D1 storage requires a complete private HTTPS endpoint and secret", () => {
+  const configured = {
+    ...validEnvironment,
+    D1_DATABASE_URL: "https://bunny-database.example.workers.dev/query",
+    D1_DATABASE_SECRET: "a".repeat(43),
+  };
+  assert.equal(loadEnvironment(validEnvironment).D1_DATABASE_URL, undefined);
+  assert.equal(loadEnvironment(configured).D1_DATABASE_URL, configured.D1_DATABASE_URL);
+  for (const field of ["D1_DATABASE_URL", "D1_DATABASE_SECRET"])
+    assert.throws(
+      () => loadEnvironment({ ...configured, [field]: undefined }),
+      /configured together/,
+    );
+  assert.throws(
+    () => loadEnvironment({ ...configured, D1_DATABASE_URL: "http://database.test/query" }),
+    /must use HTTPS/,
+  );
+  for (const url of [
+    "https://database.test/",
+    "https://database.test/query?secret=private",
+    "https://user:password@database.test/query",
+    "https://database.test/query#private",
+  ])
+    assert.throws(
+      () => loadEnvironment({ ...configured, D1_DATABASE_URL: url }),
+      /private \/query endpoint/,
+    );
+  assert.throws(
+    () => loadEnvironment({ ...configured, D1_DATABASE_SECRET: "too-short" }),
+    /32 random bytes/,
   );
 });
