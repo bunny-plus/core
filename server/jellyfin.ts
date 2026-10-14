@@ -1,4 +1,4 @@
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 import type {
   JellyfinItem,
   JellyfinLibrary,
@@ -6,7 +6,8 @@ import type {
   JellyfinSource,
   JellyfinPlayback,
 } from "../shared/jellyfin";
-import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "./upstream";
+import { fetchJson, UpstreamError } from "./upstream";
+import { isJsonObject, isString, type JsonObject, type JsonValue } from "../shared/json";
 
 export class JellyfinError extends Error {
   constructor(
@@ -15,14 +16,6 @@ export class JellyfinError extends Error {
   ) {
     super(message);
   }
-}
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isString(value: JsonValue | undefined): value is string {
-  return typeof value === "string";
 }
 
 function isNumber(value: JsonValue | undefined): value is number {
@@ -83,7 +76,7 @@ async function jellyfinGet(env: Env, path: string, query: URLSearchParams, timeo
       maxBytes: 2_000_000,
       redirect: "error",
     });
-    if (!isObject(data)) throw new Error("Jellyfin returned invalid data");
+    if (!isJsonObject(data)) throw new Error("Jellyfin returned invalid data");
     return data;
   } catch (error) {
     if (error instanceof UpstreamError && [401, 403].includes(error.status ?? 0)) {
@@ -97,7 +90,7 @@ async function jellyfinGet(env: Env, path: string, query: URLSearchParams, timeo
 }
 
 function itemFromJson(item: JsonValue): JellyfinItem {
-  if (!isObject(item) || !isString(item.Id) || !isString(item.Name))
+  if (!isJsonObject(item) || !isString(item.Id) || !isString(item.Name))
     throw new Error("Jellyfin returned an invalid library item");
   const kind = item.Type;
   if (kind !== "Movie" && kind !== "Series" && kind !== "Season" && kind !== "Episode") {
@@ -203,21 +196,21 @@ async function jellyfinItem(env: Env, itemId: string, fields = "") {
       EnableUserData: "false",
     }),
   );
-  if (!Array.isArray(data.Items) || data.Items.length !== 1 || !isObject(data.Items[0]))
+  if (!Array.isArray(data.Items) || data.Items.length !== 1 || !isJsonObject(data.Items[0]))
     throw new JellyfinError("This Jellyfin item is no longer available", 404);
   return data.Items[0];
 }
 
 function sourceFromJson(source: JsonValue): JellyfinSource | null {
   if (
-    !isObject(source) ||
+    !isJsonObject(source) ||
     !isString(source.Id) ||
     source.Protocol !== "File" ||
     source.RequiresOpening === true ||
     !Array.isArray(source.MediaStreams)
   )
     return null;
-  const streams = source.MediaStreams.filter(isObject);
+  const streams = source.MediaStreams.filter(isJsonObject);
   const video = streams.find((stream) => stream.Type === "Video" && stream.IsAttachedPic !== true);
   if (!video) return null;
   const audio = streams
@@ -259,7 +252,7 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
     audio,
     subtitles,
     fonts: Array.isArray(source.MediaAttachments)
-      ? source.MediaAttachments.filter(isObject)
+      ? source.MediaAttachments.filter(isJsonObject)
           .filter(
             (attachment) =>
               isIndex(attachment.Index) &&
@@ -284,7 +277,7 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
 
 export function isJellyfinPlayback(value: JsonValue | undefined): value is JellyfinPlayback {
   return (
-    isObject(value) &&
+    isJsonObject(value) &&
     isString(value.sessionId) &&
     /^[a-f\d]{32}$/.test(value.sessionId) &&
     isString(value.itemId) &&
@@ -312,10 +305,10 @@ export async function jellyfinRuntime(
     }),
     3_000,
   );
-  const item = Array.isArray(data.Items) ? data.Items.find(isObject) : undefined;
+  const item = Array.isArray(data.Items) ? data.Items.find(isJsonObject) : undefined;
   if (!item) return null;
   const version = Array.isArray(item.MediaSources)
-    ? item.MediaSources.filter(isObject).find((source) => source.Id === playback.mediaSourceId)
+    ? item.MediaSources.filter(isJsonObject).find((source) => source.Id === playback.mediaSourceId)
     : undefined;
   const ticks =
     isNumber(version?.RunTimeTicks) && version.RunTimeTicks > 0
@@ -330,7 +323,7 @@ export async function jellyfinOptions(env: Env, id: string): Promise<JellyfinOpt
   const item = itemFromJson(raw);
   if (item.kind !== "Movie" && item.kind !== "Episode")
     throw new JellyfinError("Choose a movie or episode to stream", 400);
-  if (!isObject(raw) || !Array.isArray(raw.MediaSources))
+  if (!isJsonObject(raw) || !Array.isArray(raw.MediaSources))
     throw new Error("Jellyfin returned no media sources");
   const sources = raw.MediaSources.map(sourceFromJson).filter((source) => source !== null);
   if (!sources.length)

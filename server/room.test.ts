@@ -10,7 +10,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import WebSocket, { WebSocketServer } from "ws";
 
 import { ChatHistory } from "./chat-history";
-import { WatchRoom, type RoomMember } from "./room";
+import type { RoomMember } from "../shared/room";
+import { WatchRoom } from "./room";
 
 const day = 24 * 60 * 60 * 1_000;
 const member: RoomMember = { admin: true, avatar: null, id: "bunny", name: "Bunny" };

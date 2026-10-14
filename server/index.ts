@@ -1,3 +1,4 @@
+import { chatHistoryLimit } from "../shared/room";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { TLSSocket } from "node:tls";
@@ -5,7 +6,9 @@ import { dirname, join } from "node:path";
 
 import { WebSocketServer } from "ws";
 
-import { authenticateRoomMember, handleRequest, type Env } from "../worker/index";
+import { handleRequest } from "../worker/index";
+import { authenticateRoomMember } from "../worker/authentication";
+import type { Env } from "../worker/env";
 import { ChatHistory } from "./chat-history";
 import { AuthSessions } from "./auth-sessions";
 import { CinemaDiary } from "./cinema";
@@ -27,7 +30,7 @@ env.AUTH_SESSIONS = new AuthSessions(
   database ?? join(dirname(chatDatabasePath), "sessions.sqlite"),
 );
 env.CINEMA_DIARY = new CinemaDiary(database ?? join(dirname(chatDatabasePath), "cinema.sqlite"));
-const chatHistory = new ChatHistory(database ?? chatDatabasePath, 200);
+const chatHistory = new ChatHistory(database ?? chatDatabasePath, chatHistoryLimit);
 const room = new WatchRoom(chatHistory, env.CINEMA_DIARY);
 const webSockets = new WebSocketServer({
   maxPayload: 16 * 1_024,

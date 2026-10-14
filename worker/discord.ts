@@ -1,7 +1,9 @@
+import { isRolePermissions, type Viewer } from "../shared/user";
 import type { AuthSessions, DiscordCredentials, StoredSession } from "../server/auth-sessions";
-import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "../server/upstream";
-import type { Env } from "./index";
-import type { Viewer } from "./session";
+import { fetchJson, UpstreamError } from "../server/upstream";
+import { isJsonObject, isString, isStringList, type JsonValue } from "../shared/json";
+import type { Env } from "./env";
+
 export const discordCheckInterval = 60 * 60 * 1000;
 const checks = new WeakMap<AuthSessions, Map<string, Promise<Viewer | null>>>();
 
@@ -15,9 +17,6 @@ type DiscordMember = {
   roles: string[];
   pending?: boolean;
 };
-type RolePermissions = {
-  [roleId: string]: string[];
-};
 type DiscordToken = {
   access_token: string;
   refresh_token: string;
@@ -26,25 +25,9 @@ type DiscordToken = {
 
 class DiscordAccessError extends Error {}
 
-function isObject(value: JsonValue): value is JsonObject {
-  return value !== null && !Array.isArray(value) && typeof value === "object";
-}
-
-function isString(value: JsonValue | undefined): value is string {
-  return typeof value === "string";
-}
-
-function isStringList(value: JsonValue | undefined): value is string[] {
-  return Array.isArray(value) && value.every(isString);
-}
-
-function isRolePermissions(value: JsonValue): value is RolePermissions {
-  return isObject(value) && Object.values(value).every(isStringList);
-}
-
 function isDiscordUser(value: JsonValue): value is DiscordUser {
   return (
-    isObject(value) &&
+    isJsonObject(value) &&
     isString(value.id) &&
     isString(value.username) &&
     (value.avatar === null || isString(value.avatar)) &&
@@ -54,7 +37,7 @@ function isDiscordUser(value: JsonValue): value is DiscordUser {
 
 function isDiscordMember(value: JsonValue): value is DiscordMember {
   return (
-    isObject(value) &&
+    isJsonObject(value) &&
     isStringList(value.roles) &&
     (value.pending === undefined || typeof value.pending === "boolean")
   );
@@ -62,7 +45,7 @@ function isDiscordMember(value: JsonValue): value is DiscordMember {
 
 function isDiscordToken(value: JsonValue): value is DiscordToken {
   return (
-    isObject(value) &&
+    isJsonObject(value) &&
     isString(value.access_token) &&
     value.access_token.length > 0 &&
     isString(value.refresh_token) &&
@@ -85,7 +68,7 @@ export async function exchangeDiscordToken(body: URLSearchParams, env: Env) {
     requireOk: false,
     timeoutMs: 10000,
   });
-  if (response.status === 400 && isObject(data) && data.error === "invalid_grant") return null;
+  if (response.status === 400 && isJsonObject(data) && data.error === "invalid_grant") return null;
   if (!response.ok) throw new UpstreamError("Discord token exchange failed", response.status);
   if (!isDiscordToken(data))
     throw new UpstreamError("Discord token exchange returned invalid data");
@@ -154,10 +137,10 @@ export async function discordBotViewer(userId: string, env: Env) {
       timeoutMs: 10000,
     },
   );
-  if (response.status === 404 && isObject(data) && data.code === 10007) return null;
+  if (response.status === 404 && isJsonObject(data) && data.code === 10007) return null;
   if (!response.ok)
     throw new UpstreamError("Discord membership could not be checked", response.status);
-  const user = isObject(data) ? data.user : undefined;
+  const user = isJsonObject(data) ? data.user : undefined;
   if (!isDiscordMember(data) || !user || !isDiscordUser(user) || user.id !== userId)
     throw new UpstreamError("Discord API returned invalid membership data");
   if (data.pending) return null;

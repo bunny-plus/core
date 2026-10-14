@@ -1,29 +1,10 @@
+import { isRolePermissions } from "../shared/user";
+import type { JsonValue } from "../shared/json";
 import { readFileSync } from "node:fs";
 
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 import { jellyfinBaseUrl } from "./jellyfin";
 import { streamInputId, validateStreamSigning } from "./stream-playback";
-
-type JsonObject = { [key: string]: JsonValue };
-type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
-type RolePermissions = { [roleId: string]: string[] };
-
-function isString(value: JsonValue): value is string {
-  return typeof value === "string";
-}
-
-function isStringList(value: JsonValue): value is string[] {
-  return Array.isArray(value) && value.every(isString);
-}
-
-function isRolePermissions(value: JsonValue): value is RolePermissions {
-  return (
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof value === "object" &&
-    Object.values(value).every(isStringList)
-  );
-}
 
 function required(source: NodeJS.ProcessEnv, name: string) {
   const value = source[name]?.trim();

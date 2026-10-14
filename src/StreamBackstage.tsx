@@ -1,8 +1,9 @@
+import type { StreamStatus } from "../shared/stream";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 
 import { AssetIcon, UiIcon } from "./Icons";
-import StreamControl, { type StreamStatus } from "./StreamControl";
+import StreamControl from "./StreamControl";
 
 export default function StreamBackstage({
   status,

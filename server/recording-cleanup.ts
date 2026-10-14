@@ -1,20 +1,17 @@
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 import { streamApiBaseUrl, streamInputId } from "./stream-playback";
-import { fetchJson, readBoundedBytes, type JsonObject, type JsonValue } from "./upstream";
+import { fetchJson, readBoundedBytes } from "./upstream";
+import { isJsonObject, type JsonObject, type JsonValue } from "../shared/json";
 
 type CleanupEnvironment = Pick<Env, "STREAM_URL" | "CF_ACCOUNT_ID" | "CF_TOKEN">;
 
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function isRecording(value: JsonValue, inputId: string): value is JsonObject & { uid: string } {
   return (
-    isObject(value) &&
+    isJsonObject(value) &&
     typeof value.uid === "string" &&
     /^[a-f\d]{32}$/i.test(value.uid) &&
     value.liveInput === inputId &&
-    isObject(value.status) &&
+    isJsonObject(value.status) &&
     typeof value.status.state === "string" &&
     ["ready", "error", "queued", "inprogress", "downloading", "pendingupload"].includes(
       value.status.state,
@@ -30,7 +27,7 @@ async function metadata(url: string, token: string) {
     maxBytes: 4_000_000,
     name: "Recording cleanup",
   });
-  if (!isObject(data) || data.success !== true || data.result === undefined)
+  if (!isJsonObject(data) || data.success !== true || data.result === undefined)
     throw new Error("Recording cleanup returned invalid metadata");
   return data.result;
 }
@@ -55,7 +52,7 @@ async function deleteRecording(url: string, token: string) {
   const bytes = await readBoundedBytes(response, 32_000, "Recording deletion");
   if (response.status === 200 && bytes.length === 0) return;
   const data: JsonValue = JSON.parse(new TextDecoder().decode(bytes));
-  if (!isObject(data) || data.success !== true)
+  if (!isJsonObject(data) || data.success !== true)
     throw new Error("Recording deletion was not confirmed");
 }
 

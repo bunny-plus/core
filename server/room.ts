@@ -1,17 +1,17 @@
+import {
+  chatMessageMaxLength,
+  type RoomChat,
+  type RoomMember,
+  type RoomClientMessage,
+  type RoomServerMessage,
+} from "../shared/room";
 import { randomUUID } from "node:crypto";
 
 import WebSocket from "ws";
 
-import { ChatHistory, type RoomChat } from "./chat-history";
+import { ChatHistory } from "./chat-history";
 import type { CinemaDiary } from "./cinema";
-import type { JsonValue } from "./upstream";
-
-export type RoomMember = {
-  admin: boolean;
-  avatar: string | null;
-  id: string;
-  name: string;
-};
+import type { JsonValue } from "../shared/json";
 
 type RoomSession = {
   pending: Promise<void>;
@@ -30,12 +30,6 @@ type MemberActivity = {
   lastChat?: number;
   lastReaction?: number;
 };
-
-type RoomClientMessage =
-  | { clientTime: number; type: "ping" }
-  | { type: "reaction" }
-  | { type: "watching"; screeningId: string; playing: boolean }
-  | { message: string; type: "chat" };
 
 function isRoomClientMessage(value: JsonValue): value is RoomClientMessage {
   if (value === null || Array.isArray(value) || typeof value !== "object") return false;
@@ -137,15 +131,12 @@ export class WatchRoom {
   private async welcome(socket: WebSocket, member: RoomMember) {
     const chats = await this.chatHistory.all();
     if (!this.sessions.has(socket)) return;
-    this.send(
-      socket,
-      JSON.stringify({
-        chats,
-        members: this.members(),
-        serverTime: Date.now(),
-        type: "welcome",
-      }),
-    );
+    this.send(socket, {
+      chats,
+      members: this.members(),
+      serverTime: Date.now(),
+      type: "welcome",
+    });
     await this.sendCinemaProgress(socket, member.id);
     this.broadcastPresence();
   }
@@ -201,10 +192,7 @@ export class WatchRoom {
       if (!isRoomClientMessage(message)) return;
       if (message.type === "ping") {
         session.lastSeen = now;
-        this.send(
-          socket,
-          JSON.stringify({ clientTime: message.clientTime, serverTime: now, type: "pong" }),
-        );
+        this.send(socket, { clientTime: message.clientTime, serverTime: now, type: "pong" });
       }
       if (message.type === "watching") {
         session.lastSeen = now;
@@ -216,7 +204,7 @@ export class WatchRoom {
             message.playing,
             now,
           );
-          if (progress) this.send(socket, JSON.stringify({ type: "cinema-progress", progress }));
+          if (progress) this.send(socket, { type: "cinema-progress", progress });
         } catch (error) {
           console.error("Could not save cinema watch progress", error);
         }
@@ -227,20 +215,18 @@ export class WatchRoom {
         activity.lastReaction = now;
         this.memberActivity.set(session.member.id, activity);
         session.lastSeen = now;
-        this.broadcast(
-          JSON.stringify({
-            id: randomUUID(),
-            member: session.member,
-            type: "reaction",
-            variant: Math.random() < 0.5 ? "carrot" : "blossom",
-            x: 18 + Math.round(Math.random() * 64),
-          }),
-        );
+        this.broadcast({
+          id: randomUUID(),
+          member: session.member,
+          type: "reaction",
+          variant: Math.random() < 0.5 ? "carrot" : "blossom",
+          x: 18 + Math.round(Math.random() * 64),
+        });
       }
       if (message.type === "chat") {
         const activity = this.memberActivity.get(session.member.id) ?? {};
         if (now - (activity.lastChat ?? 0) < 1_500) return;
-        const text = message.message.replace(/\s+/g, " ").trim().slice(0, 64);
+        const text = message.message.replace(/\s+/g, " ").trim().slice(0, chatMessageMaxLength);
         if (!text) return;
         activity.lastChat = now;
         this.memberActivity.set(session.member.id, activity);
@@ -259,7 +245,7 @@ export class WatchRoom {
           console.error("Could not persist room chat", error);
           return;
         }
-        this.broadcast(JSON.stringify(chat));
+        this.broadcast(chat);
       }
     } catch {
       // Malformed messages have no effect on room state.
@@ -304,23 +290,28 @@ export class WatchRoom {
   private async sendCinemaProgress(socket: WebSocket, memberId: string) {
     try {
       const progress = await this.cinema?.progress(memberId);
-      if (progress) this.send(socket, JSON.stringify({ type: "cinema-progress", progress }));
+      if (progress) this.send(socket, { type: "cinema-progress", progress });
     } catch (error) {
       console.error("Could not read cinema watch progress", error);
     }
   }
 
   private broadcastPresence() {
-    this.broadcast(JSON.stringify({ members: this.members(), type: "presence" }));
+    this.broadcast({ members: this.members(), type: "presence" });
   }
 
-  private broadcast(message: string) {
+  private broadcast(message: RoomServerMessage) {
+    const data = JSON.stringify(message);
     for (const socket of this.sessions.keys()) {
-      this.send(socket, message);
+      this.write(socket, data);
     }
   }
 
-  private send(socket: WebSocket, message: string) {
+  private send(socket: WebSocket, message: RoomServerMessage) {
+    this.write(socket, JSON.stringify(message));
+  }
+
+  private write(socket: WebSocket, message: string) {
     if (socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > maxBufferedAmount) {
       socket.terminate();
       return;

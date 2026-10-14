@@ -150,15 +150,6 @@
   .restream-panel form {
     grid-template-columns: 1fr;
   }
-  .movie-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .movie-release {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-  .movie-release button {
-    grid-column: 1 / -1;
-  }
   .activity-home,
   .admin-page {
     width: calc(100% - 28px);

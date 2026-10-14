@@ -2,8 +2,9 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { isSqlResults, type SqlParameter, type SqlQuery, type SqlResult } from "../shared/database";
-import { fetchJson, UpstreamError, type JsonValue } from "./upstream";
+import { isBlobParameter, isSqlResults, type SqlQuery, type SqlResult } from "../shared/database";
+import { fetchJson, UpstreamError } from "./upstream";
+import type { JsonValue } from "../shared/json";
 
 type BindValue = string | number | null | Uint8Array;
 
@@ -37,7 +38,7 @@ export abstract class AppDatabase {
           Object.fromEntries(
             Object.entries(row).map(([key, value]) => [
               key,
-              isBlob(value) ? Uint8Array.from(Buffer.from(value.blob, "base64")) : value,
+              isBlobParameter(value) ? Uint8Array.from(Buffer.from(value.blob, "base64")) : value,
             ]),
           ),
         ) as T[];
@@ -52,10 +53,6 @@ export abstract class AppDatabase {
       },
     };
   }
-}
-
-function isBlob(value: SqlParameter): value is { blob: string } {
-  return value !== null && typeof value === "object";
 }
 
 export class SqliteDatabase extends AppDatabase {
@@ -77,7 +74,7 @@ export class SqliteDatabase extends AppDatabase {
       const results = queries.map(({ sql, params }) => {
         const statement = this.sqlite.prepare(sql);
         const values = params.map((value) =>
-          isBlob(value) ? Buffer.from(value.blob, "base64") : value,
+          isBlobParameter(value) ? Buffer.from(value.blob, "base64") : value,
         );
         const before = Number(
           this.sqlite.prepare("SELECT total_changes() AS changes").get()!.changes,

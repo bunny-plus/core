@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
 import { AppDatabase, SqliteDatabase, query } from "./database";
 
-import { isViewer, sessionLifetimeSeconds, type Viewer } from "../worker/session";
-import type { JsonValue } from "./upstream";
+import type { Viewer } from "../shared/user";
+import { isViewer, sessionLifetimeSeconds } from "../worker/session";
+import type { JsonValue } from "../shared/json";
 
 export type DiscordCredentials = {
   accessToken: string;

@@ -9,26 +9,6 @@
   box-shadow: 0 28px 70px rgba(80, 45, 73, 0.28);
   flex-direction: column;
 }
-.stream-modal.admin-stream-panel {
-  width: 100%;
-  max-height: none;
-}
-.stream-modal > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-.stream-modal > header > div {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.stream-modal > header > div > .asset-icon {
-  width: 42px;
-  height: 42px;
-  transform: rotate(-12deg);
-}
 .stream-modal h2 {
   margin: 0;
   color: var(--pink-500);
@@ -39,14 +19,6 @@
   margin: 3px 0 0;
   color: var(--gray-500);
   font-size: 12px;
-}
-.stream-modal > header > button {
-  border: 0;
-  background: transparent;
-  color: var(--pink-400);
-  cursor: pointer;
-  font-size: 29px;
-  line-height: 1;
 }
 .source-picker {
   display: grid;
@@ -149,29 +121,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.current-stream button,
-.torrent-file button {
+.current-stream button {
   min-height: 44px;
   padding: 8px 11px;
   border: 0;
   border-radius: 9px;
-  background: var(--pink-400);
+  background: #fb7185;
   color: white;
   cursor: pointer;
   font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
 }
-.current-stream button {
-  background: #fb7185;
-}
-.current-stream button:disabled,
-.torrent-file button:disabled {
+.current-stream button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
-.stream-search-label,
-.movie-search > label {
+.stream-search-label {
   display: block;
   margin: 17px 0 5px 3px;
   color: var(--gray-500);
@@ -318,11 +284,6 @@
   cursor: wait;
   opacity: 0.5;
 }
-.torrent-list {
-  margin-top: 13px;
-  padding-right: 5px;
-  overflow-y: auto;
-}
 .torrent-empty {
   display: flex;
   align-items: center;
@@ -335,107 +296,6 @@
 .torrent-empty .asset-icon {
   width: 31px;
   height: 31px;
-}
-.torrent {
-  margin-bottom: 8px;
-  border: 2px solid var(--pink-100);
-  border-radius: 13px;
-  background: white;
-  overflow: hidden;
-}
-.torrent > summary {
-  display: grid;
-  align-items: center;
-  padding: 12px;
-  cursor: pointer;
-  list-style: none;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 9px;
-}
-.torrent > summary > .ui-icon {
-  width: 23px;
-  height: 23px;
-  justify-self: center;
-  color: var(--pink-500);
-}
-.torrent > summary::-webkit-details-marker {
-  display: none;
-}
-.torrent > summary:hover {
-  background: var(--pink-50);
-}
-.torrent summary div strong,
-.torrent summary div small,
-.torrent-file strong,
-.torrent-file small {
-  display: block;
-}
-.torrent summary div strong {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.torrent summary div small,
-.torrent-file small {
-  margin-top: 3px;
-  color: var(--gray-500);
-  font-size: 12px;
-}
-.torrent summary > i {
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: var(--pink-100);
-  color: var(--pink-500);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-.torrent-files {
-  padding: 0 10px 10px;
-}
-.torrent-file {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px;
-  border-top: 1px dashed var(--pink-200);
-}
-.torrent-file > div {
-  min-width: 0;
-}
-.torrent-file strong {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.source-coming-soon {
-  display: grid;
-  min-height: 260px;
-  place-items: center;
-  align-content: center;
-  padding: 30px;
-  color: var(--gray-500);
-  text-align: center;
-}
-.source-coming-soon .ui-icon {
-  width: 58px;
-  height: 58px;
-  color: var(--pink-300);
-  filter: drop-shadow(5px 6px 0 rgba(249, 168, 198, 0.18));
-}
-.source-coming-soon strong {
-  margin-top: 13px;
-  color: var(--pink-500);
-  font-size: 17px;
-}
-.source-coming-soon p {
-  max-width: 330px;
-  margin: 6px 0 0;
-  font-size: 12px;
 }
 .restream-panel {
   margin-top: 14px;

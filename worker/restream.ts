@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "../server/upstream";
+import { isString, type JsonObject, type JsonValue } from "../shared/json";
 
 export const restreamQualities = ["best", "1080p", "720p", "480p"] as const;
 
@@ -20,10 +20,6 @@ const platformHosts = {
 } satisfies Record<RestreamPlatform, Set<string>>;
 
 const qualities = new Set<string>(restreamQualities);
-
-function isString(value: JsonValue | undefined): value is string {
-  return typeof value === "string";
-}
 
 function isRestreamQuality(value: JsonValue | undefined): value is RestreamQuality {
   return isString(value) && qualities.has(value);

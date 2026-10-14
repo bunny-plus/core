@@ -1,4 +1,25 @@
 import type { HlsConfig } from "hls.js";
+import type { StreamInfo } from "../shared/stream";
+
+export function playbackPresentation(
+  status: StreamInfo | null,
+  liveReady: boolean,
+  startupExpired: boolean,
+) {
+  const idlePlayback = status?.running === false;
+  const playbackAccessError = status?.running
+    ? (status.playbackError ??
+      ([401, 403].includes(status.upstreamStatus ?? 0) ? "access-denied" : undefined))
+    : undefined;
+  return {
+    idlePlayback,
+    showIdle: !liveReady || idlePlayback,
+    startingPlayback:
+      status?.running === true && !liveReady && !startupExpired && !playbackAccessError,
+    startupFailed: status?.running === true && !liveReady && startupExpired,
+    playbackAccessError,
+  };
+}
 
 type PlaybackMedia = Pick<
   HTMLVideoElement,
@@ -103,4 +124,15 @@ export function playbackConfig(delaySeconds: number, slowConnection: boolean, pl
     maxMaxBufferLength: slowConnection ? 30 : 20,
     abrMaxWithRealBitrate: true,
   } satisfies Partial<HlsConfig>;
+}
+
+export function formatTime(seconds: number) {
+  if (!Number.isFinite(seconds)) return "--:--";
+  const whole = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(whole / 3_600);
+  const minutes = Math.floor((whole % 3_600) / 60);
+  const remainder = whole % 60;
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`
+    : `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }

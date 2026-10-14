@@ -1,19 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 
-import WatchRoom, { type User } from "./WatchRoom";
+import WatchRoom from "./WatchRoom";
 import CinemaDiary from "./CinemaDiary";
 import CinemaTicketAdmin from "./CinemaTicketAdmin";
 import DiscordLogin from "./DiscordLogin";
 import { AssetIcon, UiIcon } from "./Icons";
-import { apiFetch, apiUrl } from "./api";
+import { apiUrl } from "./api";
 import { useDismissibleDetails } from "./useDismissibleDetails";
-
-type Session = {
-  delaySeconds: number;
-  streamConfigured?: boolean;
-  user: User;
-};
+import { useSession } from "./useSession";
 
 export default function App() {
   const route = useLocation();
@@ -36,11 +31,7 @@ function BunnyApp() {
   const mainRef = useRef<HTMLElement>(null);
   const profileRef = useRef<HTMLDetailsElement>(null);
   useDismissibleDetails(profileRef);
-  const [session, setSession] = useState<Session | null | undefined>();
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const [sessionRequest, setSessionRequest] = useState(0);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const { session, sessionError, retrySession, loggingOut, logoutError, logout } = useSession();
 
   useLayoutEffect(() => {
     if (previousLocation.current === route.key) return;
@@ -50,83 +41,7 @@ function BunnyApp() {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [route.key]);
 
-  useEffect(() => {
-    const request = new AbortController();
-
-    async function loadSession() {
-      try {
-        const response = await apiFetch("/api/session", { signal: request.signal });
-        let result: Session | null;
-        if (response.status === 401 || response.status === 403) {
-          result = null;
-        } else {
-          if (!response.ok) throw new Error(`The session service returned ${response.status}.`);
-          // SAFETY: /api/session is produced by the matching server-side Session contract.
-          result = (await response.json()) as Session;
-        }
-        if (!request.signal.aborted) setSession(result);
-      } catch (error) {
-        if (request.signal.aborted) return;
-        setSessionError(
-          error instanceof Error ? error.message : "The session service could not be reached.",
-        );
-      }
-    }
-
-    void loadSession();
-
-    return () => request.abort();
-  }, [sessionRequest]);
-
-  const signedIn = session !== undefined && session !== null;
-  useEffect(() => {
-    if (!signedIn || loggingOut) return;
-    const request = new AbortController();
-    let pending = false;
-
-    async function refreshSession() {
-      if (pending || document.visibilityState === "hidden") return;
-      pending = true;
-      try {
-        const response = await apiFetch("/api/session", { signal: request.signal });
-        if (request.signal.aborted) return;
-        if (response.status === 401 || response.status === 403) {
-          setSession(null);
-        } else if (response.ok) {
-          // SAFETY: /api/session is produced by the matching server-side Session contract.
-          const refreshed = (await response.json()) as Session;
-          if (!request.signal.aborted) setSession(refreshed);
-        }
-      } catch {
-        // Keep the current page during temporary network or Discord failures.
-      } finally {
-        pending = false;
-      }
-    }
-
-    const refresh = () => void refreshSession();
-    const interval = window.setInterval(refresh, 15 * 60 * 1_000);
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => {
-      request.abort();
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    };
-  }, [signedIn, loggingOut]);
-
-  if (sessionError)
-    return (
-      <SessionError
-        message={sessionError}
-        onRetry={() => {
-          setSessionError(null);
-          setSession(undefined);
-          setSessionRequest((request) => request + 1);
-        }}
-      />
-    );
+  if (sessionError) return <SessionError message={sessionError} onRetry={retrySession} />;
   if (session === undefined)
     return (
       <main className="login-shell">
@@ -139,22 +54,6 @@ function BunnyApp() {
       </main>
     );
   if (session === null) return <Login />;
-
-  async function logout() {
-    setLoggingOut(true);
-    setLogoutError(null);
-    try {
-      const response = await apiFetch("/api/logout", { method: "POST" });
-      if (!response.ok) throw new Error(`Logout failed with status ${response.status}.`);
-      setSession(null);
-    } catch (error) {
-      setLogoutError(
-        error instanceof Error ? error.message : "Could not log out. Please try again.",
-      );
-    } finally {
-      setLoggingOut(false);
-    }
-  }
 
   const canManageStream =
     session.user.admin || session.user.permissions?.includes("stream.manage") === true;

@@ -1,0 +1,92 @@
+# Run only after stopping the backend. Replace the image with its published digest.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bunny-plus-database-import
+  namespace: default
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: bunny-plus-database-import
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: import
+          image: ghcr.io/bunny-plus/core:latest
+          imagePullPolicy: Always
+          workingDir: /app
+          command:
+            - node
+            - -e
+            - |
+              const fs = require("node:fs");
+              const { DatabaseSync, backup } = require("node:sqlite");
+              const { spawnSync } = require("node:child_process");
+              (async () => {
+                if (!fs.readFileSync("server.cjs", "utf8").includes("D1_DATABASE_URL") ||
+                    !fs.existsSync("migrate-data.cjs"))
+                  throw new Error("The import requires the backend image with D1 support");
+                const snapshot = `/app/data/migration-backups/d1-${process.env.POD_UID}`;
+                fs.mkdirSync(snapshot, { recursive: true, mode: 0o700 });
+                for (const file of ["sessions.sqlite", "chat.sqlite", "cinema.sqlite"]) {
+                  const source = new DatabaseSync(`/app/data/${file}`, { readOnly: true });
+                  try {
+                    await backup(source, `${snapshot}/${file}`);
+                    fs.chmodSync(`${snapshot}/${file}`, 0o600);
+                  } finally {
+                    source.close();
+                  }
+                }
+                console.log(`Retained cutover snapshot: ${snapshot}`);
+                for (const extra of [[], ["--apply"]]) {
+                  const result = spawnSync(process.execPath,
+                    ["migrate-data.cjs", "--from", snapshot, ...extra], { stdio: "inherit" });
+                  if (result.status !== 0) throw new Error("Database import did not complete");
+                }
+              })().catch((error) => {
+                console.error(error.message);
+                process.exitCode = 1;
+              });
+          env:
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: NODE_ENV
+              value: production
+          envFrom:
+            - secretRef:
+                name: bunny-plus-database
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bunny-plus-data

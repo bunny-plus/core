@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AuthSessions } from "../server/auth-sessions";
-import { handleRequest, authenticateRoomMember, type Env } from "./index";
+import { handleRequest } from "./index";
+import { authenticateRoomMember } from "./authentication";
+import type { Env } from "./env";
 import { discordCheckInterval } from "./discord";
 import { createSession, readCookie, readSession } from "./session";
 const day = 24 * 60 * 60 * 1000;

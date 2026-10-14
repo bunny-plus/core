@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   mediaProgramDate,
   playbackConfig,
+  playbackPresentation,
   playbackElapsedSeconds,
   PlaybackSynchronizer,
 } from "../src/playback";
@@ -194,4 +195,51 @@ test("low-latency playback URLs enable LL-HLS without speeding up playback", () 
 
 test("relative playback URLs support low-latency playback", () => {
   assert.equal(playbackConfig(6, false, "/api/playback.m3u8?protocol=llhls").lowLatencyMode, true);
+});
+
+test("the idle clip covers startup until a live frame is ready, even after the playlist is online", () => {
+  const idle = { running: false, online: false, title: null, upstreamStatus: 404 };
+  const starting = { ...idle, running: true, title: "Next screening" };
+  const online = { ...starting, online: true, upstreamStatus: 200 };
+  assert.equal(playbackPresentation(idle, false, false).idlePlayback, true);
+  for (const status of [starting, online]) {
+    const view = playbackPresentation(status, false, false);
+    assert.equal(view.showIdle, true);
+    assert.equal(view.startingPlayback, true);
+    assert.equal(view.playbackAccessError, undefined);
+  }
+  const playing = playbackPresentation(online, true, false);
+  assert.equal(playing.showIdle, false);
+  assert.equal(playing.startingPlayback, false);
+});
+
+test("authorization errors and a startup timeout are not hidden as normal warmup", () => {
+  const status = { running: true, online: false, title: "Screening", upstreamStatus: 404 };
+  for (const upstreamStatus of [401, 403]) {
+    const denied = playbackPresentation({ ...status, upstreamStatus }, false, false);
+    assert.equal(denied.startingPlayback, false);
+    assert.equal(denied.playbackAccessError, "access-denied");
+  }
+  const signing = playbackPresentation(
+    { ...status, playbackError: "signing-failed" },
+    false,
+    false,
+  );
+  assert.equal(signing.startingPlayback, false);
+  assert.equal(signing.playbackAccessError, "signing-failed");
+  const timeout = playbackPresentation(status, false, true);
+  assert.equal(timeout.showIdle, true);
+  assert.equal(timeout.startingPlayback, false);
+  assert.equal(timeout.startupFailed, true);
+  assert.equal(playbackPresentation(status, true, true).startupFailed, false);
+});
+
+test("temporary probes do not replace playing video, and a stopped screening restores the clip immediately", () => {
+  const offlineProbe = { running: true, online: false, title: "Screening", upstreamStatus: 503 };
+  assert.equal(playbackPresentation(offlineProbe, true, false).showIdle, false);
+  assert.equal(playbackPresentation(null, true, false).showIdle, false);
+  const stopped = playbackPresentation({ ...offlineProbe, running: false }, true, false);
+  assert.equal(stopped.showIdle, true);
+  assert.equal(stopped.idlePlayback, true);
+  assert.equal(stopped.startingPlayback, false);
 });

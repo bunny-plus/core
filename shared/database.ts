@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from "../server/upstream";
+import { isJsonObject, type JsonValue } from "./json";
 
 export type SqlParameter = string | number | null | { blob: string };
 export type SqlRow = { [column: string]: SqlParameter };
@@ -43,10 +43,6 @@ export function isQueryBatch(value: JsonValue): value is { batch: SqlQuery[] } {
     value.batch.length <= 50 &&
     value.batch.every(isSqlQuery)
   );
-}
-
-function isJsonObject(value: JsonValue): value is JsonObject {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isSqlRow(value: JsonValue): value is SqlRow {

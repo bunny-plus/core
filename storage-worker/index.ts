@@ -5,7 +5,7 @@ import {
   type SqlParameter,
   type SqlResult,
 } from "../shared/database";
-import type { JsonValue } from "../server/upstream";
+import type { JsonValue } from "../shared/json";
 
 type Env = { db: D1Database; DATABASE_SECRET: string };
 type D1Value = string | number | null | number[] | ArrayBuffer;

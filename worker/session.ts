@@ -1,13 +1,5 @@
-import type { JsonValue } from "../server/upstream";
-
-export type Viewer = {
-  admin: boolean;
-  avatar: string | null;
-  expires: number;
-  id: string;
-  name: string;
-  permissions: string[];
-};
+import type { Viewer } from "../shared/user";
+import { isString, type JsonValue } from "../shared/json";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -36,10 +28,6 @@ async function key(secret: string) {
     false,
     ["sign", "verify"],
   );
-}
-
-function isString(value: JsonValue): value is string {
-  return typeof value === "string";
 }
 
 export function isViewer(value: JsonValue): value is Viewer {

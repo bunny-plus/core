@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 import {
   jellyfinBaseUrl,
   jellyfinLibrary,

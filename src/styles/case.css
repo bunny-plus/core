@@ -24,13 +24,7 @@ option,
 .viewer-avatar .avatar-fallback,
 .avatar-hover-card strong,
 .current-stream strong,
-.stream-options > header strong,
-.torrent summary div strong,
-.torrent-file strong,
-.movie-card strong,
-.movie-detail-hero h3,
-.movie-detail-hero p,
-.movie-release p {
+.stream-options > header strong {
   text-transform: none;
 }
 
@@ -39,7 +33,6 @@ textarea::placeholder,
 .activity-spot b,
 .current-stream span,
 .track-selectors label span,
-.torrent summary > i,
 .player-stats span {
   text-transform: lowercase;
 }

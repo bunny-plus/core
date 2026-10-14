@@ -7,7 +7,7 @@ import { AssetIcon } from "./Icons";
 export default function DiscordLogin() {
   const [token] = useState(() => window.location.hash.slice(1));
   const [error, setError] = useState<string | null>(null);
-  const redemption = useRef<Promise<unknown> | null>(null);
+  const redemption = useRef<Promise<{ ok: true }> | null>(null);
 
   useEffect(() => {
     // Keep the login credential out of browser history, referrers and subsequent navigation.
@@ -18,7 +18,7 @@ export default function DiscordLogin() {
     }
     let active = true;
     // React StrictMode replays effects; both runs must share the single redemption request.
-    redemption.current ??= apiJson("/api/login/discord", {
+    redemption.current ??= apiJson<{ ok: true }>("/api/login/discord", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),

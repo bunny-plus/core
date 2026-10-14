@@ -11,7 +11,7 @@ import {
 } from "discord.js";
 
 import { discordBotViewer } from "../worker/discord";
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 
 type LoginInteraction = {
   guildId: string | null;

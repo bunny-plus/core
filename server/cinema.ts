@@ -1,3 +1,4 @@
+import { SerialQueue } from "./serial-queue";
 import { randomUUID } from "node:crypto";
 import { AppDatabase, SqliteDatabase, query } from "./database";
 import { generateTicketBunny, isTicketBunny, type TicketBunny } from "../shared/ticket-bunny";
@@ -101,7 +102,7 @@ function screeningTitle(title: string | null | undefined) {
 export class CinemaDiary {
   private readonly database: AppDatabase;
   readonly ready: Promise<void>;
-  private queue: Promise<void> = Promise.resolve();
+  private readonly queue = new SerialQueue();
   private readonly pulses = new Map<string, WatchingPulse>();
   private readonly intervals = new Map<string, WatchInterval[]>();
   private playbackAvailable = false;
@@ -224,25 +225,16 @@ export class CinemaDiary {
       await this.database.batch(statements.slice(offset, offset + 50));
   }
 
-  private serial<T>(operation: () => Promise<T>): Promise<T> {
-    const pending = this.queue.then(operation);
-    this.queue = pending.then(
-      () => undefined,
-      () => undefined,
-    );
-    return pending;
-  }
-
   start(title: string | null | undefined, now = Date.now()) {
-    return this.serial(() => this.startScreening(title, now));
+    return this.queue.run(() => this.startScreening(title, now));
   }
 
   observe(running: boolean, title: string | null | undefined) {
-    return this.serial(() => this.observeScreening(running, title));
+    return this.queue.run(() => this.observeScreening(running, title));
   }
 
   setTicketCounting(screeningId: string, enabled: boolean) {
-    return this.serial(() => this.changeTicketCounting(screeningId, enabled));
+    return this.queue.run(() => this.changeTicketCounting(screeningId, enabled));
   }
 
   createTicket(
@@ -252,7 +244,7 @@ export class CinemaDiary {
     now = Date.now(),
     bunny?: TicketBunny,
   ) {
-    return this.serial(() => this.createTicketDesign(screeningId, title, image, now, bunny));
+    return this.queue.run(() => this.createTicketDesign(screeningId, title, image, now, bunny));
   }
 
   watching(
@@ -262,7 +254,9 @@ export class CinemaDiary {
     playing: boolean,
     now = Date.now(),
   ) {
-    return this.serial(() => this.recordPulse(memberId, connectionId, screeningId, playing, now));
+    return this.queue.run(() =>
+      this.recordPulse(memberId, connectionId, screeningId, playing, now),
+    );
   }
 
   async current(): Promise<CinemaScreening | null> {
@@ -328,7 +322,7 @@ export class CinemaDiary {
   }
 
   stop(now = Date.now()) {
-    return this.serial(async () => {
+    return this.queue.run(async () => {
       await this.ready;
       await this.database
         .prepare("UPDATE cinema_screenings SET ended_at = ? WHERE ended_at IS NULL")

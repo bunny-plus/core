@@ -5,7 +5,8 @@ import { CinemaDiary } from "../server/cinema";
 import { cinemaImageMaxBytes } from "../shared/cinema";
 import { generateTicketBunny } from "../shared/ticket-bunny";
 import { createSession } from "./session";
-import { handleRequest, type Env } from "./index";
+import { handleRequest } from "./index";
+import type { Env } from "./env";
 
 function cinemaEnv(id: string, diary?: CinemaDiary): Env {
   return {

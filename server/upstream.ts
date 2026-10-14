@@ -1,6 +1,3 @@
-export type JsonObject = { [key: string]: JsonValue };
-export type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
-
 export type JsonFetchOptions = RequestInit & {
   fetch?: typeof fetch;
   maxBytes?: number;

@@ -6,7 +6,7 @@ import {
   type CinemaTicketCreation,
 } from "../shared/cinema";
 import { generateTicketBunny, type TicketBunny } from "../shared/ticket-bunny";
-import { apiFetch, apiJson, apiUrl } from "./api";
+import { ApiError, apiJson, apiUrl } from "./api";
 import { CinemaTicketPreview } from "./CinemaDiary";
 import { AssetIcon, UiIcon } from "./Icons";
 import TicketBunnyEditor from "./TicketBunnyEditor";
@@ -231,21 +231,12 @@ export default function CinemaTicketAdmin() {
       if (draft.artwork === "bunny") creation.bunny = draft.bunny;
       if (draft.artwork === "image" && draft.image)
         creation.image = { mimeType: draft.image.mimeType, data: draft.image.data };
-      const response = await apiFetch("/api/cinema/screening/ticket", {
+      const result = await apiJson<{ screening: CinemaScreening }>("/api/cinema/screening/ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: request.signal,
         body: JSON.stringify(creation),
       });
-      // SAFETY: This first-party endpoint returns {screening} on success or {error} on failure.
-      const result = (await response.json()) as { screening: CinemaScreening; error?: string };
-      if (!response.ok) {
-        throw new Error(
-          response.status === 409
-            ? "The screening changed or a ticket already exists. Check the current screening."
-            : result.error || "The ticket could not be created. Please try again.",
-        );
-      }
       if (!request.signal.aborted && active.current) {
         applyScreening(result.screening);
         setNotice("Ticket created.");
@@ -253,9 +244,11 @@ export default function CinemaTicketAdmin() {
     } catch (error) {
       if (!request.signal.aborted && active.current) {
         setSubmitError(
-          error instanceof Error
-            ? error.message
-            : "The ticket could not be created. Please try again.",
+          error instanceof ApiError && error.status === 409
+            ? "The screening changed or a ticket already exists. Check the current screening."
+            : error instanceof Error
+              ? error.message
+              : "The ticket could not be created. Please try again.",
         );
       }
     } finally {

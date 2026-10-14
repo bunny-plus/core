@@ -1,20 +1,14 @@
+import { isJsonObject, isString, type JsonValue } from "../shared/json";
 import { useEffect, useState } from "react";
 
 import { AssetIcon } from "./Icons";
 
-type JsonObject = { [key: string]: JsonValue };
-type JsonValue = boolean | JsonObject | JsonValue[] | null | number | string;
 type VersionPayload = { version: string };
 
 const CHECK_INTERVAL = 60_000;
 
 function isVersionPayload(value: JsonValue): value is VersionPayload {
-  return (
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof value === "object" &&
-    typeof value.version === "string"
-  );
+  return isJsonObject(value) && isString(value.version);
 }
 
 export default function UpdatePrompt() {

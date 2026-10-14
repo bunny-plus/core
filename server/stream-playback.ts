@@ -1,7 +1,8 @@
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 import type { StreamPlayback } from "../shared/stream";
 import { TtlCache } from "./cache";
-import { fetchJson, UpstreamError, type JsonObject, type JsonValue } from "./upstream";
+import { fetchJson, UpstreamError } from "./upstream";
+import { isJsonObject, isString, type JsonValue } from "../shared/json";
 
 type StreamEnvironment = Pick<
   Env,
@@ -14,14 +15,6 @@ type StreamEnvironment = Pick<
 
 const playbackCache = new TtlCache(50);
 export const streamApiBaseUrl = "https://api.cloudflare.com/client/v4/accounts";
-
-function isObject(value: JsonValue): value is JsonObject {
-  return value !== null && !Array.isArray(value) && typeof value === "object";
-}
-
-function isString(value: JsonValue | undefined): value is string {
-  return typeof value === "string";
-}
 
 function liveInput(url: URL) {
   const match = /^\/([a-f\d]{32})\/manifest\/video\.m3u8$/.exec(url.pathname);
@@ -82,7 +75,7 @@ async function signLocally(inputId: string, keyId: string, encodedKey: string, e
       encodedKey.startsWith("{") ? encodedKey : atob(encodedKey),
     );
     if (
-      !isObject(parsed) ||
+      !isJsonObject(parsed) ||
       parsed.kty !== "RSA" ||
       !isString(parsed.n) ||
       !isString(parsed.e) ||
@@ -166,10 +159,10 @@ export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlay
         },
       );
       if (
-        !isObject(data) ||
+        !isJsonObject(data) ||
         data.success !== true ||
         !data.result ||
-        !isObject(data.result) ||
+        !isJsonObject(data.result) ||
         !isString(data.result.token) ||
         !/^[a-z\d_-]+\.[a-z\d_-]+\.[a-z\d_-]+$/i.test(data.result.token)
       )

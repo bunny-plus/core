@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createSession } from "./session";
-import { handleRequest, type Env } from "./index";
+import { handleRequest } from "./index";
+import type { Env } from "./env";
 
 const env: Env = {
   ADMIN_DISCORD_IDS: "",

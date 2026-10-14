@@ -3,7 +3,7 @@ import test from "node:test";
 import { MessageFlags, type InteractionEditReplyOptions } from "discord.js";
 import { AuthSessions } from "./auth-sessions";
 import { handleDiscordLogin } from "./discord-bot";
-import type { Env } from "../worker/index";
+import type { Env } from "../worker/env";
 const userId = "123456789012345678";
 const env: Env = {
   ADMIN_DISCORD_IDS: "",

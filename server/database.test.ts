@@ -8,7 +8,8 @@ import { Miniflare } from "miniflare";
 import type { SqlQuery } from "../shared/database";
 
 import { AuthSessions } from "./auth-sessions";
-import { ChatHistory, type RoomChat } from "./chat-history";
+import type { RoomChat } from "../shared/room";
+import { ChatHistory } from "./chat-history";
 import { CinemaDiary } from "./cinema";
 import { importSnapshot, readSnapshot } from "./data-import";
 import { D1Database, SqliteDatabase, query } from "./database";

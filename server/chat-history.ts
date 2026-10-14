@@ -1,18 +1,5 @@
+import type { RoomChat } from "../shared/room";
 import { AppDatabase, SqliteDatabase, query } from "./database";
-
-export type RoomChat = {
-  createdAt: string;
-  id: string;
-  member: {
-    admin: boolean;
-    avatar: string | null;
-    id: string;
-    name: string;
-  };
-  message: string;
-  type: "chat";
-  x: number;
-};
 
 type ChatRow = {
   created_at: string;

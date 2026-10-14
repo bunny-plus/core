@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { AssetIcon, UiIcon } from "./Icons";
 import { parseChatEffects } from "./chat-effects";
-import type { RoomChat, User } from "./WatchRoom";
+import { chatMessageMaxLength, type RoomChat, type RoomMember } from "../shared/room";
 
 const maxPresencePhotos = 6;
 
-function MemberPhoto({ member }: { member: Pick<User, "name" | "avatar"> }) {
+function MemberPhoto({ member }: { member: Pick<RoomMember, "name" | "avatar"> }) {
   return (
     <span className="room-member-photo" aria-hidden="true">
       {member.avatar ? <img src={member.avatar} alt="" /> : member.name[0]?.toUpperCase()}
@@ -28,8 +28,8 @@ export default function RoomSidebar({
   onOpenChange,
   onSend,
 }: {
-  currentUser: User;
-  members: User[];
+  currentUser: RoomMember;
+  members: RoomMember[];
   messages: RoomChat[];
   messageSequence: number;
   open: boolean;
@@ -85,9 +85,9 @@ export default function RoomSidebar({
     changeOpen(true);
   }
 
-  function mention(member: Pick<User, "name" | "id">) {
+  function mention(member: Pick<RoomMember, "name" | "id">) {
     if (member.id === currentUser.id) return;
-    onDraftChange(`@${member.name} ${draft}`.slice(0, 64));
+    onDraftChange(`@${member.name} ${draft}`.slice(0, chatMessageMaxLength));
     setView("chat");
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -208,7 +208,7 @@ export default function RoomSidebar({
                     ref={inputRef}
                     aria-label="Message the room"
                     placeholder="Say something…"
-                    maxLength={64}
+                    maxLength={chatMessageMaxLength}
                     autoComplete="off"
                     value={draft}
                     onChange={(event) => {
