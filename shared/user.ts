@@ -11,9 +11,7 @@ export type User = {
 export type Viewer = User & { expires: number };
 
 export type Session = {
-  delaySeconds: number;
   streamConfigured: boolean;
-  streamUrl: string;
   user: User;
 };
 

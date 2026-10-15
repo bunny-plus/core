@@ -127,10 +127,7 @@ export async function authRoutes(request: Request, env: Env, url: URL, metadata?
     const viewer = await viewerForRequest(request, env, metadata);
     if (!viewer) return Response.json({ error: "Unauthorized" }, { status: 401 });
     const response = Response.json({
-      delaySeconds: Number(env.STREAM_DELAY_SECONDS || 6),
       streamConfigured: Boolean(env.STREAM_URL),
-      // Older clients use this as a playback identity; never send the private source URL.
-      streamUrl: "/api/stream-playback",
       user: {
         admin: viewer.admin,
         avatar: viewer.avatar,

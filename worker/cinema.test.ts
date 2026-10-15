@@ -22,8 +22,7 @@ function cinemaEnv(id: string, diary?: CinemaDiary): Env {
     RELAY_CONTROLLER_SECRET: "controller-secret",
     RELAY_CONTROLLER_URL: `http://${id}-controller.test`,
     SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-    STREAM_DELAY_SECONDS: "6",
-    STREAM_URL: `https://${id}-stream.test/index.m3u8`,
+    STREAM_URL: `https://${id}-stream.test/webRTC/play`,
     TORBOX_API_KEY: "torbox-secret",
   };
 }
@@ -216,7 +215,7 @@ test("controller status adopts an existing stream but failed polls do not split 
     const failureEnv = {
       ...env,
       RELAY_CONTROLLER_URL: "http://failed-controller.test",
-      STREAM_URL: "https://failed-stream.test/index.m3u8",
+      STREAM_URL: "https://failed-stream.test/webRTC/play",
     };
     context.mock.method(globalThis, "fetch", async () => {
       throw new Error("Temporary outage");
@@ -236,15 +235,15 @@ test("controller status adopts an existing stream but failed polls do not split 
   }
 });
 
-test("an in-flight old stream probe cannot replace a newly started screening or return its old ID", async (context) => {
+test("a concurrent controller read cannot overwrite a newer screening", async (context) => {
   const diary = new CinemaDiary(":memory:");
   try {
     const env = cinemaEnv("racing-probe", diary);
     const cookie = await viewerCookie(env, "racing-admin", true);
     await diary.start("Old title");
-    let releaseHls!: (response: Response) => void;
-    const hls = new Promise<Response>((resolve) => {
-      releaseHls = resolve;
+    let releaseRead!: () => void;
+    const heldRead = new Promise<void>((resolve) => {
+      releaseRead = resolve;
     });
     let controllerRead!: () => void;
     const readStarted = new Promise<void>((resolve) => {
@@ -252,15 +251,10 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
     });
     let title = "Old title";
     let probes = 0;
-    let hlsProbes = 0;
     context.mock.method(
       globalThis,
       "fetch",
       async (input: string | URL | Request, init?: RequestInit) => {
-        if (String(input) === env.STREAM_URL) {
-          hlsProbes += 1;
-          return hlsProbes === 1 ? hls : new Response("#EXTM3U");
-        }
         assert.equal(String(input), env.RELAY_CONTROLLER_URL);
         if (init?.method === "POST") {
           title = "New title";
@@ -268,22 +262,25 @@ test("an in-flight old stream probe cannot replace a newly started screening or 
         }
         probes += 1;
         controllerRead();
-        return Response.json({ running: true, title });
+        const observedTitle = title;
+        if (probes === 1) await heldRead;
+        return Response.json({ running: true, title: observedTitle });
       },
     );
     const oldProbe = handleRequest(request(env, "/api/stream-info", cookie), env);
     await readStarted;
-    const started = await handleRequest(
+    const starting = handleRequest(
       request(env, "/api/admin/restream/start", cookie, restreamBody),
       env,
     );
+    releaseRead();
+    const started = await starting;
     assert.equal(started.status, 200);
     const current = await diary.current();
     assert.ok(current);
     assert.equal(current.title, "New title");
-    releaseHls(new Response("#EXTM3U"));
     const oldInfo = await (await oldProbe).json();
-    assert.deepEqual(oldInfo.screening, current);
+    assert.equal(oldInfo.title, "Old title");
     const fresh = await handleRequest(request(env, "/api/stream-info", cookie), env);
     const freshInfo = await fresh.json();
     assert.equal(freshInfo.title, "New title");

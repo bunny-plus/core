@@ -39,6 +39,7 @@
     devShells = forAllSystems (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
+        ffmpeg = pkgs.callPackage ./controller/ffmpeg.nix {};
       in {
         default = pkgs.mkShell {
           packages = [
@@ -51,8 +52,8 @@
         };
 
         controller = pkgs.mkShell {
-          packages = [pkgs.python3 pkgs.ffmpeg-headless pkgs.streamlink];
-          BUNNY_TEST_FFMPEG = nixpkgs.lib.getExe pkgs.ffmpeg-headless;
+          packages = [(pkgs.python3.withPackages (ps: [ps.aiortc ps.aiohttp])) ffmpeg pkgs.streamlink];
+          BUNNY_TEST_FFMPEG = nixpkgs.lib.getExe ffmpeg;
           BUNNY_TEST_FONT = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
           PYTHONDONTWRITEBYTECODE = "1";
         };

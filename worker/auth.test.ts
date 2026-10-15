@@ -29,8 +29,7 @@ function environment(store: AuthSessions): Env {
     DISCORD_ROLE_PERMISSIONS: JSON.stringify({ staff: ["admin", "stream.manage"] }),
     NODE_ENV: "production",
     SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-    STREAM_DELAY_SECONDS: "6",
-    STREAM_URL: "https://stream.test/index.m3u8",
+    STREAM_URL: "https://stream.test/webRTC/play",
     TORBOX_API_KEY: "torbox-secret",
   };
 }

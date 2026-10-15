@@ -7,23 +7,22 @@ function bitrate(value: number | null) {
 
 export default function PlaybackStats({ stats, target }: { stats: PlayerStats; target: string }) {
   const values = [
-    { label: "Delay", value: stats.delay === null ? "--" : `${stats.delay.toFixed(1)}s` },
     { label: "Target", value: target },
-    { label: "Buffered ahead", value: `${stats.bufferAhead.toFixed(1)}s` },
-    { label: "Total buffered", value: `${stats.bufferTotal.toFixed(1)}s` },
-    { label: "Live window", value: `${stats.seekableWindow.toFixed(1)}s` },
-    { label: "Playtime", value: formatTime(stats.playtime) },
-    { label: "Playback rate", value: `${stats.rate.toFixed(3)}×` },
-    { label: "Resolution", value: stats.resolution },
     {
-      label: "Download speed (est.)",
-      value: bitrate(stats.bandwidth),
-      hint: "Estimated speed while downloading segments, not the video bitrate",
+      label: "Network round trip",
+      value: stats.roundTrip === null ? "--" : `${Math.round(stats.roundTrip * 1000)}ms`,
     },
     {
+      label: "Jitter",
+      value: stats.jitter === null ? "--" : `${Math.round(stats.jitter * 1000)}ms`,
+    },
+    { label: "Packets lost", value: stats.packetsLost ?? "--" },
+    { label: "Playtime", value: formatTime(stats.playtime) },
+    { label: "Resolution", value: stats.resolution },
+    {
       label: "Media bitrate",
-      value: bitrate(stats.mediaBitrate),
-      hint: "Average bitrate of the downloaded media segments",
+      value: bitrate(stats.bitrate),
+      hint: "Video received over the last stats interval",
     },
     { label: "Dropped frames", value: stats.droppedFrames },
   ];

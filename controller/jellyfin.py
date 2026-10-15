@@ -169,6 +169,7 @@ class JellyfinClock:
         self.item_id = url.path.split('/')[-2]
         self.media_source_id = parse_qs(url.query)['MediaSourceId'][0]
         self.started_at = None
+        self.position = None
         self.subtitle_index = subtitle_index
         self.subtitles_burned_in = subtitles_burned_in
 
@@ -184,8 +185,11 @@ class JellyfinClock:
                     continue
                 try:
                     seconds = int(values.get('out_time_us', '-1')) / 1_000_000
-                    if self.started_at is None and int(values.get('frame', '0')) > 0 and seconds > 0:
-                        self.started_at = round((time.time() - seconds) * 1000)
+                    if int(values.get('frame', '0')) > 0 and seconds > 0:
+                        now = round(time.time() * 1000)
+                        self.position = (seconds, now)
+                        if self.started_at is None:
+                            self.started_at = round(now - seconds * 1000)
                 except ValueError:
                     pass
                 values.clear()
@@ -196,7 +200,9 @@ class JellyfinClock:
         threading.Thread(target=self.read_progress, args=(process.stdout,), daemon=True).start()
 
     def status(self):
-        return {'sessionId': self.session_id, 'itemId': self.item_id,
+        position = self.position
+        timing = {'positionSeconds': position[0], 'updatedAt': position[1]} if position else {}
+        return {**timing, 'sessionId': self.session_id, 'itemId': self.item_id,
                 'mediaSourceId': self.media_source_id, 'startedAt': self.started_at,
                 'subtitleIndex': self.subtitle_index,
                 'subtitlesBurnedIn': self.subtitles_burned_in}

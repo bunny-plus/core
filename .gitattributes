@@ -1,0 +1,2 @@
+# Unified patches include a single space on blank context lines.
+*.patch whitespace=-blank-at-eol

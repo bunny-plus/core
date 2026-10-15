@@ -19,7 +19,6 @@ export function useRoomConnection(
   ticketPlaybackRef: RefObject<boolean>,
 ) {
   const socketRef = useRef<WebSocket | null>(null);
-  const clockOffsetRef = useRef(0);
   const screeningIdRef = useRef("");
   const seenTicketIdsRef = useRef(new Set<string>());
   const [cinemaProgress, setCinemaProgress] = useState<CinemaProgress | null>(null);
@@ -129,9 +128,6 @@ export function useRoomConnection(
             }
             receivedProgress = true;
           }
-          if (message.type === "pong" && message.clientTime && message.serverTime) {
-            clockOffsetRef.current = message.serverTime - (message.clientTime + Date.now()) / 2;
-          }
           if (
             message.type === "reaction" &&
             message.id &&
@@ -232,7 +228,6 @@ export function useRoomConnection(
     return !!text && send({ type: "chat", message: text });
   }
   return {
-    clockOffsetRef,
     cinemaProgress,
     earnedTicket,
     setEarnedTicket,

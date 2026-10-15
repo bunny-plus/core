@@ -9,8 +9,6 @@ export interface Env {
   AUTH_SESSIONS?: AuthSessions;
   CHAT_DB_PATH?: string;
   CINEMA_DIARY?: CinemaDiary;
-  CF_ACCOUNT_ID?: string;
-  CF_TOKEN?: string;
   CLOUDFLARE_STREAM_SIGNING_KEY_ID?: string;
   CLOUDFLARE_STREAM_SIGNING_KEY_JWK?: string;
   DISCORD_BOT_TOKEN?: string;
@@ -27,7 +25,6 @@ export interface Env {
   JELLYFIN_API_KEY?: string;
   NODE_ENV?: string;
   SESSION_SECRET: string;
-  STREAM_DELAY_SECONDS: string;
   RELAY_CONTROLLER_SECRET?: string;
   RELAY_CONTROLLER_URL?: string;
   STREAM_CONTROLLER_SECRET?: string;

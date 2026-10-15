@@ -14,8 +14,7 @@ const env: Env = {
   DISCORD_GUILD_ID: "guild",
   DISCORD_ROLE_PERMISSIONS: "{}",
   SESSION_SECRET: "private-session-secret-with-32-bytes",
-  STREAM_DELAY_SECONDS: "6",
-  STREAM_URL: "https://stream.test/index.m3u8",
+  STREAM_URL: "https://stream.test/webRTC/play",
   TORBOX_API_KEY: "private-torbox-token",
 };
 test("/login acknowledges privately before checking Discord and sends a single-use link button", async (context) => {

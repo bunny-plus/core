@@ -16,7 +16,6 @@ import { startDiscordBot } from "./discord-bot";
 import { D1Database } from "./database";
 import { loadEnvironment } from "./env";
 import { WatchRoom } from "./room";
-import { startRecordingCleanup } from "./recording-cleanup";
 
 const env: Env = loadEnvironment(process.env);
 const port = Number(process.env.PORT || 8787);
@@ -176,7 +175,6 @@ void Promise.all([env.AUTH_SESSIONS.ready, env.CINEMA_DIARY.ready, chatHistory.r
   .then(() =>
     server.listen(port, () => {
       console.log(`bunny.plus API listening on :${port}`);
-      startRecordingCleanup(env);
       void startDiscordBot(env);
     }),
   )

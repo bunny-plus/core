@@ -1,0 +1,19 @@
+WHIP's state survives FIFO reconnects, while deinit releases the transport.
+A previous FAILED or READY state then skips ICE/DTLS and dereferences a freed
+DTLS context in setup_srtp. Start each initialization with a fresh state.
+Covered by test_webrtc.py's HTTP 503 -> successful publish integration test.
+
+--- a/libavformat/whip.c
++++ b/libavformat/whip.c
+@@ -457,8 +457,9 @@ static int initialize(AVFormatContext *s)
+     for (int i = 0; i < whip->hist_sz; i++)
+         whip->hist[i].buf = whip->hist_pool + i * (whip->pkt_size - DTLS_SRTP_CHECKSUM_LEN);
+ 
+-    if (whip->state < WHIP_STATE_INIT)
+-        whip->state = WHIP_STATE_INIT;
++    /* FIFO may initialize this muxer again after deinit. Its old state must
++     * not skip the new ICE/DTLS handshake. */
++    whip->state = WHIP_STATE_INIT;
+     whip->whip_init_time = av_gettime_relative();
+     av_log(whip, AV_LOG_VERBOSE, "Init state=%d, handshake_timeout=%dms, pkt_size=%d, seed=%d, elapsed=%.2fms\n",
+         whip->state, whip->handshake_timeout, whip->pkt_size, seed, ELAPSED(whip->whip_starttime, av_gettime_relative()));

@@ -11,9 +11,6 @@ importers:
       discord.js:
         specifier: ^14.27.0
         version: 14.27.0
-      hls.js:
-        specifier: ^1.6.16
-        version: 1.6.16
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -985,9 +982,6 @@ packages:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
 
-  hls.js@1.6.16:
-    resolution: {integrity: sha512-VSIRpLfRwlAAdGL4wiTucx2ScRipo0ed1FBatWkyt832jC4CReKstga6yIhYVwGu9LOBjuX9wzmRMeQdBJtzEA==}
-
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
@@ -1940,8 +1934,6 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   has-flag@4.0.0: {}
-
-  hls.js@1.6.16: {}
 
   is-fullwidth-code-point@3.0.0: {}
 

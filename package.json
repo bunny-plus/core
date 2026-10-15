@@ -20,7 +20,6 @@
   },
   "dependencies": {
     "discord.js": "^14.27.0",
-    "hls.js": "^1.6.16",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.4.0",

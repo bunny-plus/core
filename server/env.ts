@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 import type { Env } from "../worker/env";
 import { jellyfinBaseUrl } from "./jellyfin";
-import { streamInputId, validateStreamSigning } from "./stream-playback";
+import { validateStreamSigning } from "./stream-playback";
 
 function required(source: NodeJS.ProcessEnv, name: string) {
   const value = source[name]?.trim();
@@ -93,32 +93,12 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     throw new Error("DISCORD_ROLE_PERMISSIONS must map role IDs to permission arrays");
   }
 
-  const delay = Number(source.STREAM_DELAY_SECONDS || 6);
-  if (!Number.isFinite(delay) || delay < 0 || delay > 120) {
-    throw new Error("STREAM_DELAY_SECONDS must be between 0 and 120");
-  }
-
-  const cloudflareAccountId = source.CF_ACCOUNT_ID?.trim();
-  const cloudflareToken = source.CF_TOKEN?.trim();
-  if (cloudflareAccountId || cloudflareToken) {
-    if (!cloudflareAccountId || !cloudflareToken)
-      throw new Error("Cloudflare requires both account ID and API token");
-    if (
-      !/^[a-f\d]{32}$/i.test(cloudflareAccountId) ||
-      !/^[\x21-\x7e]{20,512}$/.test(cloudflareToken)
-    )
-      throw new Error("Cloudflare credentials are invalid");
-    streamInputId(streamUrl);
-  }
-
   const env: Env = {
     ADMIN_DISCORD_IDS: source.ADMIN_DISCORD_IDS || "",
     APP_VERSION: source.APP_VERSION,
     APP_URL: appUrl,
     API_URL: source.API_URL,
     CHAT_DB_PATH: source.CHAT_DB_PATH,
-    CF_ACCOUNT_ID: cloudflareAccountId,
-    CF_TOKEN: cloudflareToken,
     CLOUDFLARE_STREAM_SIGNING_KEY_ID: source.CLOUDFLARE_STREAM_SIGNING_KEY_ID?.trim(),
     CLOUDFLARE_STREAM_SIGNING_KEY_JWK: source.CLOUDFLARE_STREAM_SIGNING_KEY_JWK?.trim(),
     DEV_USER_JSON: source.DEV_USER_JSON,
@@ -139,7 +119,6 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     SESSION_SECRET: sessionSecret,
     STREAM_CONTROLLER_SECRET: source.STREAM_CONTROLLER_SECRET,
     STREAM_CONTROLLER_URL: source.STREAM_CONTROLLER_URL,
-    STREAM_DELAY_SECONDS: String(delay),
     STREAM_URL: streamUrl,
     STREMIO_ADDON_URL: source.STREMIO_ADDON_URL,
     TMDB_API_TOKEN: source.TMDB_API_TOKEN,

@@ -1,17 +1,10 @@
-import type Hls from "hls.js";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { StreamInfo, StreamPlayback } from "../shared/stream";
-import { apiFetch } from "./api";
-import {
-  mediaProgramDate,
-  playbackConfig,
-  playbackElapsedSeconds,
-  PlaybackSynchronizer,
-  playbackPresentation,
-} from "./playback";
+import { ApiError, apiFetch, apiJson } from "./api";
+import { connectPlayback, setPlaybackBuffer } from "./webrtc";
+import { playbackElapsedSeconds, playbackPresentation } from "./playback";
 
 type PlaybackOptions = {
-  delaySeconds: number;
   streamConfigured: boolean;
   volume: number;
   onVolumeChange: (volume: number) => void;
@@ -20,7 +13,7 @@ type PlaybackOptions = {
 
 export function useStreamPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
-  { delaySeconds, streamConfigured, volume, onVolumeChange, slowConnection }: PlaybackOptions,
+  { streamConfigured, volume, onVolumeChange, slowConnection }: PlaybackOptions,
 ) {
   const idleVideoRef = useRef<HTMLVideoElement>(null);
   const liveReadyRef = useRef(false);
@@ -28,7 +21,9 @@ export function useStreamPlayback(
   const [liveReady, setLiveReady] = useState(false);
   const [idleReady, setIdleReady] = useState(false);
   const [startupExpired, setStartupExpired] = useState(false);
-  const hlsRef = useRef<Hls | null>(null);
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const [connectionAccessError, setConnectionAccessError] = useState(false);
+  const statusReceivedAt = useRef(performance.now());
   const playbackRef = useRef<{ play: () => void; fail: () => void } | null>(null);
   const slowConnectionRef = useRef(slowConnection);
   const volumeRef = useRef(volume);
@@ -36,8 +31,6 @@ export function useStreamPlayback(
   const ticketPlaybackRef = useRef(false);
   const [syncLabel, setSyncLabel] = useState("Finding the live signal");
   const [streamOnline, setStreamOnline] = useState<boolean | null>(null);
-  const [playbackUrl, setPlaybackUrl] = useState("");
-  const signedPlaybackRef = useRef<StreamPlayback | null>(null);
   const [playerStatus, setPlayerStatus] = useState<"loading" | "ready" | "error" | "unsupported">(
     "loading",
   );
@@ -51,14 +44,19 @@ export function useStreamPlayback(
     seconds: number;
   } | null>(null);
   const playbackSessionId = relayStatus?.running ? relayStatus.jellyfin?.sessionId : undefined;
-  const playbackStartedAt = relayStatus?.jellyfin?.startedAt ?? null;
   const playbackDuration = relayStatus?.runtimeSeconds ?? null;
   const elapsedSeconds =
     liveReady && playbackPosition?.sessionId === playbackSessionId
       ? (playbackPosition?.seconds ?? null)
       : null;
   const { idlePlayback, showIdle, startingPlayback, startupFailed, playbackAccessError } =
-    playbackPresentation(relayStatus, liveReady, startupExpired);
+    playbackPresentation(
+      connectionAccessError && relayStatus
+        ? { ...relayStatus, playbackError: "access-denied" }
+        : relayStatus,
+      liveReady,
+      startupExpired,
+    );
   const running = relayStatus?.running;
 
   useEffect(() => {
@@ -103,43 +101,17 @@ export function useStreamPlayback(
         if (!response.ok) {
           availableRef.current = false;
           ticketPlaybackRef.current = false;
-          setStreamInfo(null);
+          // Keep the last broadcast state during a temporary API outage.
           return;
         }
         // SAFETY: /api/stream-info is produced by the matching StreamInfo server contract.
         const status = (await response.json()) as StreamInfo;
         if (stopped) return;
-        if (status.running && status.online) {
-          let playback = signedPlaybackRef.current;
-          if (
-            !playback ||
-            (playback.expiresAt !== null && playback.expiresAt - Date.now() < 5 * 60 * 1000)
-          ) {
-            const signed = await apiFetch("/api/stream-playback", {
-              cache: "no-store",
-              signal: AbortSignal.any([request.signal, AbortSignal.timeout(8_000)]),
-            });
-            if (!signed.ok) throw new Error("Could not authorize stream playback");
-            // SAFETY: The authenticated endpoint returns the matching StreamPlayback contract.
-            const result = (await signed.json()) as StreamPlayback;
-            playback = result;
-            signedPlaybackRef.current = playback;
-          }
-          if (stopped) return;
-          setPlaybackUrl(playback.url);
-        }
+        statusReceivedAt.current = performance.now();
         availableRef.current = status.running && status.online;
         ticketPlaybackRef.current = availableRef.current && liveReadyRef.current;
         pollDelay = status.running && !status.online ? 3_000 : 10_000;
         setStreamInfo(status);
-        // A failed availability probe must not interrupt media that is still buffered.
-        if (
-          status.running &&
-          !status.online &&
-          liveReadyRef.current &&
-          (videoRef.current?.readyState ?? 0) >= HTMLMediaElement.HAVE_FUTURE_DATA
-        )
-          return;
         setStreamOnline(status.running && status.online);
         if (!status.running) {
           setPlayerStatus("ready");
@@ -150,17 +122,13 @@ export function useStreamPlayback(
           setPlayerStatus("error");
           setIsBuffering(false);
           setAutoplayBlocked(false);
-          setSyncLabel(
-            status.playbackError || [401, 403].includes(status.upstreamStatus ?? 0)
-              ? "Playback access denied"
-              : "Stream is offline",
-          );
+          setSyncLabel(status.playbackError ? "Playback access denied" : "Stream is offline");
         }
       } catch {
         if (!stopped && !request.signal.aborted) {
           availableRef.current = false;
           ticketPlaybackRef.current = false;
-          setStreamInfo(null);
+          // Keep the last broadcast state during a temporary API outage.
         }
       } finally {
         if (!stopped) timer = setTimeout(checkStreamInfo, pollDelay);
@@ -176,18 +144,23 @@ export function useStreamPlayback(
   }, [streamConfigured, streamInfoRequest, videoRef]);
 
   useEffect(() => {
-    if (!playbackSessionId || playbackStartedAt === null) {
+    if (!playbackSessionId || !relayStatus?.jellyfin || !relayStatus.serverTime) {
       setPlaybackPosition(null);
       return;
     }
     const sessionId = playbackSessionId;
+    const playback = relayStatus.jellyfin;
+    const serverTime = relayStatus.serverTime;
     const video = videoRef.current;
     function updatePosition() {
       const seconds =
-        video && !video.loop && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+        video &&
+        liveReadyRef.current &&
+        !video.paused &&
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
           ? playbackElapsedSeconds(
-              playbackStartedAt,
-              mediaProgramDate(video, hlsRef.current?.playingDate ?? null),
+              playback,
+              serverTime + performance.now() - statusReceivedAt.current,
               playbackDuration,
             )
           : null;
@@ -207,45 +180,49 @@ export function useStreamPlayback(
       video?.removeEventListener("timeupdate", updatePosition);
       video?.removeEventListener("loadeddata", updatePosition);
     };
-  }, [playbackSessionId, playbackStartedAt, playbackDuration, videoRef]);
+  }, [playbackSessionId, relayStatus, playbackDuration, videoRef]);
 
   useEffect(() => {
     slowConnectionRef.current = slowConnection;
-    const hls = hlsRef.current;
-    if (hls) Object.assign(hls.config, playbackConfig(delaySeconds, slowConnection, playbackUrl));
-    if (videoRef.current) videoRef.current.playbackRate = 1;
-  }, [delaySeconds, slowConnection, playbackUrl, videoRef]);
+    if (peerRef.current) setPlaybackBuffer(peerRef.current, slowConnection);
+  }, [slowConnection]);
 
   useEffect(() => {
     const video = videoRef.current;
     liveReadyRef.current = false;
     setLiveReady(false);
     ticketPlaybackRef.current = false;
-    if (!video || !streamConfigured || !playbackUrl || streamOnline !== true) return;
+    if (!video || !streamConfigured || streamOnline !== true) return;
     setPlayerStatus("loading");
     setIsBuffering(false);
     setAutoplayBlocked(false);
     setSyncLabel("Connecting to the stream");
+    setConnectionAccessError(false);
     video.volume = volumeRef.current;
     // Prepare live playback silently under the clip, then hand audio over with the picture.
     video.muted = true;
     video.defaultMuted = true;
     let disposed = false;
     let failed = false;
-    let attachedHls: Hls | null = null;
+    let connection: ReturnType<typeof connectPlayback> | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let cancelFrame: (() => void) | undefined;
 
-    function failPlayback() {
+    function failPlayback(error?: Error) {
       if (disposed || failed) return;
       failed = true;
-      attachedHls?.stopLoad();
+      connection?.close();
+      liveReadyRef.current = false;
+      setLiveReady(false);
+      ticketPlaybackRef.current = false;
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403))
+        setConnectionAccessError(true);
       setPlayerStatus("error");
       setIsBuffering(false);
       setAutoplayBlocked(false);
       setSyncLabel("Playback failed");
-      // Refresh the playlist/session after a fatal error, even while the server stays online.
-      retry = setTimeout(() => setPlaybackAttempt((current) => current + 1), 10_000);
+      // A fresh peer/session recovers encoder restarts and network changes.
+      retry = setTimeout(() => setPlaybackAttempt((current) => current + 1), 5_000);
     }
 
     async function play() {
@@ -270,7 +247,7 @@ export function useStreamPlayback(
       setIsBuffering(false);
       setAutoplayBlocked(false);
       setSyncLabel(
-        slowConnectionRef.current ? "Slow connection · sync off" : "Following the live room",
+        slowConnectionRef.current ? "Extra buffering enabled" : "Following the live room",
       );
       if (liveReadyRef.current || cancelFrame) return;
       const reveal = () => {
@@ -304,35 +281,39 @@ export function useStreamPlayback(
     video.addEventListener("playing", playing);
     playbackRef.current = { play, fail: failPlayback };
 
-    async function attachStream(media: HTMLVideoElement) {
-      const { default: HlsPlayer } = await import("hls.js");
-      if (disposed) return;
-      // Prefer HLS.js even when native HLS is available: Android's native player
-      // does not expose the timing needed for live synchronization.
-      if (HlsPlayer.isSupported()) {
-        const hls = new HlsPlayer(
-          playbackConfig(delaySeconds, slowConnectionRef.current, playbackUrl),
+    if (!("RTCPeerConnection" in window)) {
+      setPlayerStatus("unsupported");
+      setSyncLabel("Live playback is unsupported");
+    } else {
+      try {
+        connection = connectPlayback(
+          video,
+          (sdp) =>
+            apiJson<StreamPlayback>("/api/stream-playback", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sdp }),
+              signal: AbortSignal.timeout(20_000),
+            }),
+          async (session) => {
+            await apiFetch("/api/stream-playback/stop", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ session }),
+              keepalive: true,
+              signal: AbortSignal.timeout(8000),
+            });
+          },
+          failPlayback,
         );
-        attachedHls = hls;
-        hlsRef.current = hls;
-        hls.on(HlsPlayer.Events.ERROR, (_event, data) => {
-          if (data.fatal) failPlayback();
-        });
-        hls.loadSource(playbackUrl);
-        hls.attachMedia(media);
-        play();
-      } else if (media.canPlayType("application/vnd.apple.mpegurl")) {
-        // Keep native playback for browsers without MediaSource support.
-        media.src = playbackUrl;
-        play();
-      } else {
-        setPlayerStatus("unsupported");
-        setIsBuffering(false);
-        setSyncLabel("HLS playback is unsupported");
+        peerRef.current = connection.peer;
+        setPlaybackBuffer(connection.peer, slowConnectionRef.current);
+        void connection.ready.then(play).catch(failPlayback);
+      } catch (error) {
+        failPlayback(error instanceof Error ? error : undefined);
       }
     }
 
-    void attachStream(video).catch(failPlayback);
     return () => {
       disposed = true;
       clearTimeout(retry);
@@ -341,51 +322,35 @@ export function useStreamPlayback(
       liveReadyRef.current = false;
       ticketPlaybackRef.current = false;
       playbackRef.current = null;
-      attachedHls?.destroy();
-      if (hlsRef.current === attachedHls) hlsRef.current = null;
+      connection?.close();
+      if (peerRef.current === connection?.peer) peerRef.current = null;
       video.pause();
       video.playbackRate = 1;
       video.removeAttribute("src");
       video.load();
     };
-  }, [delaySeconds, streamOnline, streamConfigured, playbackUrl, playbackAttempt, videoRef]);
+  }, [streamOnline, streamConfigured, playbackSessionId, playbackAttempt, videoRef]);
 
   useEffect(() => {
     if (!liveReady) return;
-    const synchronizer = new PlaybackSynchronizer();
+    let lastFrame = -1;
+    let lastProgress = performance.now();
     const timer = setInterval(() => {
       const video = videoRef.current;
-      if (!video || playerStatus !== "ready" || autoplayBlocked) return;
-      if (video.paused) {
-        playbackRef.current?.play();
+      if (!video || autoplayBlocked) return;
+      if (document.visibilityState === "hidden") {
+        lastProgress = performance.now();
         return;
       }
-      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-        synchronizer.update(video, null, performance.now());
-        setIsBuffering(true);
-        setSyncLabel("Buffering the live stream...");
-        return;
-      }
-      // Use the same media timeline as HLS. Program dates can lag the encoder's
-      // wall clock and previously caused a second synchronization loop to keep seeking.
-      const target = hlsRef.current
-        ? hlsRef.current.liveSyncPosition
-        : video.seekable.length > 0
-          ? video.seekable.end(video.seekable.length - 1) - delaySeconds
-          : null;
-      const correction = synchronizer.update(
-        video,
-        target,
-        performance.now(),
-        !slowConnectionRef.current,
-      );
-      if (correction.position !== null) video.currentTime = correction.position;
-      video.playbackRate = correction.rate;
-      if (!video.seeking && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA)
-        setSyncLabel(correction.label);
-    }, 1_000);
+      if (video.paused) playbackRef.current?.play();
+      const frame = video.getVideoPlaybackQuality?.().totalVideoFrames ?? video.currentTime;
+      if (frame !== lastFrame) {
+        lastFrame = frame;
+        lastProgress = performance.now();
+      } else if (performance.now() - lastProgress > 10_000) playbackRef.current?.fail();
+    }, 1000);
     return () => clearInterval(timer);
-  }, [delaySeconds, playerStatus, streamConfigured, autoplayBlocked, liveReady, videoRef]);
+  }, [autoplayBlocked, liveReady, videoRef]);
 
   function playVisible() {
     if (streamOnline === true) playbackRef.current?.play();
@@ -444,7 +409,7 @@ export function useStreamPlayback(
   };
 
   return {
-    hlsRef,
+    peerRef,
     idleVideoRef,
     idleReady,
     showIdle,
@@ -452,6 +417,10 @@ export function useStreamPlayback(
     startupFailed,
     idleVideoEvents: {
       onPlaying() {
+        if (liveReadyRef.current) {
+          idleVideoRef.current?.pause();
+          return;
+        }
         setIdleReady(true);
         if (streamOnline !== true) setAutoplayBlocked(false);
       },
@@ -464,7 +433,6 @@ export function useStreamPlayback(
     ticketPlaybackRef,
     relayStatus,
     streamOnline,
-    playbackUrl,
     playerStatus,
     isBuffering,
     autoplayBlocked,

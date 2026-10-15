@@ -78,6 +78,21 @@ class RelayOutputTests(unittest.TestCase):
                             self.assertEqual(command[command.index("-attempt_recovery") + 1], "1")
         self.assertNotIn("test-private-stream-key", json.dumps(controller.relay_status()))
 
+    def test_whip_uses_baseline_opus_and_reconnects_with_no_credentials_in_status(self):
+        output = "https://customer-test.cloudflarestream.com/private-secret/webRTC/publish"
+        self.credentials.joinpath("output-url").write_text(output)
+        controller = self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url")
+        command = controller.relay_command("pipe:0", None, None, 2, False)
+        for option, expected in (("-fifo_format", "whip"), ("-c:a", "libopus"), ("-profile:v", "baseline"), ("-tune", "zerolatency"), ("-bf", "0"), ("-attempt_recovery", "1")):
+            self.assertEqual(command[command.index(option)+1], expected)
+        self.assertNotIn("private-secret", json.dumps(controller.relay_status()))
+        with self.assertRaisesRegex(ValueError, "libx264"):
+            self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url", BUNNY_VIDEO_ENCODER="h264_nvenc")
+        for path in ("/private-secret/webRTC/play", "/webRTC/publish", "/private-secret/webRTC/publish?key=secret"):
+            self.credentials.joinpath("output-url").write_text("https://customer-test.cloudflarestream.com" + path)
+            with self.assertRaisesRegex(ValueError, "complete WHIP"):
+                self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url")
+
     def test_invalid_ingest_credentials_fail_without_exposing_them(self):
         for output in ("", "private-stream-key", "rtmp://live.cloudflare.com/live/private-stream-key", "rtmps://live.cloudflare.com", "rtmps://live.cloudflare.com/live/"):
             with self.subTest(output=output):

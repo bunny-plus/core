@@ -32,12 +32,15 @@ OUTPUT_URL_CREDENTIAL = os.environ.get("BUNNY_OUTPUT_URL_CREDENTIAL")
 if OUTPUT_URL_CREDENTIAL:
     OUTPUT_URL = read_credential(OUTPUT_URL_CREDENTIAL)
     parsed_output = urlparse(OUTPUT_URL)
-    if not parsed_output.hostname or parsed_output.scheme not in ("rtmps", "srt"):
-        raise ValueError("The output URL credential must contain a complete RTMPS or SRT ingest URL")
+    if not parsed_output.hostname or parsed_output.scheme not in ("https", "rtmps", "srt"):
+        raise ValueError("The output URL credential must contain a complete RTMPS, SRT or WHIP ingest URL")
+    if parsed_output.scheme == "https":
+        if parsed_output.username or parsed_output.password or not parsed_output.path.endswith("/webRTC/publish") or len(parsed_output.path.split("/")) != 4 or not parsed_output.path.split("/")[1] or parsed_output.query or parsed_output.fragment:
+            raise ValueError("The output URL credential must contain a complete WHIP ingest URL")
     if parsed_output.scheme == "rtmps":
         if not parsed_output.path.strip("/") or parsed_output.path.endswith("/"):
             raise ValueError("The output URL credential must contain a complete RTMPS ingest URL")
-    else:
+    elif parsed_output.scheme == "srt":
         parameters = parse_qs(parsed_output.query)
         stream_ids = parameters.get("streamid", [])
         passphrases = parameters.get("passphrase", [])
@@ -57,8 +60,10 @@ if os.environ.get("BUNNY_OUTPUT_PASSWORD_CREDENTIAL") == "1":
         raise ValueError("Output URL and publisher password credentials cannot be combined")
     separator = "&" if "?" in OUTPUT_URL else "?"
     OUTPUT_URL += f"{separator}pass={quote(read_credential('publisher-password'), safe='')}"
-OUTPUT_FORMAT = "mpegts" if urlparse(OUTPUT_URL).scheme == "srt" else "flv"
+OUTPUT_FORMAT = {"srt": "mpegts", "https": "whip"}.get(urlparse(OUTPUT_URL).scheme, "flv")
 VIDEO_ENCODER = os.environ.get("BUNNY_VIDEO_ENCODER", "libx264")
+if OUTPUT_FORMAT == "whip" and VIDEO_ENCODER != "libx264":
+    raise ValueError("WHIP publishing requires the libx264 encoder")
 PROBE_TIMEOUT_SECONDS = int(os.environ.get("BUNNY_PROBE_TIMEOUT_SECONDS", "20"))
 RESOLUTION_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
 # Constrained quality: simple scenes can use less, complex scenes stay within
@@ -233,7 +238,9 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             VIDEO_ENCODER,
         ]
     )
-    if VIDEO_ENCODER == "h264_nvenc":
+    if OUTPUT_FORMAT == "whip":
+        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-r", "30", "-g", "30"])
+    elif VIDEO_ENCODER == "h264_nvenc":
         command.extend(["-preset", "p4", "-tune", "hq", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-profile:v", "high"])
     elif VIDEO_ENCODER == "libx264":
         command.extend(["-preset", "veryfast", "-crf", "20", "-profile:v", "high"])
@@ -241,8 +248,7 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     max_kbps = min(VIDEO_MAX_KBPS[resolution_index if resolution_index is not None else -1], VIDEO_BITRATE_LIMIT_KBPS)
     command.extend(["-maxrate:v", f"{max_kbps}k", "-bufsize:v", f"{max_kbps * 2}k"])
 
-    # FLV needs codec headers on every reconnect. MPEG-TS uses FFmpeg's
-    # automatic Annex B conversion to repeat them at keyframes instead.
+    # Every reconnected publisher must start with codec headers and a keyframe.
     command.extend(["-bf", "0", "-flags:v", "+global_header"])
 
     target_height = RESOLUTION_HEIGHTS[resolution_index] if resolution_index is not None else None
@@ -272,11 +278,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             "-pix_fmt",
             "yuv420p",
             "-force_key_frames",
-            "expr:gte(t,n_forced*2)",
+            "expr:gte(t,n_forced)" if OUTPUT_FORMAT == "whip" else "expr:gte(t,n_forced*2)",
             "-c:a",
-            "aac",
+            "libopus" if OUTPUT_FORMAT == "whip" else "aac",
             "-b:a",
-            "192k",
+            "128k" if OUTPUT_FORMAT == "whip" else "192k",
             "-ac",
             "2",
             "-ar",
@@ -295,7 +301,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             "-fifo_format",
             OUTPUT_FORMAT,
             "-format_opts",
-            "mpegts_flags=+resend_headers:avoid_negative_ts=make_non_negative:rw_timeout=15000000" if OUTPUT_FORMAT == "mpegts" else "flvflags=no_duration_filesize:fflags=-autobsf:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
+            {
+                "whip": "ts_buffer_size=16777216:handshake_timeout=10000:timeout=15",
+                "mpegts": "mpegts_flags=+resend_headers:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
+                "flv": "flvflags=no_duration_filesize:fflags=-autobsf:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
+            }[OUTPUT_FORMAT],
             "-queue_size",
             "120",
             "-drop_pkts_on_overflow",

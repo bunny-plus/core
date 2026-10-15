@@ -35,7 +35,7 @@ in {
 
     outputUrlFile = lib.mkOption {
       type = lib.types.str;
-      description = "Runtime path to the complete RTMPS or SRT publishing URL, loaded as a systemd credential.";
+      description = "Runtime path to the complete WHIP publishing URL, loaded as a systemd credential. RTMPS/SRT remain supported for rollback.";
     };
 
     videoEncoder = lib.mkOption {

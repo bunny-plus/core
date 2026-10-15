@@ -58,35 +58,15 @@ function streamInfoCacheKey(env: Env) {
 type StreamPlaybackAvailability = {
   online: boolean;
   playbackError?: StreamPlaybackError;
-  upstreamStatus: number | null;
 };
 
-async function probeStreamPlayback(env: Env): Promise<StreamPlaybackAvailability> {
-  let url: string;
+async function playbackAvailability(env: Env): Promise<StreamPlaybackAvailability> {
   try {
-    ({ url } = await streamPlayback(env));
+    await streamPlayback(env);
+    // WHEP has no playlist to probe. The browser confirms readiness by decoding a frame.
+    return { online: true };
   } catch {
-    return { online: false, playbackError: "signing-failed", upstreamStatus: null };
-  }
-  try {
-    const origin = new URL(env.APP_URL).origin;
-    const response = await fetch(url, {
-      headers: {
-        Accept: "application/vnd.apple.mpegurl",
-        Origin: origin,
-        Referer: `${origin}/`,
-      },
-      signal: AbortSignal.timeout(5000),
-    });
-    await response.body?.cancel();
-    const result: StreamPlaybackAvailability = {
-      online: response.status === 200,
-      upstreamStatus: response.status,
-    };
-    if ([401, 403].includes(response.status)) result.playbackError = "access-denied";
-    return result;
-  } catch {
-    return { online: false, upstreamStatus: null };
+    return { online: false, playbackError: "signing-failed" };
   }
 }
 
@@ -112,7 +92,7 @@ export async function streamInfo(env: Env) {
           jellyfin: status.running && !status.error ? status.jellyfin : undefined,
         }))
         .catch(() => ({ running: false, title: null, jellyfin: undefined })),
-      probeStreamPlayback(env),
+      playbackAvailability(env),
     ]);
     const playback = relay.jellyfin;
     const runtimeSeconds = playback
@@ -125,15 +105,15 @@ export async function streamInfo(env: Env) {
           .catch(() => null)
       : null;
     return runtimeSeconds === null
-      ? { ...relay, ...upstream }
-      : { ...relay, ...upstream, runtimeSeconds };
+      ? { ...relay, ...upstream, online: relay.running && upstream.online }
+      : { ...relay, ...upstream, online: relay.running && upstream.online, runtimeSeconds };
   });
-  if (!env.CINEMA_DIARY) return info;
+  if (!env.CINEMA_DIARY) return { ...info, serverTime: Date.now() };
   try {
-    return { ...info, screening: await env.CINEMA_DIARY.current() };
+    return { ...info, serverTime: Date.now(), screening: await env.CINEMA_DIARY.current() };
   } catch (error) {
     console.error("Could not read cinema screening", error);
-    return info;
+    return { ...info, serverTime: Date.now() };
   }
 }
 

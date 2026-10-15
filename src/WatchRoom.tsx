@@ -21,11 +21,9 @@ function volumeStyle(volume: number): CSSProperties & { "--volume": string } {
 
 export default function WatchRoom({
   currentUser,
-  delaySeconds,
   streamConfigured,
 }: {
   currentUser: User;
-  delaySeconds: number;
   streamConfigured: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -58,7 +56,7 @@ export default function WatchRoom({
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
   const {
-    hlsRef,
+    peerRef,
     idleVideoRef,
     idleVideoEvents,
     idleReady,
@@ -68,7 +66,6 @@ export default function WatchRoom({
     ticketPlaybackRef,
     relayStatus,
     streamOnline,
-    playbackUrl,
     playerStatus,
     isBuffering,
     autoplayBlocked,
@@ -85,14 +82,12 @@ export default function WatchRoom({
     retryPlayback,
     refreshStream,
   } = useStreamPlayback(videoRef, {
-    delaySeconds,
     streamConfigured,
     volume,
     onVolumeChange: setVolume,
     slowConnection,
   });
   const {
-    clockOffsetRef,
     cinemaProgress,
     earnedTicket,
     setEarnedTicket,
@@ -104,12 +99,7 @@ export default function WatchRoom({
     react,
     sendChat,
   } = useRoomConnection(videoRef, currentUser, ticketPlaybackRef);
-  const stats = usePlaybackStats(
-    showIdle ? idleVideoRef : videoRef,
-    hlsRef,
-    clockOffsetRef,
-    showStats,
-  );
+  const stats = usePlaybackStats(showIdle ? idleVideoRef : videoRef, peerRef, showStats);
   usePlayerAutoHide(playerRef, {
     playerStatus: showIdle && idleReady ? "ready" : playerStatus,
     isBuffering: !showIdle && isBuffering,
@@ -272,8 +262,7 @@ export default function WatchRoom({
               )}
               {playerStatus === "unsupported" && (
                 <div className="stream-error" role="status">
-                  This browser does not support HLS playback. Open the stream in an HLS-capable
-                  browser or player.
+                  This browser does not support live playback. Please try a current browser.
                 </div>
               )}
               {playerStatus !== "unsupported" &&
@@ -466,7 +455,7 @@ export default function WatchRoom({
                       onClick={() => setSlowConnection(!slowConnection)}
                     >
                       Slow connection: {slowConnection ? "on" : "off"}
-                      <small>More buffer, no live catch-up. Same video quality.</small>
+                      <small>Extra buffering where supported for uneven connections.</small>
                     </button>
                     <button
                       type="button"
@@ -494,11 +483,6 @@ export default function WatchRoom({
                     >
                       Single-key shortcuts: {shortcutsEnabled ? "on" : "off"}
                     </button>
-                    {playbackUrl && streamOnline === true && (
-                      <a href={playbackUrl} target="_blank" rel="noreferrer">
-                        Open in own player ↗<small>May not stay in sync</small>
-                      </a>
-                    )}
                   </div>
                 </details>
               </div>
@@ -581,10 +565,7 @@ export default function WatchRoom({
             onDismiss={() => setEarnedTicket(null)}
           />
           {showStats && stats && (
-            <PlaybackStats
-              stats={stats}
-              target={slowConnection ? "Sync off" : `${delaySeconds}s`}
-            />
+            <PlaybackStats stats={stats} target={slowConnection ? "Extra buffer" : "Live"} />
           )}
         </section>
         <RoomSidebar

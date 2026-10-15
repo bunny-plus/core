@@ -1,80 +1,79 @@
-import type Hls from "hls.js";
 import { useEffect, useState, type RefObject } from "react";
 
 export type PlayerStats = {
-  bandwidth: number | null;
-  mediaBitrate: number | null;
-  bufferAhead: number;
-  bufferTotal: number;
-  delay: number | null;
+  bitrate: number | null;
+  jitter: number | null;
+  roundTrip: number | null;
+  packetsLost: number | null;
   droppedFrames: number;
   playtime: number;
-  rate: number;
   resolution: string;
-  seekableWindow: number;
 };
 
 export function usePlaybackStats(
   videoRef: RefObject<HTMLVideoElement | null>,
-  hlsRef: RefObject<Hls | null>,
-  clockOffsetRef: RefObject<number>,
+  peerRef: RefObject<RTCPeerConnection | null>,
   showStats: boolean,
 ) {
   const [stats, setStats] = useState<PlayerStats | null>(null);
   useEffect(() => {
     if (!showStats) return;
-
-    function updateStats() {
+    let disposed = false;
+    let pending = false;
+    let previous: { peer: RTCPeerConnection; bytes: number; time: number } | undefined;
+    async function update() {
+      if (pending) return;
       const video = videoRef.current;
       if (!video) return;
-
-      let bufferAhead = 0;
-      let bufferTotal = 0;
-      for (let index = 0; index < video.buffered.length; index++) {
-        const start = video.buffered.start(index);
-        const end = video.buffered.end(index);
-        bufferTotal += end - start;
-        if (video.currentTime >= start && video.currentTime <= end)
-          bufferAhead = end - video.currentTime;
+      pending = true;
+      try {
+        const peer = !video.loop ? peerRef.current : null;
+        const report = peer && peer.connectionState !== "closed" ? await peer.getStats() : null;
+        const next: PlayerStats = {
+          bitrate: null,
+          jitter: null,
+          roundTrip: null,
+          packetsLost: null,
+          playtime: video.currentTime,
+          resolution: video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : "--",
+          droppedFrames: video.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0,
+        };
+        report?.forEach((value) => {
+          if (value.type === "inbound-rtp" && value.kind === "video" && peer) {
+            // SAFETY: The browser's RTCStats discriminator identifies an inbound RTP report.
+            const incoming = value as RTCInboundRtpStreamStats;
+            if (
+              previous?.peer === peer &&
+              incoming.bytesReceived !== undefined &&
+              incoming.timestamp > previous.time
+            )
+              next.bitrate = Math.max(
+                0,
+                ((incoming.bytesReceived - previous.bytes) * 8000) /
+                  (incoming.timestamp - previous.time),
+              );
+            if (incoming.bytesReceived !== undefined)
+              previous = { peer, bytes: incoming.bytesReceived, time: incoming.timestamp };
+            next.jitter = incoming.jitter ?? null;
+            next.packetsLost = incoming.packetsLost ?? null;
+            next.droppedFrames = incoming.framesDropped ?? next.droppedFrames;
+          }
+          if (value.type === "candidate-pair" && value.nominated && value.state === "succeeded")
+            next.roundTrip = value.currentRoundTripTime ?? null;
+        });
+        if (!disposed) setStats(next);
+      } catch {
+        /* A peer can close while its last stats request is in flight. */
+      } finally {
+        pending = false;
       }
-
-      const hls = video.loop ? null : hlsRef.current;
-      const playingDate = hls?.playingDate;
-      const liveEdge =
-        video.seekable.length > 0 ? video.seekable.end(video.seekable.length - 1) : null;
-      const delay = video.loop
-        ? null
-        : playingDate
-          ? (Date.now() + clockOffsetRef.current - playingDate.getTime()) / 1_000
-          : liveEdge === null
-            ? null
-            : liveEdge - video.currentTime;
-      const quality = video.getVideoPlaybackQuality?.();
-
-      setStats({
-        bandwidth: hls?.bandwidthEstimate ?? null,
-        mediaBitrate: hls ? hls.levels[hls.currentLevel]?.realBitrate || null : null,
-        bufferAhead,
-        bufferTotal,
-        delay,
-        droppedFrames: quality?.droppedVideoFrames ?? 0,
-        playtime: video.currentTime,
-        rate: video.playbackRate,
-        resolution:
-          video.videoWidth && video.videoHeight
-            ? `${video.videoWidth} × ${video.videoHeight}`
-            : "--",
-        seekableWindow:
-          video.seekable.length > 0
-            ? video.seekable.end(video.seekable.length - 1) - video.seekable.start(0)
-            : 0,
-      });
     }
-
-    updateStats();
-    const timer = setInterval(updateStats, 1_000);
-    return () => clearInterval(timer);
-  }, [showStats, videoRef, hlsRef, clockOffsetRef]);
-
+    void update();
+    const timer = setInterval(update, 1000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [showStats, videoRef, peerRef]);
   return stats;
 }

@@ -16,7 +16,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://192.168.1.240:10000",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-  STREAM_URL: "https://stream.test/index.m3u8",
+  STREAM_URL: "https://stream.test/webRTC/play",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -24,7 +24,6 @@ test("production environment accepts valid configuration and fills safe defaults
   const env = loadEnvironment(validEnvironment);
   assert.equal(env.ADMIN_DISCORD_IDS, "");
   assert.equal(env.DISCORD_ROLE_PERMISSIONS, "{}");
-  assert.equal(env.STREAM_DELAY_SECONDS, "6");
 });
 
 test("environment rejects missing or weak session secrets", () => {
@@ -57,46 +56,27 @@ test("development environment can run without a relay controller", () => {
     NODE_ENV: "development",
     RELAY_CONTROLLER_SECRET: undefined,
     RELAY_CONTROLLER_URL: undefined,
-    STREAM_URL: "http://localhost:8888/stream.m3u8",
+    STREAM_URL: "http://localhost:8888/webRTC/play",
   });
   assert.equal(env.RELAY_CONTROLLER_URL, undefined);
 });
 
 test("environment loads private Cloudflare playback credentials only as complete pairs", () => {
   const signing = {
-    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
-    CF_ACCOUNT_ID: "a".repeat(32),
-    CF_TOKEN: "cloudflare-api-token-secret",
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/webRTC/play`,
+    CLOUDFLARE_STREAM_SIGNING_KEY_ID: "test-key",
+    CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "validated-when-used",
   };
   const env = loadEnvironment({ ...validEnvironment, ...signing });
-  assert.equal(env.CF_TOKEN, signing.CF_TOKEN);
+  assert.equal(env.CLOUDFLARE_STREAM_SIGNING_KEY_ID, signing.CLOUDFLARE_STREAM_SIGNING_KEY_ID);
   assert.throws(
-    () => loadEnvironment({ ...validEnvironment, ...signing, CF_ACCOUNT_ID: undefined }),
-    /both account ID and API token/,
-  );
-});
-
-test("generic Cloudflare credentials validate the account and token", () => {
-  const configured = {
-    ...validEnvironment,
-    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
-    CF_ACCOUNT_ID: "a".repeat(32),
-    CF_TOKEN: "private-cloudflare-api-token",
-  };
-  const result = loadEnvironment(configured);
-  assert.equal(result.CF_ACCOUNT_ID, configured.CF_ACCOUNT_ID);
-  assert.equal(result.CF_TOKEN, configured.CF_TOKEN);
-  assert.throws(
-    () => loadEnvironment({ ...configured, CF_TOKEN: undefined }),
-    /both account ID and API token/,
-  );
-  assert.throws(
-    () => loadEnvironment({ ...configured, CF_ACCOUNT_ID: "invalid" }),
-    /credentials are invalid/,
-  );
-  assert.throws(
-    () => loadEnvironment({ ...configured, CF_TOKEN: "cloudflare-api-token-secret\r\nheader" }),
-    /credentials are invalid/,
+    () =>
+      loadEnvironment({
+        ...validEnvironment,
+        ...signing,
+        CLOUDFLARE_STREAM_SIGNING_KEY_JWK: undefined,
+      }),
+    /both signing key ID and private JWK/,
   );
 });
 

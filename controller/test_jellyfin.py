@@ -280,6 +280,8 @@ class ClockTests(unittest.TestCase):
         with patch('jellyfin.time.time', return_value=1800000000.25):
             clock.read_progress(output)
         self.assertEqual(clock.status()['startedAt'], 1800000000000)
+        self.assertEqual(clock.status()['positionSeconds'], 5)
+        self.assertEqual(clock.status()['updatedAt'], 1800000000250)
         self.assertTrue(output.closed)
 
     def test_new_process_gets_new_identity_and_old_reader_cannot_change_it(self):

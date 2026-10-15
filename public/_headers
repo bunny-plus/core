@@ -1,5 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.bunny.plus wss://api.bunny.plus https://*.cloudflarestream.com https://videodelivery.net https://*.videodelivery.net; font-src 'self'; form-action 'self' https://api.bunny.plus; frame-ancestors 'none'; img-src 'self' data: https://api.bunny.plus https://cdn.discordapp.com https://media.discordapp.net https://image.tmdb.org; media-src 'self' blob: https://*.cloudflarestream.com https://videodelivery.net https://*.videodelivery.net; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; connect-src 'self' https://api.bunny.plus wss://api.bunny.plus; font-src 'self'; form-action 'self' https://api.bunny.plus; frame-ancestors 'none'; img-src 'self' data: https://api.bunny.plus https://cdn.discordapp.com https://media.discordapp.net https://image.tmdb.org; media-src 'self' blob:; object-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'
   Permissions-Policy: camera=(), geolocation=(), microphone=()
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff

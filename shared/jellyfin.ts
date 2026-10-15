@@ -49,6 +49,8 @@ export type JellyfinPlayback = {
   subtitlesBurnedIn?: boolean;
   // Estimated program date of episode time zero, measured from FFmpeg output.
   startedAt: number | null;
+  positionSeconds?: number;
+  updatedAt?: number;
 };
 
 export type JellyfinOptions = {

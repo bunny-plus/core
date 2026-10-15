@@ -67,9 +67,16 @@ spec:
                   fieldPath: metadata.uid
             - name: NODE_ENV
               value: production
-          envFrom:
-            - secretRef:
-                name: bunny-plus-database
+            - name: D1_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bunny-plus
+                  key: D1_DATABASE_URL
+            - name: D1_DATABASE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: bunny-plus
+                  key: D1_DATABASE_SECRET
           volumeMounts:
             - name: data
               mountPath: /app/data

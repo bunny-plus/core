@@ -18,12 +18,9 @@ PORT=8787
 SESSION_SECRET=replace-with-output-of-openssl-rand-base64-32
 RELAY_CONTROLLER_SECRET=
 RELAY_CONTROLLER_URL=
-# Cloudflare Stream HLS URL using the stable live input ID, not a recording ID.
-# https://customer-<CODE>.cloudflarestream.com/<LIVE_INPUT_ID>/manifest/video.m3u8
+# Private WHEP playback URL; the backend proxies signaling.
+# https://customer-<CODE>.cloudflarestream.com/<LIVE_INPUT_ID>/webRTC/play
 STREAM_URL=
-# Cloudflare account API credentials, backend only. Also enable recording cleanup.
-CF_ACCOUNT_ID=
-CF_TOKEN=
 # Registered Stream signing key for local playback signing (raw or base64 private JWK).
 CLOUDFLARE_STREAM_SIGNING_KEY_ID=
 CLOUDFLARE_STREAM_SIGNING_KEY_JWK=
