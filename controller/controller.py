@@ -238,7 +238,7 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         ]
     )
     if OUTPUT_FORMAT == "whip":
-        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-fps_mode:v", "passthrough", "-g", "30"])
+        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-fps_mode:v", "passthrough", "-g", "30", "-x264-params", "repeat-headers=1"])
         command.extend(["-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
     elif VIDEO_ENCODER == "h264_nvenc":
         command.extend(["-preset", "p4", "-tune", "hq", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-profile:v", "high"])
@@ -297,12 +297,12 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             OUTPUT_FORMAT,
             "-format_opts",
             {
-                "whip": "ts_buffer_size=16777216:handshake_timeout=10000:timeout=15",
+                "whip": "ts_buffer_size=16777216:handshake_timeout=10000:timeout=15:pacing_delay=0.5",
                 "mpegts": "mpegts_flags=+resend_headers:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
                 "flv": "flvflags=no_duration_filesize:fflags=-autobsf:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
             }[OUTPUT_FORMAT],
             "-queue_size",
-            "120",
+            "256" if OUTPUT_FORMAT == "whip" else "120",
             "-drop_pkts_on_overflow",
             "1",
             "-attempt_recovery",

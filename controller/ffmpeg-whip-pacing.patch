@@ -1,0 +1,62 @@
+--- a/libavformat/whip.c
++++ b/libavformat/whip.c
+@@ -213,6 +213,10 @@
+ 
+ typedef struct WHIPContext {
+     AVClass *av_class;
++    int64_t pacing_delay;
++    int64_t pacing_start_time;
++    int64_t pacing_start_ts;
++    int64_t pacing_last_ts;
+ 
+     uint32_t flags;
+     /* The state of the RTC connection. */
+@@ -445,6 +449,9 @@
+     if (whip->pkt_size < ideal_pkt_size)
+         av_log(whip, AV_LOG_WARNING, "pkt_size=%d(<%d) is too small, may cause packet loss\n",
+                whip->pkt_size, ideal_pkt_size);
++
++    whip->pacing_start_ts = AV_NOPTS_VALUE;
++    whip->pacing_last_ts = AV_NOPTS_VALUE;
+ 
+     whip->hist = av_calloc(whip->hist_sz, sizeof(*whip->hist));
+     if (!whip->hist)
+@@ -2018,6 +2025,30 @@
+     AVStream *st = s->streams[pkt->stream_index];
+     AVFormatContext *rtp_ctx = st->priv_data;
+     int64_t now = av_gettime_relative();
++
++    if (whip->pacing_delay && pkt->dts != AV_NOPTS_VALUE) {
++        int64_t ts = av_rescale_q(pkt->dts, st->time_base, AV_TIME_BASE_Q);
++        int64_t deadline;
++
++        if (whip->pacing_start_ts == AV_NOPTS_VALUE ||
++            ts < whip->pacing_last_ts - AV_TIME_BASE ||
++            ts > whip->pacing_last_ts + 2 * AV_TIME_BASE) {
++            whip->pacing_start_ts = ts;
++            whip->pacing_start_time = now + whip->pacing_delay;
++        }
++        deadline = whip->pacing_start_time + ts - whip->pacing_start_ts;
++        if (now - deadline > whip->pacing_delay) {
++            whip->pacing_start_ts = ts;
++            whip->pacing_start_time = deadline = now + whip->pacing_delay;
++        }
++        whip->pacing_last_ts = ts;
++        while (now < deadline) {
++            if (ff_check_interrupt(&s->interrupt_callback))
++                return AVERROR_EXIT;
++            av_usleep(FFMIN(deadline - now, 10000));
++            now = av_gettime_relative();
++        }
++    }
+     /**
+      * Refer to RFC 7675
+      * Periodically send Consent Freshness STUN Binding Request
+@@ -2181,6 +2212,7 @@
+ #define OFFSET(x) offsetof(WHIPContext, x)
+ #define ENC AV_OPT_FLAG_ENCODING_PARAM
+ static const AVOption options[] = {
++    { "pacing_delay", "Pace media timestamps with this initial buffering delay", OFFSET(pacing_delay), AV_OPT_TYPE_DURATION, { .i64 = 0 }, 0, AV_TIME_BASE, ENC },
+     { "handshake_timeout",  "Timeout in milliseconds for ICE and DTLS handshake.",      OFFSET(handshake_timeout),  AV_OPT_TYPE_INT,    { .i64 = 5000 },    -1, INT_MAX, ENC },
+     { "timeout",            "Set timeout for socket I/O operations",                    OFFSET(timeout),            AV_OPT_TYPE_DURATION, { .i64 = -1 }, -1, INT_MAX, ENC },
+     { "pkt_size",           "The maximum size, in bytes, of RTP packets that send out", OFFSET(pkt_size),           AV_OPT_TYPE_INT,    { .i64 = 1200 },    -1, INT_MAX, ENC },
