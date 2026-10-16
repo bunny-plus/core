@@ -52,8 +52,7 @@ export function connectPlayback(
   video.srcObject = media;
   peer.addTransceiver("video", { direction: "recvonly" });
   peer.addTransceiver("audio", { direction: "recvonly" });
-  peer.ontrack = ({ track, receiver }) => {
-    if ("jitterBufferTarget" in receiver) receiver.jitterBufferTarget = 4000;
+  peer.ontrack = ({ track }) => {
     media.addTrack(track);
     track.onended = onDisconnect;
   };
