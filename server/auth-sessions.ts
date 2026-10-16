@@ -13,7 +13,6 @@ export type DiscordCredentials = {
 
 export type StoredSession = {
   viewer: Viewer;
-  // Bot sign-ins recheck membership with the backend token instead of user OAuth credentials.
   credentials: DiscordCredentials | null;
   checkedAt: number;
 };
@@ -117,7 +116,6 @@ export class AuthSessions {
   async read(token: string, now = Date.now()): Promise<StoredSession | null> {
     await this.ready;
     if (!isToken(token)) return null;
-    // SAFETY: The query selects these exact columns from the STRICT schema above.
     const row = await this.database
       .prepare("SELECT * FROM auth_sessions WHERE token_hash = ? AND expires_at > ?")
       .get<SessionRow>(tokenHash(token), now);

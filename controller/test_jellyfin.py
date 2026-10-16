@@ -174,6 +174,21 @@ class ControllerTests(unittest.TestCase):
                 self.controller.start_relay(SOURCE, "Movie", None, None, None, hdr_transfer="injected-filter")
             stop.assert_not_called()
 
+    def test_dolby_vision_conversion_precedes_subtitles_and_rejects_invalid_options(self):
+        files = JellyfinSubtitleFiles()
+        self.addCleanup(files.stop)
+        command = self.controller.relay_command(SOURCE, None, None, 5, True, dolby_vision=True, subtitle_files=files)
+        filters = command[command.index("-vf") + 1]
+        self.assertTrue(filters.startswith("libplacebo="))
+        self.assertIn("apply_dolbyvision=1", filters)
+        self.assertLess(filters.index("libplacebo="), filters.index(files.video_filter()))
+        self.assertNotIn("zscale=", filters)
+        self.assertEqual(command[command.index("-color_trc") + 1], "bt709")
+        with patch.object(self.controller, "stop_relay") as stop:
+            with self.assertRaisesRegex(ValueError, "dolbyVision"):
+                self.controller.start_relay(SOURCE, "Movie", None, None, None, dolby_vision="injected-filter")
+            stop.assert_not_called()
+
     def test_failed_access_does_not_stop_current_stream(self):
         with patch.object(self.controller, "prepare_jellyfin_input", side_effect=RuntimeError("Unauthorized")), patch.object(self.controller, "stop_relay") as stop:
             with self.assertRaises(RuntimeError):

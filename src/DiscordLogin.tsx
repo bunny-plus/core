@@ -10,14 +10,12 @@ export default function DiscordLogin() {
   const redemption = useRef<Promise<{ ok: true }> | null>(null);
 
   useEffect(() => {
-    // Keep the login credential out of browser history, referrers and subsequent navigation.
     window.history.replaceState(window.history.state, "", window.location.pathname);
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
       setError("Run /login in Bunny's Discord for a fresh private login link.");
       return;
     }
     let active = true;
-    // React StrictMode replays effects; both runs must share the single redemption request.
     redemption.current ??= apiJson<{ ok: true }>("/api/login/discord", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -1,4 +1,3 @@
-"""Real, offline WHIP interoperability: FFmpeg -> ICE/DTLS/SRTP -> decoded frames."""
 import asyncio
 import importlib.util
 import os
@@ -32,8 +31,6 @@ class WhipTests(unittest.TestCase):
         self.frames = {"audio": 0, "video": 0}
         self.audio_timing = []
         self.video_timing = []
-        # Nix sandboxes expose only loopback, which aioice normally filters out.
-        # Keep this fixture local even on a host with public network interfaces.
         addresses = patch("aioice.ice.get_host_addresses", return_value=["127.0.0.1"])
         addresses.start()
         self.addCleanup(addresses.stop)
@@ -53,12 +50,12 @@ class WhipTests(unittest.TestCase):
         self.source = str(root / "source.mkv")
         self.make_source()
 
-    def make_source(self, audio_codec="aac", frame_rate="30"):
+    def make_source(self, audio_codec="aac", frame_rate="30", duration="8"):
         subprocess.run([
             self.ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
             "-f", "lavfi", "-i", f"testsrc2=size=160x90:rate={frame_rate}",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-            "-t", "8", "-c:v", "libx264", "-preset", "ultrafast",
+            "-t", duration, "-c:v", "libx264", "-preset", "ultrafast",
             "-c:a", audio_codec, "-strict", "-2",
             *(["-bsf:a", "setts=ts=TS-mod(N\\,2)*0.001/TB"]
               if audio_codec == "dca" else []),
@@ -139,8 +136,6 @@ class WhipTests(unittest.TestCase):
         self.assertEqual(self.requests, 1)
 
     def test_dts_in_matroska_has_a_continuous_opus_sample_clock(self):
-        # DTS frames span 10 2/3 ms. Model a source with millisecond timestamps
-        # and 1 ms jitter; passing it through to RTP makes browsers discard audio.
         self.make_source("dca")
         self.publish()
         self.assertGreater(len(self.audio_timing), 100)
@@ -160,6 +155,7 @@ class WhipTests(unittest.TestCase):
         self.assertGreaterEqual(self.requests, 2)
 
     def test_encoder_recovers_after_a_connected_peer_disconnects(self):
+        self.make_source(duration="12")
         self.disconnect_first = True
         self.publish()
         self.assertGreaterEqual(self.requests, 2)

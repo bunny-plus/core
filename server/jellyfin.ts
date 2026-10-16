@@ -216,7 +216,6 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
   const audio = streams
     .filter((stream) => stream.Type === "Audio" && isIndex(stream.Index))
     .map((stream) => ({
-      // SAFETY: The filter above requires a non-negative integer stream index.
       index: stream.Index as number,
       label: isString(stream.DisplayTitle)
         ? stream.DisplayTitle
@@ -232,7 +231,6 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
   const subtitles = streams
     .filter((stream) => stream.Type === "Subtitle" && isIndex(stream.Index))
     .map((stream) => ({
-      // SAFETY: The filter requires a non-negative integer stream index.
       index: stream.Index as number,
       label: isString(stream.DisplayTitle) ? stream.DisplayTitle : `Subtitle ${stream.Index}`,
       language: isString(stream.Language) ? stream.Language : null,
@@ -261,7 +259,6 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
           )
           .slice(0, 16)
           .map((attachment) => {
-            // SAFETY: The filter requires a non-negative integer attachment index.
             return attachment.Index as number;
           })
       : [],
@@ -272,6 +269,9 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
       video.ColorTransfer === "smpte2084" || video.ColorTransfer === "arib-std-b67"
         ? video.ColorTransfer
         : null,
+    dolbyVision:
+      (isNumber(video.DvProfile) && video.DvProfile > 0) ||
+      (isString(video.VideoRangeType) && video.VideoRangeType.startsWith("DOVI")),
   };
 }
 
@@ -373,6 +373,7 @@ export async function jellyfinRelay(env: Env, input: JsonObject) {
     subtitleFonts: subtitleIndex === null ? [] : source.fonts,
     resolutionIndex,
     hdrTransfer: source.hdrTransfer,
+    dolbyVision: source.dolbyVision,
     title: options.item.title.slice(0, 200),
   };
 }

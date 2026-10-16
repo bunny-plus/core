@@ -30,6 +30,7 @@ export type JellyfinSource = {
   defaultSubtitleIndex: number | null;
   height: number | null;
   hdrTransfer: "smpte2084" | "arib-std-b67" | null;
+  dolbyVision: boolean;
 };
 
 export type JellyfinSubtitle = {

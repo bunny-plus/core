@@ -27,7 +27,6 @@ function liveInput(url: URL) {
 
 export function validateStreamSigning(env: StreamEnvironment) {
   const url = new URL(env.STREAM_URL);
-  // Local development may use a WHEP fixture. Production provider inputs are always private.
   if (!url.hostname.endsWith(".cloudflarestream.com")) {
     if (env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
       throw new Error("Signing requires a private WHEP URL");
@@ -97,7 +96,6 @@ async function signLocally(inputId: string, keyId: string, encodedKey: string, e
   }
 }
 
-// Server-only: the permanent URL and signed endpoint never go to the browser.
 export async function streamPlayback(env: StreamEnvironment): Promise<string> {
   validateStreamSigning(env);
   if (!env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)

@@ -1,7 +1,5 @@
 import type { TicketBunny } from "../shared/ticket-bunny";
 
-// Piercings sit on the ear itself. A folded ear uses its dangling tip; lop ears
-// use their outer ends, beyond the cheeks. Coordinates match BunnyEars.
 const earAttachments = {
   upright: [
     { x: 30, y: 29, angle: -12 },

@@ -47,7 +47,6 @@ function HeldItem({ coat, children }: { coat: string; children: ReactNode }) {
   );
 }
 
-/** Additional named SVG parts; old accessory identifiers retain their artwork. */
 export function ExtraBunnyAccessory({
   parts,
   patternId,

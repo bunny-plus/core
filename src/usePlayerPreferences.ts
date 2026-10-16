@@ -21,9 +21,7 @@ function usePreference<T>(
       setValue(next);
       try {
         localStorage.setItem(`bunny-plus-${key}`, encode(next));
-      } catch {
-        // Preferences still apply to this visit when browser storage is unavailable.
-      }
+      } catch {}
     },
     [key, encode],
   );

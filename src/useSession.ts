@@ -51,7 +51,6 @@ export function useSession() {
         const refreshed = await readSession(request.signal);
         if (!request.signal.aborted) setSession(refreshed);
       } catch {
-        // Keep the current page during temporary network or Discord failures.
       } finally {
         pending = false;
       }

@@ -1,7 +1,6 @@
 import type { TicketBunny } from "./ticket-bunny";
 
 export const ticketWatchSeconds = 10 * 60;
-// D1 rows are limited to 2,000,000 bytes; leave space for the title and metadata.
 export const cinemaImageMaxBytes = 1_900_000;
 
 export type CinemaTicketDesign = {

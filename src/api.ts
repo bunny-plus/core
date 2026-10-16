@@ -24,7 +24,6 @@ export async function apiJson<T>(path: string, init?: RequestInit) {
   }
   if (result === null)
     throw new ApiError("The server returned an invalid response.", response.status);
-  // SAFETY: Callers select the matching contract for a first-party bunny.plus API route.
   return result as T;
 }
 

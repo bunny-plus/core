@@ -33,7 +33,6 @@ export abstract class AppDatabase {
     return {
       all: async <T>(...values: BindValue[]): Promise<T[]> => {
         const [result] = await this.batch([query(sql, ...values)]);
-        // SAFETY: Repository callers select a domain row matching their explicit SQL projection.
         return result.rows.map((row) =>
           Object.fromEntries(
             Object.entries(row).map(([key, value]) => [
@@ -94,7 +93,6 @@ export class SqliteDatabase extends AppDatabase {
         const after = Number(
           this.sqlite.prepare("SELECT total_changes() AS changes").get()!.changes,
         );
-        // SAFETY: SQLite columns are scalar or binary; blobs were converted to the wire representation above.
         return { rows, changes: after - before } as SqlResult;
       });
       this.sqlite.exec("COMMIT");

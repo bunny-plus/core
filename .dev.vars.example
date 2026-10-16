@@ -1,12 +1,9 @@
 DISCORD_CLIENT_ID=
 DISCORD_CLIENT_SECRET=
-# Optional /login bot. Use an environment secret or a local token file.
 DISCORD_BOT_TOKEN=
 # DISCORD_BOT_TOKEN_FILE=../discord-token
-# Required in production; local development uses SQLite when both are empty.
 D1_DATABASE_URL=
 D1_DATABASE_SECRET=
-# Local SQLite directory also holds sessions and cinema data.
 CHAT_DB_PATH=./data/chat.sqlite
 DISCORD_GUILD_ID=
 DISCORD_ROLE_PERMISSIONS={"1510763796984238241":["chloe.chat"],"1398994574864678982":["admin","stream.manage"]}
@@ -20,16 +17,12 @@ PORT=8787
 SESSION_SECRET=replace-with-output-of-openssl-rand-base64-32
 RELAY_CONTROLLER_SECRET=
 RELAY_CONTROLLER_URL=
-# Private WHEP playback URL; the backend proxies signaling.
-# https://customer-<CODE>.cloudflarestream.com/<LIVE_INPUT_ID>/webRTC/play
 STREAM_URL=
-# Registered Stream signing key for local playback signing (raw or base64 private JWK).
 CLOUDFLARE_STREAM_SIGNING_KEY_ID=
 CLOUDFLARE_STREAM_SIGNING_KEY_JWK=
 STREMIO_ADDON_URL=
 TMDB_API_TOKEN=
 TORBOX_API_KEY=
-# Optional controller-reachable base URL; defaults to JELLYFIN_URL.
 JELLYFIN_STREAM_URL=
 JELLYFIN_URL=
 JELLYFIN_API_KEY=

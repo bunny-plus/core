@@ -56,7 +56,6 @@ export async function handleDiscordLogin(interaction: LoginInteraction, env: Env
       await env.AUTH_SESSIONS?.revokeLoginLink(loginToken).catch(() =>
         console.error("Discord /login link could not be revoked"),
       );
-    // Discord errors can include request bodies and interaction tokens; never log them.
     console.error("Discord /login could not be completed");
     if (deferred) {
       await interaction
@@ -86,7 +85,6 @@ export async function startDiscordBot(env: Env) {
     }
     registering = true;
     try {
-      // Upsert just /login, preserving any other application commands.
       await client.application.commands.create(
         {
           name: "login",

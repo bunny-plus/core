@@ -41,7 +41,6 @@ export class ChatHistory {
 
   async all(): Promise<RoomChat[]> {
     await this.ready;
-    // SAFETY: The query selects these exact columns from the STRICT schema created above.
     const rows = await this.database
       .prepare(`
       SELECT id, created_at, member_id, member_name, member_avatar, member_admin, message, x

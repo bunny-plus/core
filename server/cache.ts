@@ -11,7 +11,6 @@ export class TtlCache {
     if (cached && cached.expires > Date.now()) {
       this.entries.delete(key);
       this.entries.set(key, cached);
-      // SAFETY: Entries are written only from the T-producing loader for the same cache key.
       return cached.value as T;
     }
     if (cached) this.entries.delete(key);
@@ -19,7 +18,6 @@ export class TtlCache {
     const generation = this.generations.get(key) ?? 0;
     const existingLoad = this.loads.get(key);
     if (existingLoad?.generation === generation) {
-      // SAFETY: A coalesced load for this key was created by the same T-producing loader contract.
       return existingLoad.promise as Promise<T>;
     }
 

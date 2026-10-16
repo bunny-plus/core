@@ -180,7 +180,6 @@ function BunnyOutfit({ parts, patternId }: { parts: BunnyParts; patternId: strin
   );
 }
 
-/** The illustrated style renders the same saved traits, including existing version 1 tickets. */
 export function TicketBunny({ parts }: { parts: BunnyParts }) {
   const patternId = useId();
   const colours = ticketBunnyColours[parts.palette];

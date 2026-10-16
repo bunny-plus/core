@@ -106,7 +106,6 @@ async function send(response: ServerResponse, result: Response, request: Incomin
     response.end();
     return;
   }
-  // SAFETY: Node's fetch body is the Web ReadableStream implementation accepted by fromWeb.
   Readable.fromWeb(result.body as import("node:stream/web").ReadableStream).pipe(response);
 }
 

@@ -168,7 +168,6 @@ export class WatchRoom {
       );
       session.expiry.unref();
     } catch {
-      // A temporary Discord outage should reconnect the room without logging the viewer out.
       socket.close(4002, "Session check unavailable");
     }
   }
@@ -247,9 +246,7 @@ export class WatchRoom {
         }
         this.broadcast(chat);
       }
-    } catch {
-      // Malformed messages have no effect on room state.
-    }
+    } catch {}
   }
 
   private disconnect(socket: WebSocket) {

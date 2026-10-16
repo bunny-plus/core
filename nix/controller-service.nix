@@ -58,6 +58,8 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    hardware.graphics.enable = true;
+
     systemd.services.bunny-stream-controller = {
       description = "Bunny+ host stream controller";
       wantedBy = ["multi-user.target"];
@@ -80,6 +82,7 @@ in {
       serviceConfig = {
         CapabilityBoundingSet = "";
         DeviceAllow = [
+          "char-drm rw"
           "/dev/nvidia0 rw"
           "/dev/nvidiactl rw"
           "/dev/nvidia-modeset rw"

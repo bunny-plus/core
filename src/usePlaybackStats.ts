@@ -40,7 +40,6 @@ export function usePlaybackStats(
         };
         report?.forEach((value) => {
           if (value.type === "inbound-rtp" && value.kind === "video" && peer) {
-            // SAFETY: The browser's RTCStats discriminator identifies an inbound RTP report.
             const incoming = value as RTCInboundRtpStreamStats;
             if (
               previous?.peer === peer &&
@@ -63,7 +62,6 @@ export function usePlaybackStats(
         });
         if (!disposed) setStats(next);
       } catch {
-        /* A peer can close while its last stats request is in flight. */
       } finally {
         pending = false;
       }

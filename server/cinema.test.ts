@@ -136,7 +136,6 @@ test("stopping ticket counting survives restarts and preserves progress, tickets
   const collected = await diary.collection("collector");
   const stopped = await diary.setTicketCounting(screening.id, false);
   assert.equal(stopped?.ticketCountingEnabled, false);
-  // Even a stop/resume entirely between pulses must exclude that interval.
   await diary.setTicketCounting(screening.id, true);
   await diary.watching("viewer", "viewer", screening.id, true, startTime + 600000);
   assert.equal((await diary.progress("viewer")).watchedSeconds, 590);

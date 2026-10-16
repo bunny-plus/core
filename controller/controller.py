@@ -66,8 +66,6 @@ if OUTPUT_FORMAT == "whip" and VIDEO_ENCODER != "libx264":
     raise ValueError("WHIP publishing requires the libx264 encoder")
 PROBE_TIMEOUT_SECONDS = int(os.environ.get("BUNNY_PROBE_TIMEOUT_SECONDS", "20"))
 RESOLUTION_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
-# Constrained quality: simple scenes can use less, complex scenes stay within
-# a two-second VBV budget. Original resolution uses the 4K ceiling.
 VIDEO_MAX_KBPS = [250, 500, 1000, 1800, 3500, 6000, 12000, 20000]
 VIDEO_BITRATE_LIMIT_KBPS = int(os.environ.get("BUNNY_VIDEO_MAX_KBPS", str(max(VIDEO_MAX_KBPS))))
 if VIDEO_BITRATE_LIMIT_KBPS <= 0:
@@ -152,7 +150,6 @@ def probe_source(source):
         and (stream.get("disposition") or {}).get("attached_pic") != 1
         and isinstance(stream.get("height"), int)
     ]
-    # Remote embedded subtitle extraction/burning is intentionally unsupported.
     return {
         "audio": audio,
         "subtitles": [],
@@ -181,9 +178,11 @@ def stop_relay():
     relay_subtitles = None
 
 
-def relay_command(source, audio_index, subtitle_index, resolution_index, network_source, input_headers=None, hdr_transfer=None, subtitle_files=None):
+def relay_command(source, audio_index, subtitle_index, resolution_index, network_source, input_headers=None, hdr_transfer=None, subtitle_files=None, dolby_vision=False):
     if hdr_transfer not in (None, "smpte2084", "arib-std-b67"):
         raise ValueError("Unsupported HDR transfer function")
+    if not isinstance(dolby_vision, bool):
+        raise ValueError("dolbyVision must be a boolean")
     audio_index = optional_index(audio_index, "audioIndex")
     subtitle_index = optional_index(subtitle_index, "subtitleIndex")
     resolution_index = optional_index(resolution_index, "resolutionIndex")
@@ -239,10 +238,7 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         ]
     )
     if OUTPUT_FORMAT == "whip":
-        # Preserve film cadence instead of duplicating frames to force 30 fps.
         command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-fps_mode:v", "passthrough", "-g", "30"])
-        # Coarse source timestamps can make Opus RTP frames overlap or leave gaps.
-        # Follow the resampled sample count while preserving the initial A/V offset.
         command.extend(["-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
     elif VIDEO_ENCODER == "h264_nvenc":
         command.extend(["-preset", "p4", "-tune", "hq", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-profile:v", "high"])
@@ -252,28 +248,28 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     max_kbps = min(VIDEO_MAX_KBPS[resolution_index if resolution_index is not None else -1], VIDEO_BITRATE_LIMIT_KBPS)
     command.extend(["-maxrate:v", f"{max_kbps}k", "-bufsize:v", f"{max_kbps * 2}k"])
 
-    # Every reconnected publisher must start with codec headers and a keyframe.
     command.extend(["-bf", "0", "-flags:v", "+global_header"])
 
     target_height = RESOLUTION_HEIGHTS[resolution_index] if resolution_index is not None else None
     height = f"min(ih\\,{target_height})" if target_height is not None else "ih"
     video_filter = f"scale=-2:trunc({height}/2)*2:flags=lanczos"
-    if hdr_transfer is not None:
-        # Convert HDR in linear light, then encode a correctly tagged SDR image
-        # that every viewer can display. Resize before the costly float stages.
+    if dolby_vision:
+        video_filter = (
+            f"libplacebo=w=-2:h=trunc({height}/2)*2:format=yuv420p"
+            ":apply_dolbyvision=1:tonemapping=bt.2390"
+            ":colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv"
+        )
+    elif hdr_transfer is not None:
         video_filter += (
             f",zscale=tin={hdr_transfer}:pin=bt2020:min=bt2020nc:p=bt2020:t=linear:npl=100,format=gbrpf32le"
             ",zscale=p=bt709,tonemap=tonemap=mobius:desat=2"
             ",zscale=t=bt709:m=bt709:r=tv:dither=error_diffusion,format=yuv420p"
         )
-        # Do not advertise the source's HDR mastering/Dolby Vision metadata
-        # on the tone-mapped SDR frames.
+    if hdr_transfer is not None or dolby_vision:
         for side_data in ("MASTERING_DISPLAY_METADATA", "CONTENT_LIGHT_LEVEL", "DYNAMIC_HDR_PLUS", "DOVI_RPU_BUFFER", "DOVI_METADATA"):
             video_filter += f",sidedata=mode=delete:type={side_data}"
         command.extend(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"])
     if subtitle_files is not None:
-        # Render against source frame timestamps, after resizing/tone mapping.
-        # Browser buffering cannot advance these subtitles independently.
         video_filter += f",{subtitle_files.video_filter()}"
     command.extend(
         [
@@ -291,15 +287,10 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             "2",
             "-ar",
             "48000",
-            # Shift timestamps in the inner FLV muxer's common millisecond
-            # time base; doing it in FIFO rounds audio/video differently.
             "-avoid_negative_ts",
             "disabled",
             "-muxdelay",
             "0",
-            # Input HTTP reconnects do not recover a broken streaming output.
-            # Keep a bounded live queue and reconnect at a decodable keyframe,
-            # without restarting the movie or accumulating an outage's frames.
             "-f",
             "fifo",
             "-fifo_format",
@@ -316,7 +307,6 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             "1",
             "-attempt_recovery",
             "1",
-            # RTMP disconnects can surface as EOF, which is otherwise fatal.
             "-recover_any_error",
             "1",
             "-recovery_wait_time",
@@ -331,11 +321,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     return command
 
 
-def start_relay(source, title, audio_index, subtitle_index, resolution_index, *, input_headers=None, source_type="direct", hdr_transfer=None, jellyfin_subtitle_index=None, subtitle_files=None):
+def start_relay(source, title, audio_index, subtitle_index, resolution_index, *, input_headers=None, source_type="direct", hdr_transfer=None, dolby_vision=False, jellyfin_subtitle_index=None, subtitle_files=None):
     global relay, relay_kind, relay_title, relay_clock, relay_subtitles
     if source_type != "jellyfin":
         source = validate_source(source)
-    command = relay_command(source, audio_index, subtitle_index, resolution_index, True, input_headers, hdr_transfer, subtitle_files)
+    command = relay_command(source, audio_index, subtitle_index, resolution_index, True, input_headers, hdr_transfer, subtitle_files, dolby_vision)
     if source_type == "jellyfin":
         command[1:1] = ["-progress", "pipe:1", "-stats_period", "0.1"]
     stop_relay()
@@ -369,13 +359,13 @@ def start_relay(source, title, audio_index, subtitle_index, resolution_index, *,
         raise
 
 
-def start_jellyfin(source, api_key, title, audio_index, resolution_index, hdr_transfer=None, subtitle_index=None, subtitle_fonts=None):
+def start_jellyfin(source, api_key, title, audio_index, resolution_index, hdr_transfer=None, subtitle_index=None, subtitle_fonts=None, dolby_vision=False):
     subtitle_index = optional_index(subtitle_index, "subtitleIndex")
     subtitle_fonts = validate_subtitle_fonts(subtitle_fonts)
     headers = prepare_jellyfin_input(source, api_key)
     files = prepare_jellyfin_subtitles(source, api_key, subtitle_index, subtitle_fonts)
     try:
-        start_relay(source, title, audio_index, None, resolution_index, input_headers=headers, source_type="jellyfin", hdr_transfer=hdr_transfer, jellyfin_subtitle_index=subtitle_index, subtitle_files=files)
+        start_relay(source, title, audio_index, None, resolution_index, input_headers=headers, source_type="jellyfin", hdr_transfer=hdr_transfer, dolby_vision=dolby_vision, jellyfin_subtitle_index=subtitle_index, subtitle_files=files)
     except Exception:
         if files is not None:
             files.stop()
@@ -471,6 +461,7 @@ class Handler(BaseHTTPRequestHandler):
                         body.get("hdrTransfer"),
                         body.get("subtitleIndex"),
                         body.get("subtitleFonts"),
+                        body.get("dolbyVision", False),
                     )
                     return self.respond(200, {"detail": "Jellyfin relay started", **relay_status()})
                 if action == "start":

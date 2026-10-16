@@ -55,6 +55,8 @@
           packages = [(pkgs.python3.withPackages (ps: [ps.aiortc ps.aiohttp])) ffmpeg pkgs.streamlink];
           BUNNY_TEST_FFMPEG = nixpkgs.lib.getExe ffmpeg;
           BUNNY_TEST_FONT = "${pkgs.dejavu_fonts}/share/fonts/truetype/DejaVuSans.ttf";
+          BUNNY_TEST_DOVI_SAMPLE = self.packages.${system}.bunny-controller.doviSample;
+          BUNNY_TEST_VULKAN_DRIVERS = nixpkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux "${pkgs.mesa}/share/vulkan/icd.d";
           PYTHONDONTWRITEBYTECODE = "1";
         };
       }

@@ -31,9 +31,7 @@ export default function UpdatePrompt() {
         if (result.version && result.version !== __STATIC_VERSION__) {
           setAvailableVersion(result.version);
         }
-      } catch {
-        // Update checks are best-effort and should never disrupt the current page.
-      }
+      } catch {}
     }
 
     function checkVisiblePage() {

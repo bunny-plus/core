@@ -219,8 +219,6 @@ export class CinemaDiary {
         new Date().toISOString(),
       ),
     ];
-    // Large legacy collections can exceed the free Worker's 50-query limit.
-    // Each insert is idempotent; the final marker is written only after all chunks succeed.
     for (let offset = 0; offset < statements.length; offset += 50)
       await this.database.batch(statements.slice(offset, offset + 50));
   }
@@ -261,7 +259,6 @@ export class CinemaDiary {
 
   async current(): Promise<CinemaScreening | null> {
     await this.ready;
-    // SAFETY: These exact columns come from the STRICT cinema_screenings schema above.
     const row = await this.database
       .prepare(`
         SELECT s.id, s.title, s.started_at, d.title AS design_title,
@@ -313,8 +310,6 @@ export class CinemaDiary {
     this.playbackAvailable = running;
     if (!running) this.pulses.clear();
     const current = await this.current();
-    // A failed controller poll or a temporary relay outage must not divide a screening.
-    // Only a successful explicit stop ends it; a known new title starts the next one.
     if (!running) return current;
     if (!current || (title?.trim() && screeningTitle(title) !== current.title))
       return this.startScreening(title, Date.now());
@@ -347,7 +342,6 @@ export class CinemaDiary {
       await this.database
         .prepare("INSERT OR IGNORE INTO cinema_counting_pauses (screening_id) VALUES (?)")
         .run(screeningId);
-    // Neither a stopped interval nor time before resuming can bridge two watching pulses.
     if (screening.ticketCountingEnabled !== enabled) this.pulses.clear();
     return { ...screening, ticketCountingEnabled: enabled };
   }
@@ -389,8 +383,6 @@ export class CinemaDiary {
           JSON.stringify(bunny),
         ),
       );
-    // Award everyone eligible in two SQL statements so large audiences still fit the free Worker query limit.
-    // The random prefix identifies only tickets created by this batch, preserving legacy artwork.
     const ticketPrefix = `${randomUUID()}.`;
     statements.push(
       query(
@@ -430,7 +422,6 @@ export class CinemaDiary {
 
   async image(screeningId: string): Promise<CinemaImage | null> {
     await this.ready;
-    // SAFETY: The STRICT designs schema stores a non-null TEXT MIME with each BLOB image.
     const row = await this.database
       .prepare(
         "SELECT image_mime, image_data FROM cinema_ticket_designs WHERE screening_id = ? AND image_data IS NOT NULL",
@@ -448,7 +439,6 @@ export class CinemaDiary {
         requiredSeconds: ticketWatchSeconds,
         ticket: null,
       };
-    // SAFETY: watched_ms is an INTEGER in the STRICT cinema_progress table.
     const row = await this.database
       .prepare("SELECT watched_ms FROM cinema_progress WHERE member_id = ? AND screening_id = ?")
       .get<ProgressRow>(memberId, screening.id);
@@ -510,7 +500,6 @@ export class CinemaDiary {
 
   async collection(memberId: string): Promise<CinemaCollection> {
     await this.ready;
-    // SAFETY: The joined STRICT tables provide these exact ticket and screening columns.
     const rows = await this.database
       .prepare(`
         SELECT t.id, t.screening_id, COALESCE(d.title, s.title) AS title,
@@ -524,7 +513,6 @@ export class CinemaDiary {
         WHERE t.member_id = ? ORDER BY t.number DESC LIMIT ?
       `)
       .all<TicketRow>(memberId, collectionLimit);
-    // SAFETY: COUNT returns one row containing an integer total.
     const count = await this.database
       .prepare("SELECT COUNT(*) AS total FROM cinema_tickets WHERE member_id = ?")
       .get<CountRow>(memberId);
@@ -536,7 +524,6 @@ export class CinemaDiary {
   }
 
   private async ticket(memberId: string, screeningId: string): Promise<CinemaTicket | null> {
-    // SAFETY: The joined STRICT tables provide these exact ticket and screening columns.
     const row = await this.database
       .prepare(`
         SELECT t.id, t.screening_id, COALESCE(d.title, s.title) AS title,

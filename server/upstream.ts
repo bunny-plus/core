@@ -83,7 +83,6 @@ export async function fetchJson<T>(
   }
 
   try {
-    // SAFETY: Callers provide the expected response contract and validate required fields before use.
     return {
       data: JSON.parse(
         new TextDecoder().decode(await readBoundedBytes(response, maxBytes, name)),

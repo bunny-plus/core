@@ -72,7 +72,6 @@ export function useRoomConnection(
 
     const playbackEvents = ["playing", "waiting", "pause", "seeking", "ended", "emptied"];
     for (const event of playbackEvents) video?.addEventListener(event, reportWatching);
-    // One timer expires the bounded overlays, including while browser timers are throttled.
     const expiry = setInterval(() => {
       const now = performance.now();
       setReactions((current) =>
@@ -111,7 +110,6 @@ export function useRoomConnection(
       connection.addEventListener("message", (event) => {
         if (stopped) return;
         try {
-          // SAFETY: This listener receives text frames from the first-party room protocol.
           const message = JSON.parse(event.data as string) as RoomServerMessage;
           if (message.type === "welcome" || message.type === "presence")
             setMembers(message.members);
@@ -177,9 +175,7 @@ export function useRoomConnection(
             });
             setChatHistory((current) => [...current.slice(-(chatHistoryLimit - 1)), chat]);
           }
-        } catch {
-          // Ignore malformed server messages and keep the current room state.
-        }
+        } catch {}
       });
       connection.addEventListener("close", (event) => {
         clearInterval(clockPing);

@@ -1,8 +1,3 @@
-"""Exercise the real relay command against disposable loopback RTMP receivers.
-
-Set BUNNY_TEST_FFMPEG to enable these integration tests (also run by Nix).
-No production service, source, credentials, or stream path is used.
-"""
 
 import importlib.util
 import json
@@ -229,7 +224,6 @@ class RelayRecoveryTests(unittest.TestCase):
         command = self.controller.relay_command(self.source, None, None, 1, False, subtitle_files=files)
         publisher, publisher_log = self.start(command)
         self.wait_for_frames(first)
-        # A receiver disappearing mid-stream reproduces the broken RTMP socket.
         first[0].kill()
         first[0].wait(timeout=3)
         time.sleep(0.5)
@@ -287,12 +281,8 @@ class RelayRecoveryTests(unittest.TestCase):
         self.assertEqual(len(decoded.stdout), 30 * frame_size)
         for index in range(30):
             frame = decoded.stdout[index * frame_size:(index + 1) * frame_size]
-            # A cue from 1s inclusive to 2s exclusive must be part of exactly
-            # these ten frames, independent of when a viewer receives them.
             self.assertEqual(max(frame) > 180, 10 <= index < 20, f"frame {index}")
             if font and 10 <= index < 20:
-                # The drawing is near the top; lower pixels prove that the
-                # attached font rendered the text as well as ASS positioning.
                 self.assertGreater(max(frame[120 * 320:]), 180)
 
     def test_hdr_sources_produce_sdr_video_with_correct_colour_tags(self):
@@ -322,9 +312,42 @@ class RelayRecoveryTests(unittest.TestCase):
                 for tag in ("color_space", "color_transfer", "color_primaries"):
                     self.assertEqual(stream[tag], "bt709")
 
+    @unittest.skipUnless(os.environ.get("BUNNY_TEST_VULKAN_DRIVERS"), "Vulkan test drivers are not available")
+    def test_dolby_vision_profile_five_produces_sdr_without_hdr_metadata(self):
+        source = os.environ["BUNNY_TEST_DOVI_SAMPLE"]
+        probe = str(Path(self.ffmpeg).with_name("ffprobe"))
+        source_info = subprocess.run([
+            probe, "-v", "error", "-show_streams", "-of", "json", source,
+        ], check=True, capture_output=True, text=True, timeout=10)
+        source_stream = json.loads(source_info.stdout)["streams"][0]
+        self.assertNotIn("color_transfer", source_stream)
+        dovi = next(side for side in source_stream["side_data_list"] if side["side_data_type"] == "DOVI configuration record")
+        self.assertEqual(dovi["dv_profile"], 5)
+        self.assertEqual(dovi["dv_bl_signal_compatibility_id"], 0)
+        self.controller.OUTPUT_URL = str(Path(self.directory.name, "dovi.flv"))
+        command = self.controller.relay_command(source, None, None, 0, False, dolby_vision=True)
+        command.remove("-re")
+        command[1:1] = ["-init_hw_device", "vulkan:llvmpipe"]
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30, env={
+            **os.environ, "VK_DRIVER_FILES": os.environ["BUNNY_TEST_VULKAN_DRIVERS"],
+        })
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = subprocess.run([
+            probe, "-v", "error", "-show_streams", "-show_frames", "-of", "json", self.controller.OUTPUT_URL,
+        ], check=True, capture_output=True, text=True, timeout=10)
+        output = json.loads(result.stdout)
+        stream = output["streams"][0]
+        self.assertEqual((stream["width"], stream["height"]), (256, 144))
+        self.assertEqual(stream["pix_fmt"], "yuv420p")
+        for tag in ("color_space", "color_transfer", "color_primaries"):
+            self.assertEqual(stream[tag], "bt709")
+        self.assertGreater(len(output["frames"]), 0)
+        for frame in output["frames"]:
+            for side in frame.get("side_data_list", []):
+                self.assertNotRegex(side["side_data_type"], "Dolby|DOVI|HDR|Mastering|Content light")
+
     def test_noisy_video_stays_within_the_bitrate_budget(self):
         self.controller.OUTPUT_URL = str(Path(self.directory.name, "bounded.flv"))
-        # Noise makes an unconstrained quality encode much larger than the budget.
         command = self.controller.relay_command(
             "testsrc2=size=854x480:rate=24,noise=alls=60:allf=t", None, None, 3, False,
         )
@@ -342,13 +365,11 @@ class RelayRecoveryTests(unittest.TestCase):
         packets = json.loads(result.stdout)["packets"]
         self.assertEqual(len(packets), 6 * 24)
         encoded_bits = sum(int(packet["size"]) for packet in packets) * 8
-        # The allowed bits include the initial two-second VBV buffer.
         self.assertLessEqual(encoded_bits, 1_800_000 * (6 + 2))
         self.assertGreater(encoded_bits, 1_800_000 * 3)
 
     def test_permanent_output_failure_eventually_exits(self):
         command = self.controller.relay_command(self.source, None, None, 1, False)
-        # Use a short retry budget for this test; the production budget is 30.
         command[command.index("-max_recovery_attempts") + 1] = "2"
         command[command.index("-recovery_wait_time") + 1] = "0.1"
         process, _ = self.start(command)

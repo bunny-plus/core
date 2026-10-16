@@ -261,6 +261,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     subtitleFonts: [],
     resolutionIndex: 5,
     hdrTransfer: null,
+    dolbyVision: false,
     title: "Movie night",
     source: `https://jellyfin.test/jellyfin/Videos/${itemId}/stream?Static=true&MediaSourceId=version-1`,
   });
@@ -380,6 +381,33 @@ test("Jellyfin derives HDR conversion from the selected server media, ignoring c
       relay.hdrTransfer,
       transfer === "smpte2084" || transfer === "arib-std-b67" ? transfer : null,
     );
+  }
+});
+
+test("Dolby Vision conversion follows the media metadata even without an HDR transfer tag", async (context) => {
+  for (const metadata of [
+    { DvProfile: 5, DvBlSignalCompatibilityId: 0 },
+    { DvProfile: 8, ColorTransfer: "smpte2084" },
+    { VideoRangeType: "DOVI" },
+    { VideoRangeType: "DOVIWithHLG" },
+    { VideoRangeType: "SDR" },
+  ]) {
+    const source = {
+      ...movie.MediaSources[0],
+      MediaStreams: movie.MediaSources[0].MediaStreams.map((stream) =>
+        stream.Type === "Video" ? { ...stream, ...metadata } : stream,
+      ),
+    };
+    context.mock.method(globalThis, "fetch", async () =>
+      Response.json({ Items: [{ ...movie, MediaSources: [source] }] }),
+    );
+    const dolbyVision = metadata.VideoRangeType !== "SDR";
+    const relay = await jellyfinRelay(env, {
+      itemId,
+      mediaSourceId: sourceId,
+      dolbyVision: !dolbyVision,
+    });
+    assert.equal(relay.dolbyVision, dolbyVision);
   }
 });
 

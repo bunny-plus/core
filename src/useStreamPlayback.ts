@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { StreamInfo, StreamPlayback } from "../shared/stream";
 import { ApiError, apiFetch, apiJson } from "./api";
-import { connectPlayback } from "./webrtc";
+import { connectPlayback, watchPlayback } from "./webrtc";
 import { playbackElapsedSeconds, playbackPresentation } from "./playback";
 
 type PlaybackOptions = {
@@ -98,10 +98,8 @@ export function useStreamPlayback(
         if (!response.ok) {
           availableRef.current = false;
           ticketPlaybackRef.current = false;
-          // Keep the last broadcast state during a temporary API outage.
           return;
         }
-        // SAFETY: /api/stream-info is produced by the matching StreamInfo server contract.
         const status = (await response.json()) as StreamInfo;
         if (stopped) return;
         statusReceivedAt.current = performance.now();
@@ -125,7 +123,6 @@ export function useStreamPlayback(
         if (!stopped && !request.signal.aborted) {
           availableRef.current = false;
           ticketPlaybackRef.current = false;
-          // Keep the last broadcast state during a temporary API outage.
         }
       } finally {
         if (!stopped) timer = setTimeout(checkStreamInfo, pollDelay);
@@ -191,7 +188,6 @@ export function useStreamPlayback(
     setSyncLabel("Connecting to the stream");
     setConnectionAccessError(false);
     video.volume = volumeRef.current;
-    // Prepare live playback silently under the clip, then hand audio over with the picture.
     video.muted = true;
     video.defaultMuted = true;
     let disposed = false;
@@ -213,7 +209,6 @@ export function useStreamPlayback(
       setIsBuffering(false);
       setAutoplayBlocked(false);
       setSyncLabel("Playback failed");
-      // A fresh peer/session recovers encoder restarts and network changes.
       retry = setTimeout(() => setPlaybackAttempt((current) => current + 1), 5_000);
     }
 
@@ -257,7 +252,6 @@ export function useStreamPlayback(
         video.volume = volumeRef.current;
         video.muted = volumeRef.current === 0;
         setLiveReady(true);
-        // Unmuting may need a gesture on mobile; retain the usual tap-to-play fallback.
         void play();
       };
       if (video?.requestVideoFrameCallback) {
@@ -321,24 +315,13 @@ export function useStreamPlayback(
   }, [streamOnline, playbackSessionId, playbackAttempt, videoRef]);
 
   useEffect(() => {
-    if (!liveReady) return;
-    let lastFrame = -1;
-    let lastProgress = performance.now();
-    const timer = setInterval(() => {
-      const video = videoRef.current;
-      if (!video || autoplayBlocked) return;
-      if (document.visibilityState === "hidden") {
-        lastProgress = performance.now();
-        return;
-      }
-      if (video.paused) playbackRef.current?.play();
-      const frame = video.getVideoPlaybackQuality?.().totalVideoFrames ?? video.currentTime;
-      if (frame !== lastFrame) {
-        lastFrame = frame;
-        lastProgress = performance.now();
-      } else if (performance.now() - lastProgress > 10_000) playbackRef.current?.fail();
-    }, 1000);
-    return () => clearInterval(timer);
+    const video = videoRef.current;
+    if (!video || !liveReady || autoplayBlocked) return;
+    return watchPlayback(
+      video,
+      () => playbackRef.current?.play(),
+      () => playbackRef.current?.fail(),
+    );
   }, [autoplayBlocked, liveReady, videoRef]);
 
   function playVisible() {

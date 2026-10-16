@@ -1,4 +1,3 @@
-"""Authenticated Jellyfin input for the shared FFmpeg relay."""
 
 import os
 import re
@@ -51,7 +50,6 @@ def validate_jellyfin_input(source, api_key):
 def prepare_jellyfin_input(source, api_key):
     validate_jellyfin_input(source, api_key)
 
-    # Check access before replacing the current relay. Never forward the token to a redirect.
     request = Request(source, headers={"X-Emby-Token": api_key}, method="HEAD")
     try:
         with build_opener(NoRedirect()).open(request, timeout=10) as response:
@@ -80,11 +78,8 @@ def validate_subtitle_fonts(indices):
 
 
 class JellyfinSubtitleFiles:
-    """Private local assets kept until the encoder using them has stopped."""
 
     def __init__(self):
-        # Controlled paths need no filtergraph escaping and never contain a token.
-        # The controller runs with PrivateTmp, so each relay owns its assets.
         self.directory = tempfile.TemporaryDirectory(prefix="bunny-subtitles-", dir="/tmp")
         self.track = Path(self.directory.name, "track.ass")
         self.fonts = Path(self.directory.name, "fonts")
@@ -139,8 +134,6 @@ def prepare_jellyfin_subtitles(source, api_key, subtitle_index, font_indices=Non
         def font(index):
             return index, subtitle_bytes(f"{base}/Attachments/{index}", api_key, "font", 5_000_000, 10)
 
-        # Fetch attached fonts before replacing playback. Four bounded downloads
-        # at a time also keep startup within the controller request's budget.
         with ThreadPoolExecutor(max_workers=4) as pool:
             total = 0
             for index, data in pool.map(font, fonts):
@@ -155,11 +148,6 @@ def prepare_jellyfin_subtitles(source, api_key, subtitle_index, font_indices=Non
 
 
 class JellyfinClock:
-    """A per-process clock: stale progress readers cannot change a new relay.
-
-    Encoder progress reports elapsed media time without counting startup delay.
-    Burned subtitles use video timestamps directly and do not use this clock.
-    """
 
     def __init__(self, source, subtitle_index=None, subtitles_burned_in=False):
         url = urlparse(source)
@@ -197,7 +185,6 @@ class JellyfinClock:
     def status(self):
         position = self.position
         timing = {'positionSeconds': position[0], 'updatedAt': position[1]} if position else {}
-        # Older deployed APIs require this field, but WebRTC uses progress snapshots.
         return {**timing, 'sessionId': self.session_id, 'itemId': self.item_id,
                 'mediaSourceId': self.media_source_id, 'startedAt': None,
                 'subtitleIndex': self.subtitle_index,

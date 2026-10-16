@@ -29,7 +29,6 @@ export function playbackElapsedSeconds(
     !Number.isFinite(serverTime)
   )
     return null;
-  // Estimate between controller samples; stop advancing if status becomes stale.
   const elapsed =
     playback.positionSeconds! +
     Math.max(0, Math.min(15, (serverTime - playback.updatedAt!) / 1000));

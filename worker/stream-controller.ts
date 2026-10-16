@@ -63,7 +63,6 @@ type StreamPlaybackAvailability = {
 async function playbackAvailability(env: Env): Promise<StreamPlaybackAvailability> {
   try {
     await streamPlayback(env);
-    // WHEP has no playlist to probe. The browser confirms readiness by decoding a frame.
     return { online: true };
   } catch {
     return { online: false, playbackError: "signing-failed" };

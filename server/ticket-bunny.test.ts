@@ -79,7 +79,6 @@ test("bunny tickets retain their chosen parts across viewers, later screenings, 
     const screening = await diary.start("Bunny screening", 700000);
     const parts = { ...bowBunny };
     const expected = { ...parts };
-    // Someone who already reached ten minutes receives the design as soon as it is created.
     for (let time = 700000; time <= 1300000; time += 10000)
       await diary.watching("viewer", "first-tab", screening.id, true, time);
     const created = await diary.createTicket(screening.id, "Bunny night", null, 1300000, parts);
@@ -138,7 +137,6 @@ test("legacy conversion covers image, blank, and early tickets once while preser
     const before = await diary.collection("owner");
     diary.close();
     const previousVersion = new DatabaseSync(file);
-    // Model a database from before this upgrade; it may already have hand-picked bunnies.
     previousVersion.exec(
       "DROP TABLE cinema_ticket_migrations; DROP TABLE cinema_legacy_ticket_bunnies;",
     );

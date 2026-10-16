@@ -1,7 +1,5 @@
 import type { JsonValue } from "./json";
 
-// Persist named parts so artwork updates and new choices preserve each ticket's traits.
-// Version 1 remains the storage format for both old and newly created bunnies.
 export const bunnyFurs = ["cream", "biscuit", "cocoa", "smoke", "ink", "blush"] as const;
 export const bunnyEars = ["upright", "floppy", "lop", "short"] as const;
 export const bunnyFaces = ["sparkle", "wink", "dreamy", "tough"] as const;

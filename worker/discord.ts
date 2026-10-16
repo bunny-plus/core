@@ -171,7 +171,6 @@ async function recheckSession(token: string, stored: StoredSession, store: AuthS
       return null;
     }
     credentials = renewed;
-    // Keep rotated credentials even if the subsequent Discord API request fails.
     if (!(await store.update(token, stored.viewer, credentials, stored.checkedAt))) return null;
   }
   let viewer: Omit<Viewer, "expires"> | null;

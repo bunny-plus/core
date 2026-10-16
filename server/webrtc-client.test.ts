@@ -44,7 +44,6 @@ function browser(context: import("node:test").TestContext) {
       else Reflect.deleteProperty(globalThis, name);
     });
   }
-  // SAFETY: This minimal media mock covers the srcObject lifecycle used by connectPlayback.
   return { srcObject: null } as HTMLVideoElement;
 }
 
@@ -92,7 +91,6 @@ test("a rejected answer closes the peer and releases its resource", async (conte
     },
     () => {},
   );
-  // SAFETY: The constructor above is replaced by this test's peer implementation.
   assert.ok(connection.peer instanceof TestPeer);
   connection.peer.rejected = true;
   await assert.rejects(connection.ready, /Invalid answer/);
@@ -114,7 +112,6 @@ test("receive-only playback reports a connection failure for recovery", async (c
   );
   context.after(connection.close);
   await connection.ready;
-  // SAFETY: The constructor above is replaced by this test's peer implementation.
   const peer = connection.peer;
   assert.ok(peer instanceof TestPeer);
   assert.deepEqual(peer.transceivers, ["video", "audio"]);

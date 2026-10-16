@@ -1,15 +1,24 @@
 {
   dejavu_fonts,
   ffmpeg-headless,
+  fetchurl,
   lib,
   makeWrapper,
+  mesa,
   python3,
   stdenvNoCC,
   streamlink,
 }: let
   inherit (lib.meta) getExe getExe';
-  ffmpeg = import ./ffmpeg.nix {inherit ffmpeg-headless;};
+  ffmpeg = import ./ffmpeg.nix {
+    inherit ffmpeg-headless;
+    stdenv = stdenvNoCC;
+  };
   testPython = python3.withPackages (ps: [ps.aiortc ps.aiohttp]);
+  doviSample = fetchurl {
+    url = "https://fate-suite.ffmpeg.org/mov/dovi-p5.mp4";
+    hash = "sha256-Ef5Zn9d+MeJvv4VbrhzZkx358mGgp7Hc6frZsjZnfEs=";
+  };
 in
   stdenvNoCC.mkDerivation {
     pname = "bunny-controller";
@@ -35,6 +44,8 @@ in
       '';
 
     doCheck = true;
+    BUNNY_TEST_DOVI_SAMPLE = doviSample;
+    BUNNY_TEST_VULKAN_DRIVERS = lib.optionalString stdenvNoCC.hostPlatform.isLinux "${mesa}/share/vulkan/icd.d";
     checkPhase =
       /*
       bash
@@ -46,5 +57,6 @@ in
         BUNNY_TEST_FFMPEG=${getExe ffmpeg} PYTHONPATH=${./.} ${getExe testPython} ${./test_webrtc.py}
       '';
 
+    passthru = {inherit doviSample;};
     meta.mainProgram = "bunny-controller";
   }
