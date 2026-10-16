@@ -38,7 +38,6 @@ test("authenticated API responses are private and mutation origins are enforced"
   assert.equal(session.status, 200);
   assert.equal(session.headers.get("Cache-Control"), "private, no-store");
   const sessionBody = await session.json();
-  assert.equal(sessionBody.streamConfigured, true);
   assert.equal(sessionBody.streamUrl, undefined);
   assert.ok(!JSON.stringify(sessionBody).includes(env.STREAM_URL));
 
@@ -146,7 +145,6 @@ test("stream runtime is available to members, caches Jellyfin metadata, and clea
     sessionId: "b".repeat(32),
     itemId: "a".repeat(32),
     mediaSourceId: "version-1",
-    startedAt: null,
   };
   let jellyfinCalls = 0;
   let running = true;
@@ -228,7 +226,6 @@ test("Jellyfin metadata failure leaves the stream playable without a runtime", a
           sessionId: "b".repeat(32),
           itemId: "a".repeat(32),
           mediaSourceId: "version-1",
-          startedAt: null,
         },
       });
     if (url.startsWith(runtimeEnv.JELLYFIN_URL))

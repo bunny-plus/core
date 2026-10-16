@@ -1,8 +1,6 @@
 .dev.vars
 .env*
 .git
-.next
-.playwright-mcp
 .wrangler
 dist
 node_modules

@@ -37,8 +37,7 @@
   font-size: 17px;
 }
 
-.login-card,
-.audience-panel {
+.login-card {
   border: 4px solid var(--pink-300);
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 22px 55px rgba(244, 114, 166, 0.2);
@@ -85,7 +84,6 @@
   cursor: pointer;
   font-weight: 800;
 }
-.login-kicker,
 .eyebrow {
   margin: 0 0 8px;
   color: var(--orange-400);
@@ -99,12 +97,6 @@
   font-size: clamp(29px, 6vw, 39px);
   line-height: 1.08;
   letter-spacing: -0.04em;
-}
-.login-copy {
-  margin: 17px auto 24px;
-  max-width: 390px;
-  color: var(--gray-500);
-  line-height: 1.55;
 }
 .login-error {
   padding: 11px;

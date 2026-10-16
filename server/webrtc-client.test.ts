@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { connectPlayback, setPlaybackBuffer } from "../src/webrtc";
+import { connectPlayback } from "../src/webrtc";
 
 class TestPeer extends EventTarget {
   connectionState = "new";
@@ -9,7 +9,6 @@ class TestPeer extends EventTarget {
   ontrack = null;
   onconnectionstatechange: (() => void) | null = null;
   transceivers: string[] = [];
-  receiver = { jitterBufferTarget: 0 };
   rejected = false;
   addTransceiver(kind: string, options: { direction: string }) {
     assert.equal(options.direction, "recvonly");
@@ -23,9 +22,6 @@ class TestPeer extends EventTarget {
   }
   setRemoteDescription() {
     return this.rejected ? Promise.reject(new Error("Invalid answer")) : Promise.resolve();
-  }
-  getReceivers() {
-    return [this.receiver];
   }
   close() {
     this.connectionState = "closed";
@@ -105,7 +101,7 @@ test("a rejected answer closes the peer and releases its resource", async (conte
   assert.deepEqual(released, ["session"]);
 });
 
-test("receive-only playback applies optional buffering and connection failure triggers recovery", async (context) => {
+test("receive-only playback reports a connection failure for recovery", async (context) => {
   const video = browser(context);
   let failures = 0;
   const connection = connectPlayback(
@@ -122,10 +118,6 @@ test("receive-only playback applies optional buffering and connection failure tr
   const peer = connection.peer;
   assert.ok(peer instanceof TestPeer);
   assert.deepEqual(peer.transceivers, ["video", "audio"]);
-  setPlaybackBuffer(connection.peer, true);
-  assert.equal(peer.receiver.jitterBufferTarget, 1000);
-  setPlaybackBuffer(connection.peer, false);
-  assert.equal(peer.receiver.jitterBufferTarget, 100);
   peer.connectionState = "failed";
   peer.onconnectionstatechange?.();
   assert.equal(failures, 1);

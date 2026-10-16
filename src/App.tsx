@@ -61,11 +61,7 @@ function BunnyApp() {
     session.user.admin || session.user.permissions?.includes("chloe.chat") === true;
   const page =
     path === "/stream" ? (
-      <WatchRoom
-        {...session}
-        streamConfigured={session.streamConfigured ?? true}
-        currentUser={session.user}
-      />
+      <WatchRoom currentUser={session.user} />
     ) : path === "/admin" && canManageStream ? (
       <AdminPage admin={session.user.admin} />
     ) : path === "/chloe" && canChatChloe ? (

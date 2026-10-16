@@ -3,9 +3,11 @@ DISCORD_CLIENT_SECRET=
 # Optional /login bot. Use an environment secret or a local token file.
 DISCORD_BOT_TOKEN=
 # DISCORD_BOT_TOKEN_FILE=../discord-token
-# Optional remote storage for sessions, login links, chat and cinema data.
+# Required in production; local development uses SQLite when both are empty.
 D1_DATABASE_URL=
 D1_DATABASE_SECRET=
+# Local SQLite directory also holds sessions and cinema data.
+CHAT_DB_PATH=./data/chat.sqlite
 DISCORD_GUILD_ID=
 DISCORD_ROLE_PERMISSIONS={"1510763796984238241":["chloe.chat"],"1398994574864678982":["admin","stream.manage"]}
 ENABLE_DEV_AUTH=true

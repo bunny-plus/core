@@ -40,10 +40,6 @@ export function usePlayerPreferences() {
     return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
   });
   const [lightsOut, setLightsOut] = usePreference("lights-out", (value) => value === "true");
-  const [slowConnection, setSlowConnection] = usePreference(
-    "slow-connection",
-    (value) => value === "true",
-  );
   const [shortcutsEnabled, setShortcutsEnabled] = usePreference(
     "shortcuts",
     (value) => value !== "false",
@@ -64,8 +60,6 @@ export function usePlayerPreferences() {
     setVolume,
     lightsOut,
     setLightsOut,
-    slowConnection,
-    setSlowConnection,
     shortcutsEnabled,
     setShortcutsEnabled,
     chatDisplayMode,

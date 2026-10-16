@@ -44,10 +44,8 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   const sessionSecret = required(source, "SESSION_SECRET");
   const streamUrl = required(source, "STREAM_URL");
   const torBoxApiKey = required(source, "TORBOX_API_KEY");
-  const controllerUrl = (source.RELAY_CONTROLLER_URL || source.STREAM_CONTROLLER_URL)?.trim();
-  const controllerSecret = (
-    source.RELAY_CONTROLLER_SECRET || source.STREAM_CONTROLLER_SECRET
-  )?.trim();
+  const controllerUrl = source.RELAY_CONTROLLER_URL?.trim();
+  const controllerSecret = source.RELAY_CONTROLLER_SECRET?.trim();
 
   if (new TextEncoder().encode(sessionSecret).byteLength < 32) {
     throw new Error("SESSION_SECRET must contain at least 32 bytes");
@@ -59,6 +57,8 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
   validUrl(appUrl, "APP_URL", production);
   const databaseUrl = source.D1_DATABASE_URL?.trim();
   const databaseSecret = source.D1_DATABASE_SECRET?.trim();
+  if (production && !databaseUrl && !databaseSecret)
+    throw new Error("D1 database URL and secret are required in production");
   if (databaseUrl || databaseSecret) {
     if (!databaseUrl || !databaseSecret)
       throw new Error("D1 database URL and secret must be configured together");
@@ -114,11 +114,9 @@ export function loadEnvironment(source: NodeJS.ProcessEnv): Env {
     JELLYFIN_STREAM_URL: jellyfinStreamUrl,
     JELLYFIN_API_KEY: jellyfinApiKey,
     NODE_ENV: source.NODE_ENV,
-    RELAY_CONTROLLER_SECRET: source.RELAY_CONTROLLER_SECRET,
-    RELAY_CONTROLLER_URL: source.RELAY_CONTROLLER_URL,
+    RELAY_CONTROLLER_SECRET: controllerSecret,
+    RELAY_CONTROLLER_URL: controllerUrl,
     SESSION_SECRET: sessionSecret,
-    STREAM_CONTROLLER_SECRET: source.STREAM_CONTROLLER_SECRET,
-    STREAM_CONTROLLER_URL: source.STREAM_CONTROLLER_URL,
     STREAM_URL: streamUrl,
     STREMIO_ADDON_URL: source.STREMIO_ADDON_URL,
     TMDB_API_TOKEN: source.TMDB_API_TOKEN,

@@ -1,19 +1,17 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { StreamInfo, StreamPlayback } from "../shared/stream";
 import { ApiError, apiFetch, apiJson } from "./api";
-import { connectPlayback, setPlaybackBuffer } from "./webrtc";
+import { connectPlayback } from "./webrtc";
 import { playbackElapsedSeconds, playbackPresentation } from "./playback";
 
 type PlaybackOptions = {
-  streamConfigured: boolean;
   volume: number;
   onVolumeChange: (volume: number) => void;
-  slowConnection: boolean;
 };
 
 export function useStreamPlayback(
   videoRef: RefObject<HTMLVideoElement | null>,
-  { streamConfigured, volume, onVolumeChange, slowConnection }: PlaybackOptions,
+  { volume, onVolumeChange }: PlaybackOptions,
 ) {
   const idleVideoRef = useRef<HTMLVideoElement>(null);
   const liveReadyRef = useRef(false);
@@ -25,7 +23,6 @@ export function useStreamPlayback(
   const [connectionAccessError, setConnectionAccessError] = useState(false);
   const statusReceivedAt = useRef(performance.now());
   const playbackRef = useRef<{ play: () => void; fail: () => void } | null>(null);
-  const slowConnectionRef = useRef(slowConnection);
   const volumeRef = useRef(volume);
   const lastAudibleVolumeRef = useRef(volume > 0 ? volume : 0.5);
   const ticketPlaybackRef = useRef(false);
@@ -141,7 +138,7 @@ export function useStreamPlayback(
       request.abort();
       clearTimeout(timer);
     };
-  }, [streamConfigured, streamInfoRequest, videoRef]);
+  }, [streamInfoRequest, videoRef]);
 
   useEffect(() => {
     if (!playbackSessionId || !relayStatus?.jellyfin || !relayStatus.serverTime) {
@@ -183,16 +180,11 @@ export function useStreamPlayback(
   }, [playbackSessionId, relayStatus, playbackDuration, videoRef]);
 
   useEffect(() => {
-    slowConnectionRef.current = slowConnection;
-    if (peerRef.current) setPlaybackBuffer(peerRef.current, slowConnection);
-  }, [slowConnection]);
-
-  useEffect(() => {
     const video = videoRef.current;
     liveReadyRef.current = false;
     setLiveReady(false);
     ticketPlaybackRef.current = false;
-    if (!video || !streamConfigured || streamOnline !== true) return;
+    if (!video || streamOnline !== true) return;
     setPlayerStatus("loading");
     setIsBuffering(false);
     setAutoplayBlocked(false);
@@ -246,9 +238,7 @@ export function useStreamPlayback(
       setPlayerStatus("ready");
       setIsBuffering(false);
       setAutoplayBlocked(false);
-      setSyncLabel(
-        slowConnectionRef.current ? "Extra buffering enabled" : "Following the live room",
-      );
+      setSyncLabel("Watching live");
       if (liveReadyRef.current || cancelFrame) return;
       const reveal = () => {
         cancelFrame = undefined;
@@ -307,7 +297,6 @@ export function useStreamPlayback(
           failPlayback,
         );
         peerRef.current = connection.peer;
-        setPlaybackBuffer(connection.peer, slowConnectionRef.current);
         void connection.ready.then(play).catch(failPlayback);
       } catch (error) {
         failPlayback(error instanceof Error ? error : undefined);
@@ -329,7 +318,7 @@ export function useStreamPlayback(
       video.removeAttribute("src");
       video.load();
     };
-  }, [streamOnline, streamConfigured, playbackSessionId, playbackAttempt, videoRef]);
+  }, [streamOnline, playbackSessionId, playbackAttempt, videoRef]);
 
   useEffect(() => {
     if (!liveReady) return;

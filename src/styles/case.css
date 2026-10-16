@@ -21,8 +21,6 @@ option,
 .chat-history-entry > span:last-child,
 .room-sidebar-message > span,
 .room-reaction strong,
-.viewer-avatar .avatar-fallback,
-.avatar-hover-card strong,
 .current-stream strong,
 .stream-options > header strong {
   text-transform: none;

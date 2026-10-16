@@ -26,17 +26,6 @@
   text-underline-offset: 4px;
 }
 
-.cinema-diary-watch-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cinema-diary-watch-link .ui-icon {
-  width: 17px;
-  height: 17px;
-}
-
 .cinema-diary-heading {
   display: flex;
   align-items: center;

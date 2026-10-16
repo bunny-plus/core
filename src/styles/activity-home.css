@@ -532,35 +532,6 @@
     transform: scale(0.75) rotate(15deg);
   }
 }
-.future-patch {
-  position: absolute;
-  z-index: 2;
-  right: 40%;
-  bottom: 28px;
-  display: flex;
-  align-items: flex-end;
-  color: var(--gray-500);
-  gap: 0;
-  rotate: -4deg;
-}
-.future-patch > .asset-icon {
-  width: 36px;
-  height: 36px;
-}
-.future-patch > .asset-icon:nth-child(2) {
-  width: 51px;
-  height: 51px;
-  margin: 0 -7px;
-}
-.future-patch small {
-  position: absolute;
-  top: calc(100% + 3px);
-  left: 50%;
-  width: max-content;
-  font-size: 8px;
-  font-style: italic;
-  transform: translateX(-50%);
-}
 .burrow-hole {
   position: absolute;
   z-index: 0;

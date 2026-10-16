@@ -239,7 +239,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         ]
     )
     if OUTPUT_FORMAT == "whip":
-        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-r", "30", "-g", "30"])
+        # Preserve film cadence instead of duplicating frames to force 30 fps.
+        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-fps_mode:v", "passthrough", "-g", "30"])
+        # Coarse source timestamps can make Opus RTP frames overlap or leave gaps.
+        # Follow the resampled sample count while preserving the initial A/V offset.
+        command.extend(["-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
     elif VIDEO_ENCODER == "h264_nvenc":
         command.extend(["-preset", "p4", "-tune", "hq", "-rc", "vbr", "-cq", "20", "-b:v", "0", "-profile:v", "high"])
     elif VIDEO_ENCODER == "libx264":

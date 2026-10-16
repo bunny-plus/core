@@ -11,7 +11,6 @@ const buildVersion =
 const versionSource = `${JSON.stringify({ version: buildVersion })}\n`;
 
 export default defineConfig({
-  worker: { format: "es" },
   build: { outDir: "dist/client" },
   define: { __STATIC_VERSION__: JSON.stringify(buildVersion) },
   plugins: [

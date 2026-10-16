@@ -276,10 +276,9 @@ class ClockTests(unittest.TestCase):
     def test_clock_uses_encoded_output_not_process_start_or_viewer_wall_time(self):
         clock = JellyfinClock(SOURCE)
         output = io.StringIO('frame=0\nout_time_us=N/A\nprogress=continue\nframe=1\nout_time_us=0\nprogress=continue\nframe=1\nout_time_us=250000\nprogress=continue\nframe=90\nout_time_us=5000000\nprogress=continue\n')
-        self.assertIsNone(clock.status()['startedAt'])
+        self.assertNotIn('positionSeconds', clock.status())
         with patch('jellyfin.time.time', return_value=1800000000.25):
             clock.read_progress(output)
-        self.assertEqual(clock.status()['startedAt'], 1800000000000)
         self.assertEqual(clock.status()['positionSeconds'], 5)
         self.assertEqual(clock.status()['updatedAt'], 1800000000250)
         self.assertTrue(output.closed)
@@ -290,7 +289,7 @@ class ClockTests(unittest.TestCase):
         self.assertNotEqual(old.session_id, current.session_id)
         with patch('jellyfin.time.time', return_value=1800000000):
             old.read_progress(io.StringIO('frame=1\nout_time_us=100000\nprogress=end\n'))
-        self.assertIsNone(current.started_at)
+        self.assertNotIn('positionSeconds', current.status())
 
 
 if __name__ == "__main__":

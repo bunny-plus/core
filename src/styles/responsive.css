@@ -57,43 +57,8 @@
     width: min(100%, 235px);
     height: 205px;
   }
-  .future-patch {
-    position: relative;
-    right: auto;
-    bottom: auto;
-    align-self: center;
-    margin: 3px 0 24px;
-  }
   .room-grid {
     grid-template-columns: 1fr;
-  }
-  .audience-panel {
-    width: 100%;
-  }
-  .member-list {
-    overflow-x: auto;
-    overflow-y: hidden;
-    flex-direction: row;
-  }
-  .viewer-entry {
-    flex-direction: row;
-  }
-  .viewer-entry:nth-child(2n),
-  .viewer-entry:nth-child(3n) {
-    translate: 0 0;
-  }
-  .viewer-link {
-    width: 40px;
-    height: 52px;
-    margin: 0 -2px;
-  }
-  .viewer-link-track {
-    top: 4px;
-    left: -6px;
-    transform: rotate(-90deg);
-  }
-  .viewer-link-charm {
-    rotate: 90deg;
   }
   .player-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));

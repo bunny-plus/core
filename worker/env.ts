@@ -27,8 +27,6 @@ export interface Env {
   SESSION_SECRET: string;
   RELAY_CONTROLLER_SECRET?: string;
   RELAY_CONTROLLER_URL?: string;
-  STREAM_CONTROLLER_SECRET?: string;
-  STREAM_CONTROLLER_URL?: string;
   STREAM_URL: string;
   STREMIO_ADDON_URL?: string;
   TMDB_API_TOKEN?: string;

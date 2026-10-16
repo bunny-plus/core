@@ -19,13 +19,7 @@ function volumeStyle(volume: number): CSSProperties & { "--volume": string } {
   return { "--volume": `calc(${volume * 100}% + ${11.5 - volume * 23}px)` };
 }
 
-export default function WatchRoom({
-  currentUser,
-  streamConfigured,
-}: {
-  currentUser: User;
-  streamConfigured: boolean;
-}) {
+export default function WatchRoom({ currentUser }: { currentUser: User }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
@@ -38,8 +32,6 @@ export default function WatchRoom({
     setVolume,
     lightsOut,
     setLightsOut,
-    slowConnection,
-    setSlowConnection,
     shortcutsEnabled,
     setShortcutsEnabled,
     chatDisplayMode,
@@ -82,10 +74,8 @@ export default function WatchRoom({
     retryPlayback,
     refreshStream,
   } = useStreamPlayback(videoRef, {
-    streamConfigured,
     volume,
     onVolumeChange: setVolume,
-    slowConnection,
   });
   const {
     cinemaProgress,
@@ -234,7 +224,6 @@ export default function WatchRoom({
               />
               {(streamOnline === null || playerStatus === "loading") &&
                 !(showIdle && idleReady) &&
-                streamConfigured &&
                 !autoplayBlocked && (
                   <div className="stream-loading" role="status">
                     <AssetIcon name="carrot" />
@@ -255,9 +244,7 @@ export default function WatchRoom({
                 <div className="stream-loading buffering-overlay" role="status">
                   <AssetIcon name="carrot" />
                   <strong>Buffering the live stream...</strong>
-                  <small>
-                    {slowConnection ? "Waiting for more video" : "Catching everybun back up"}
-                  </small>
+                  <small>Waiting for more video</small>
                 </div>
               )}
               {playerStatus === "unsupported" && (
@@ -267,21 +254,18 @@ export default function WatchRoom({
               )}
               {playerStatus !== "unsupported" &&
                 !startingPlayback &&
-                (!streamConfigured ||
-                  startupFailed ||
+                (startupFailed ||
                   (streamOnline === false && !idlePlayback) ||
                   playerStatus === "error") && (
                   <div className="stream-error" role="status">
                     <span>
-                      {!streamConfigured
-                        ? "Playback is not connected yet."
-                        : playbackAccessError
-                          ? playbackAccessMessage
-                          : streamOnline === false && !idlePlayback
-                            ? "The stream is offline. Reconnecting when it returns."
-                            : "Couldn't play the video. Reconnecting…"}
+                      {playbackAccessError
+                        ? playbackAccessMessage
+                        : streamOnline === false && !idlePlayback
+                          ? "The stream is offline. Reconnecting when it returns."
+                          : "Couldn't play the video. Reconnecting…"}
                     </span>
-                    {streamConfigured && (streamOnline === true || showIdle) && (
+                    {(streamOnline === true || showIdle) && (
                       <button className="stream-action" type="button" onClick={retryPlayback}>
                         Retry playback
                       </button>
@@ -451,14 +435,6 @@ export default function WatchRoom({
                   <div className="player-menu-popover">
                     <button
                       type="button"
-                      aria-pressed={slowConnection}
-                      onClick={() => setSlowConnection(!slowConnection)}
-                    >
-                      Slow connection: {slowConnection ? "on" : "off"}
-                      <small>Extra buffering where supported for uneven connections.</small>
-                    </button>
-                    <button
-                      type="button"
                       aria-expanded={showStats}
                       onClick={(event) => {
                         setShowStats((visible) => !visible);
@@ -564,9 +540,7 @@ export default function WatchRoom({
             earnedTicket={earnedTicket}
             onDismiss={() => setEarnedTicket(null)}
           />
-          {showStats && stats && (
-            <PlaybackStats stats={stats} target={slowConnection ? "Extra buffer" : "Live"} />
-          )}
+          {showStats && stats && <PlaybackStats stats={stats} />}
         </section>
         <RoomSidebar
           currentUser={currentUser}

@@ -9,7 +9,6 @@ cf-token
 secret-token
 !.dev.vars.example
 .wrangler/
-.next/
 dist/
 data/
 node_modules/

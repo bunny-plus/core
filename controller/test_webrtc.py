@@ -30,6 +30,8 @@ class WhipTests(unittest.TestCase):
             self.controller = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.controller)
         self.frames = {"audio": 0, "video": 0}
+        self.audio_timing = []
+        self.video_timing = []
         # Nix sandboxes expose only loopback, which aioice normally filters out.
         # Keep this fixture local even on a host with public network interfaces.
         addresses = patch("aioice.ice.get_host_addresses", return_value=["127.0.0.1"])
@@ -49,19 +51,30 @@ class WhipTests(unittest.TestCase):
         self.controller.OUTPUT_URL = f"http://127.0.0.1:{self.port}/publish"
         self.controller.OUTPUT_FORMAT = "whip"
         self.source = str(root / "source.mkv")
+        self.make_source()
+
+    def make_source(self, audio_codec="aac", frame_rate="30"):
         subprocess.run([
-            self.ffmpeg, "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=30",
+            self.ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc2=size=160x90:rate={frame_rate}",
             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
-            "-t", "8", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", self.source,
+            "-t", "8", "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:a", audio_codec, "-strict", "-2",
+            *(["-bsf:a", "setts=ts=TS-mod(N\\,2)*0.001/TB"]
+              if audio_codec == "dca" else []),
+            self.source,
         ], capture_output=True, check=True, timeout=20)
 
     async def start_server(self):
         async def receive(track, peer):
             while True:
                 try:
-                    await track.recv()
+                    frame = await track.recv()
                     self.frames[track.kind] += 1
+                    if track.kind == "audio":
+                        self.audio_timing.append((frame.pts, frame.samples))
+                    else:
+                        self.video_timing.append(frame.pts * frame.time_base)
                     if self.disconnect_first and track.kind == "video" and self.frames["video"] == 15:
                         self.disconnect_first = False
                         asyncio.create_task(peer.close())
@@ -124,6 +137,22 @@ class WhipTests(unittest.TestCase):
     def test_whip_decodes_audio_video_and_closes_the_resource(self):
         self.publish()
         self.assertEqual(self.requests, 1)
+
+    def test_dts_in_matroska_has_a_continuous_opus_sample_clock(self):
+        # DTS frames span 10 2/3 ms. Model a source with millisecond timestamps
+        # and 1 ms jitter; passing it through to RTP makes browsers discard audio.
+        self.make_source("dca")
+        self.publish()
+        self.assertGreater(len(self.audio_timing), 100)
+        for (pts, samples), (next_pts, _) in zip(self.audio_timing, self.audio_timing[1:]):
+            self.assertEqual(next_pts - pts, samples, "Opus frames must not overlap or leave gaps")
+
+    def test_film_keeps_its_source_frame_cadence_with_eac3_audio(self):
+        self.make_source("eac3", "24000/1001")
+        self.publish()
+        self.assertGreater(len(self.video_timing), 100)
+        for previous, current in zip(self.video_timing, self.video_timing[1:]):
+            self.assertAlmostEqual(float(current - previous), 1001 / 24000, delta=0.001)
 
     def test_encoder_recovers_when_the_initial_publish_is_temporarily_unavailable(self):
         self.reject_first = True

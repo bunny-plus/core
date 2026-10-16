@@ -6,8 +6,7 @@
   "scripts": {
     "build": "pnpm typecheck && pnpm build:client && pnpm build:server",
     "build:client": "vite build",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs && esbuild server/migrate-data.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/migrate-data.cjs",
-    "database:import": "node --env-file-if-exists=.dev.vars --import tsx server/migrate-data.ts",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs",
     "deploy": "pnpm format:check && pnpm lint && pnpm test && pnpm typecheck && VITE_API_URL=https://api.bunny.plus pnpm build:client && wrangler deploy --config wrangler.jsonc",
     "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.dev.vars --import tsx server/index.ts\" \"vite\"",
     "format": "oxfmt . --write",

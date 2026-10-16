@@ -288,8 +288,7 @@ export function isJellyfinPlayback(value: JsonValue | undefined): value is Jelly
     (value.subtitlesBurnedIn === undefined || typeof value.subtitlesBurnedIn === "boolean") &&
     (value.positionSeconds === undefined ||
       (isNumber(value.positionSeconds) && value.positionSeconds >= 0)) &&
-    (value.updatedAt === undefined || (isNumber(value.updatedAt) && value.updatedAt > 0)) &&
-    (value.startedAt === null || (isNumber(value.startedAt) && value.startedAt > 0))
+    (value.updatedAt === undefined || (isNumber(value.updatedAt) && value.updatedAt > 0))
   );
 }
 

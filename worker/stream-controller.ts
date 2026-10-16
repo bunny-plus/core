@@ -31,8 +31,8 @@ const cache = new TtlCache(500);
 export const controllerQueue = new SerialQueue();
 
 export async function controller(env: Env, method: "GET" | "POST", body?: JsonObject) {
-  const url = env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL;
-  const secret = env.RELAY_CONTROLLER_SECRET || env.STREAM_CONTROLLER_SECRET;
+  const url = env.RELAY_CONTROLLER_URL;
+  const secret = env.RELAY_CONTROLLER_SECRET;
   if (!url || !secret) throw new Error("Relay controller is not configured");
   const action = body && "action" in body ? body.action : null;
   const { data: result } = await fetchJson<JsonValue>(url, {
@@ -52,7 +52,7 @@ export async function controller(env: Env, method: "GET" | "POST", body?: JsonOb
 }
 
 function streamInfoCacheKey(env: Env) {
-  return `stream-info:${env.RELAY_CONTROLLER_URL || env.STREAM_CONTROLLER_URL}:${env.STREAM_URL}:${env.APP_URL}`;
+  return `stream-info:${env.RELAY_CONTROLLER_URL}:${env.STREAM_URL}:${env.APP_URL}`;
 }
 
 type StreamPlaybackAvailability = {

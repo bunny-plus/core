@@ -157,9 +157,7 @@ def prepare_jellyfin_subtitles(source, api_key, subtitle_index, font_indices=Non
 class JellyfinClock:
     """A per-process clock: stale progress readers cannot change a new relay.
 
-    The first encoded output timestamp estimates the program date of source
-    time zero. Unlike process launch time, it excludes probing/startup delay.
-    Retain this timing in relay metadata for compatibility with older clients.
+    Encoder progress reports elapsed media time without counting startup delay.
     Burned subtitles use video timestamps directly and do not use this clock.
     """
 
@@ -168,7 +166,6 @@ class JellyfinClock:
         self.session_id = uuid.uuid4().hex
         self.item_id = url.path.split('/')[-2]
         self.media_source_id = parse_qs(url.query)['MediaSourceId'][0]
-        self.started_at = None
         self.position = None
         self.subtitle_index = subtitle_index
         self.subtitles_burned_in = subtitles_burned_in
@@ -188,8 +185,6 @@ class JellyfinClock:
                     if int(values.get('frame', '0')) > 0 and seconds > 0:
                         now = round(time.time() * 1000)
                         self.position = (seconds, now)
-                        if self.started_at is None:
-                            self.started_at = round(now - seconds * 1000)
                 except ValueError:
                     pass
                 values.clear()
@@ -202,7 +197,8 @@ class JellyfinClock:
     def status(self):
         position = self.position
         timing = {'positionSeconds': position[0], 'updatedAt': position[1]} if position else {}
+        # Older deployed APIs require this field, but WebRTC uses progress snapshots.
         return {**timing, 'sessionId': self.session_id, 'itemId': self.item_id,
-                'mediaSourceId': self.media_source_id, 'startedAt': self.started_at,
+                'mediaSourceId': self.media_source_id, 'startedAt': None,
                 'subtitleIndex': self.subtitle_index,
                 'subtitlesBurnedIn': self.subtitles_burned_in}

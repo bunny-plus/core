@@ -82,9 +82,3 @@ export function connectPlayback(
   })();
   return { peer, ready, close };
 }
-
-export function setPlaybackBuffer(peer: RTCPeerConnection, slowConnection: boolean) {
-  for (const receiver of peer.getReceivers()) {
-    if ("jitterBufferTarget" in receiver) receiver.jitterBufferTarget = slowConnection ? 1000 : 100;
-  }
-}

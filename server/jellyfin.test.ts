@@ -206,7 +206,7 @@ test("Jellyfin playback options preserve stream indexes, media versions and pref
 });
 
 test("runtime uses the selected Jellyfin version and falls back to valid item metadata", async (context) => {
-  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId };
   const cases = [
     {
       item: { ...movie, MediaSources: [{ Id: sourceId, RunTimeTicks: 57_000_000_000 }] },
@@ -327,7 +327,7 @@ test("subtitle defaults follow the selected media version and reject unavailable
 });
 
 test("playback metadata accepts an admin subtitle index or no selection, including older sessions", () => {
-  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId, startedAt: null };
+  const playback = { sessionId: "b".repeat(32), itemId, mediaSourceId: sourceId };
   assert.equal(isJellyfinPlayback(playback), true);
   for (const subtitlesBurnedIn of [false, true])
     assert.equal(isJellyfinPlayback({ ...playback, subtitlesBurnedIn }), true);

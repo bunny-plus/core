@@ -27,8 +27,6 @@ body.theatre-mode .stream-page > :is(.room-header, .floating-decorations, .versi
   min-height: 0;
   height: 100%;
 }
-.watch-content--theatre .screen-player-dock,
-.watch-content--theatre .screen-player-dock > div,
 .screen-player.screen-player--theatre,
 .screen-player.screen-player--theatre .screen-frame {
   width: 100%;

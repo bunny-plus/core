@@ -5,9 +5,8 @@ function bitrate(value: number | null) {
   return value === null ? "--" : `${(value / 1_000_000).toFixed(2)} Mbps`;
 }
 
-export default function PlaybackStats({ stats, target }: { stats: PlayerStats; target: string }) {
+export default function PlaybackStats({ stats }: { stats: PlayerStats }) {
   const values = [
-    { label: "Target", value: target },
     {
       label: "Network round trip",
       value: stats.roundTrip === null ? "--" : `${Math.round(stats.roundTrip * 1000)}ms`,

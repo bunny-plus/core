@@ -12,6 +12,8 @@ const validEnvironment: NodeJS.ProcessEnv = {
   DISCORD_CLIENT_ID: "client",
   DISCORD_CLIENT_SECRET: "discord-secret",
   DISCORD_GUILD_ID: "guild",
+  D1_DATABASE_URL: "https://bunny-database.example.workers.dev/query",
+  D1_DATABASE_SECRET: "a".repeat(43),
   NODE_ENV: "production",
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://192.168.1.240:10000",
@@ -148,12 +150,14 @@ test("Discord bot credentials are optional and can be loaded from a private toke
 });
 
 test("D1 storage requires a complete private HTTPS endpoint and secret", () => {
-  const configured = {
+  const configured = validEnvironment;
+  const local = {
     ...validEnvironment,
-    D1_DATABASE_URL: "https://bunny-database.example.workers.dev/query",
-    D1_DATABASE_SECRET: "a".repeat(43),
+    D1_DATABASE_URL: undefined,
+    D1_DATABASE_SECRET: undefined,
   };
-  assert.equal(loadEnvironment(validEnvironment).D1_DATABASE_URL, undefined);
+  assert.throws(() => loadEnvironment(local), /required in production/);
+  assert.equal(loadEnvironment({ ...local, NODE_ENV: "development" }).D1_DATABASE_URL, undefined);
   assert.equal(loadEnvironment(configured).D1_DATABASE_URL, configured.D1_DATABASE_URL);
   for (const field of ["D1_DATABASE_URL", "D1_DATABASE_SECRET"])
     assert.throws(
