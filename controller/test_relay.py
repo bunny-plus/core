@@ -89,6 +89,32 @@ class RelayOutputTests(unittest.TestCase):
             self.assertTrue(filters.endswith(",format=nv12,hwupload"))
             self.assertIn("ass=filename=", filters)
 
+    def test_nvenc_decodes_on_nvidia_and_preserves_sdr_hdr_subtitles_and_cadence(self):
+        controller = self.load_controller(BUNNY_VIDEO_ENCODER="h264_nvenc", BUNNY_VIDEO_MAX_KBPS="6000")
+        subtitles = JellyfinSubtitleFiles()
+        self.addCleanup(subtitles.stop)
+        subtitles.track.write_text(ASS)
+        for transfer, dovi in ((None, False), ("smpte2084", False), ("arib-std-b67", False), (None, True)):
+            with self.subTest(transfer=transfer, dovi=dovi):
+                command = controller.relay_command("pipe:0", None, None, 6, False, hdr_transfer=transfer, dolby_vision=dovi, subtitle_files=subtitles)
+                for option, value in (("-hwaccel", "cuda"), ("-hwaccel_device", "0"), ("-gpu", "0"), ("-pix_fmt", "nv12"), ("-rc", "cbr"), ("-b:v", "6000k"), ("-maxrate:v", "6000k"), ("-bf", "0"), ("-forced-idr", "1"), ("-fps_mode:v", "passthrough"), ("-force_key_frames", "expr:gte(t,n_forced*2)")):
+                    self.assertEqual(command[command.index(option) + 1], value)
+                self.assertLess(command.index("-hwaccel"), command.index("-i"))
+                filters = command[command.index("-vf") + 1]
+                self.assertTrue(filters.endswith(",format=nv12"))
+                self.assertIn(subtitles.video_filter(), filters)
+                if dovi:
+                    self.assertEqual(command[command.index("-init_hw_device") + 1], "vulkan=bunny_tone:NVIDIA")
+                    self.assertEqual(command[command.index("-filter_hw_device") + 1], "bunny_tone")
+                    self.assertIn("apply_dolbyvision=1", filters)
+                    self.assertLess(filters.index("libplacebo"), filters.index("ass=filename="))
+                else:
+                    self.assertNotIn("-init_hw_device", command)
+                    if transfer:
+                        self.assertLess(filters.index("tonemap="), filters.index("ass=filename="))
+                self.assertNotIn("-r", command)
+                self.assertNotIn("-cq", command)
+
     def test_whip_uses_baseline_opus_and_reconnects_with_no_credentials_in_status(self):
         output = "https://customer-test.cloudflarestream.com/private-secret/webRTC/publish"
         self.credentials.joinpath("output-url").write_text(output)

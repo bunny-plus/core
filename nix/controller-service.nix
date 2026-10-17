@@ -81,6 +81,7 @@ in {
           BUNNY_VIDEO_MAX_KBPS = toString cfg.maxVideoBitrateKbps;
           BUNNY_VIDEO_ENCODER = cfg.videoEncoder;
           BUNNY_VIDEO_DEVICE = cfg.videoDevice;
+          LD_LIBRARY_PATH = "/run/opengl-driver/lib";
         }
         // lib.optionalAttrs (cfg.jellyfinHttpOrigin != null) {
           BUNNY_JELLYFIN_HTTP_ORIGIN = cfg.jellyfinHttpOrigin;
