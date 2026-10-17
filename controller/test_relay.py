@@ -59,7 +59,7 @@ class RelayOutputTests(unittest.TestCase):
         controller = self.load_controller(
             BUNNY_OUTPUT_URL_CREDENTIAL="output-url", BUNNY_VIDEO_MAX_KBPS="10000",
         )
-        for encoder in ("libx264", "h264_nvenc"):
+        for encoder in ("libx264", "h264_nvenc", "h264_vaapi"):
             with patch.object(controller, "VIDEO_ENCODER", encoder):
                 for source in ("pipe:0", "https://torbox.test/file", "https://jellyfin.test/Videos/item/stream"):
                     for resolution, limit in ((None, 10000), (5, 6000), (6, 10000), (7, 10000)):
@@ -72,6 +72,22 @@ class RelayOutputTests(unittest.TestCase):
                             self.assertEqual(command[command.index("-force_key_frames") + 1], "expr:gte(t,n_forced*2)")
                             self.assertEqual(command[command.index("-attempt_recovery") + 1], "1")
         self.assertNotIn("test-private-stream-key", json.dumps(controller.relay_status()))
+
+    def test_vaapi_uses_explicit_device_and_uploads_after_tonemapping_and_subtitles(self):
+        controller = self.load_controller(BUNNY_VIDEO_ENCODER="h264_vaapi", BUNNY_VIDEO_DEVICE="/dev/dri/renderD129")
+        subtitles = JellyfinSubtitleFiles()
+        self.addCleanup(subtitles.stop)
+        subtitles.track.write_text(ASS)
+        for transfer, dovi in ((None, False), ("smpte2084", False), ("arib-std-b67", False), (None, True)):
+            command = controller.relay_command("pipe:0", None, None, 5, False, hdr_transfer=transfer, dolby_vision=dovi, subtitle_files=subtitles)
+            self.assertEqual(command[command.index("-init_hw_device") + 1], "vaapi=bunny_gpu:/dev/dri/renderD129")
+            self.assertEqual(command[command.index("-hwaccel") + 1], "vaapi")
+            self.assertEqual(command[command.index("-pix_fmt") + 1], "vaapi")
+            self.assertEqual(command[command.index("-fps_mode:v") + 1], "passthrough")
+            self.assertEqual(command[command.index("-rc_mode") + 1], "CBR")
+            filters = command[command.index("-vf") + 1]
+            self.assertTrue(filters.endswith(",format=nv12,hwupload"))
+            self.assertIn("ass=filename=", filters)
 
     def test_whip_uses_baseline_opus_and_reconnects_with_no_credentials_in_status(self):
         output = "https://customer-test.cloudflarestream.com/private-secret/webRTC/publish"

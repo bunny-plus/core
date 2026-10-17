@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { watchPlayback } from "../src/webrtc";
+import { watchPlayback } from "../src/playback-watchdog";
 
 function playback(context: TestContext, frameCallbacks = true) {
   let now = 0;
@@ -47,7 +47,7 @@ function playback(context: TestContext, frameCallbacks = true) {
   };
 }
 
-test("WebRTC keeps playing when Firefox's quality counter stays at zero", (context) => {
+test("playback continues when Firefox's quality counter stays at zero", (context) => {
   const player = playback(context);
   player.advance(60, true);
   assert.equal(player.video.getVideoPlaybackQuality().totalVideoFrames, 0);
@@ -97,4 +97,12 @@ test("stopping playback monitoring cancels its callbacks and resume attempts", (
   player.advance(30);
   assert.equal(player.resume.mock.callCount(), 1);
   assert.equal(player.stalled.mock.callCount(), 0);
+});
+
+test("a finished HLS screening is not restarted by the pause watchdog", (context) => {
+  const player = playback(context);
+  player.video.paused = true;
+  Object.defineProperty(player.video, "ended", { value: true });
+  player.advance(3);
+  assert.equal(player.resume.mock.callCount(), 0);
 });

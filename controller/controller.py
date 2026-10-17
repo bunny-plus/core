@@ -62,6 +62,7 @@ if os.environ.get("BUNNY_OUTPUT_PASSWORD_CREDENTIAL") == "1":
     OUTPUT_URL += f"{separator}pass={quote(read_credential('publisher-password'), safe='')}"
 OUTPUT_FORMAT = {"srt": "mpegts", "https": "whip"}.get(urlparse(OUTPUT_URL).scheme, "flv")
 VIDEO_ENCODER = os.environ.get("BUNNY_VIDEO_ENCODER", "libx264")
+VIDEO_DEVICE = os.environ.get("BUNNY_VIDEO_DEVICE", "/dev/dri/renderD128")
 if OUTPUT_FORMAT == "whip" and VIDEO_ENCODER != "libx264":
     raise ValueError("WHIP publishing requires the libx264 encoder")
 PROBE_TIMEOUT_SECONDS = int(os.environ.get("BUNNY_PROBE_TIMEOUT_SECONDS", "20"))
@@ -199,6 +200,8 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         "-fflags",
         "+genpts+discardcorrupt",
     ]
+    if VIDEO_ENCODER == "h264_vaapi":
+        command.extend(["-init_hw_device", f"vaapi=bunny_gpu:{VIDEO_DEVICE}", "-filter_hw_device", "bunny_gpu", "-hwaccel", "vaapi", "-hwaccel_device", "bunny_gpu"])
     if network_source:
         command.extend(
             [
@@ -246,7 +249,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         command.extend(["-preset", "veryfast", "-crf", "20", "-profile:v", "high"])
 
     max_kbps = min(VIDEO_MAX_KBPS[resolution_index if resolution_index is not None else -1], VIDEO_BITRATE_LIMIT_KBPS)
+    if VIDEO_ENCODER == "h264_vaapi":
+        command.extend(["-rc_mode", "CBR", "-b:v", f"{max_kbps}k", "-profile:v", "high"])
     command.extend(["-maxrate:v", f"{max_kbps}k", "-bufsize:v", f"{max_kbps * 2}k"])
+    if OUTPUT_FORMAT != "whip":
+        command.extend(["-fps_mode:v", "passthrough", "-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
 
     command.extend(["-bf", "0", "-flags:v", "+global_header"])
 
@@ -271,12 +278,14 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         command.extend(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"])
     if subtitle_files is not None:
         video_filter += f",{subtitle_files.video_filter()}"
+    if VIDEO_ENCODER == "h264_vaapi":
+        video_filter += ",pad=w=max(iw\\,128):h=max(ih\\,128):x=(ow-iw)/2:y=(oh-ih)/2,format=nv12,hwupload"
     command.extend(
         [
             "-vf",
             video_filter,
             "-pix_fmt",
-            "yuv420p",
+            "vaapi" if VIDEO_ENCODER == "h264_vaapi" else "yuv420p",
             "-force_key_frames",
             "expr:gte(t,n_forced)" if OUTPUT_FORMAT == "whip" else "expr:gte(t,n_forced*2)",
             "-c:a",

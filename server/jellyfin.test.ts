@@ -21,7 +21,7 @@ const env: Env = {
   DISCORD_GUILD_ID: "guild",
   DISCORD_ROLE_PERMISSIONS: "{}",
   SESSION_SECRET: "test-session-secret-with-at-least-32-bytes",
-  STREAM_URL: "https://stream.test/webRTC/play",
+  STREAM_URL: "https://stream.test/manifest/video.m3u8",
   TORBOX_API_KEY: "torbox",
   JELLYFIN_URL: "https://jellyfin.test/jellyfin/",
   JELLYFIN_API_KEY: "private-api-token-for-tests",

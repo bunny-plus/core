@@ -7,21 +7,14 @@ function bitrate(value: number | null) {
 
 export default function PlaybackStats({ stats }: { stats: PlayerStats }) {
   const values = [
-    {
-      label: "Network round trip",
-      value: stats.roundTrip === null ? "--" : `${Math.round(stats.roundTrip * 1000)}ms`,
-    },
-    {
-      label: "Jitter",
-      value: stats.jitter === null ? "--" : `${Math.round(stats.jitter * 1000)}ms`,
-    },
-    { label: "Packets lost", value: stats.packetsLost ?? "--" },
+    { label: "Behind live", value: stats.latency === null ? "--" : `${stats.latency.toFixed(1)}s` },
+    { label: "Buffered", value: `${stats.buffer.toFixed(1)}s` },
     { label: "Playtime", value: formatTime(stats.playtime) },
     { label: "Resolution", value: stats.resolution },
     {
       label: "Media bitrate",
       value: bitrate(stats.bitrate),
-      hint: "Video received over the last stats interval",
+      hint: "Bitrate of the selected video quality",
     },
     { label: "Dropped frames", value: stats.droppedFrames },
   ];

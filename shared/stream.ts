@@ -1,6 +1,6 @@
 import type { JellyfinPlayback } from "./jellyfin";
 
-export type StreamPlayback = { sdp: string; session: string };
+export type StreamPlayback = { url: string; expiresAt: number | null };
 
 export type StreamPlaybackError = "access-denied" | "signing-failed";
 

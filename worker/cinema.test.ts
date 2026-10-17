@@ -22,7 +22,7 @@ function cinemaEnv(id: string, diary?: CinemaDiary): Env {
     RELAY_CONTROLLER_SECRET: "controller-secret",
     RELAY_CONTROLLER_URL: `http://${id}-controller.test`,
     SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-    STREAM_URL: `https://${id}-stream.test/webRTC/play`,
+    STREAM_URL: `https://${id}-stream.test/manifest/video.m3u8`,
     TORBOX_API_KEY: "torbox-secret",
   };
 }
@@ -215,7 +215,7 @@ test("controller status adopts an existing stream but failed polls do not split 
     const failureEnv = {
       ...env,
       RELAY_CONTROLLER_URL: "http://failed-controller.test",
-      STREAM_URL: "https://failed-stream.test/webRTC/play",
+      STREAM_URL: "https://failed-stream.test/manifest/video.m3u8",
     };
     context.mock.method(globalThis, "fetch", async () => {
       throw new Error("Temporary outage");

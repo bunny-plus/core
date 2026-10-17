@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm typecheck && pnpm build:client && pnpm build:server",
     "build:client": "vite build",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/server.cjs && esbuild server/cleanup.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/cleanup.cjs",
     "deploy": "pnpm format:check && pnpm lint && pnpm test && pnpm typecheck && VITE_API_URL=https://api.bunny.plus pnpm build:client && wrangler deploy --config wrangler.jsonc",
     "dev": "concurrently -k -n api,web \"node --env-file-if-exists=.dev.vars --import tsx server/index.ts\" \"vite\"",
     "format": "oxfmt . --write",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "discord.js": "^14.27.0",
+    "hls.js": "^1.7.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^8.4.0",

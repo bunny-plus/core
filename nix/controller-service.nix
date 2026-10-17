@@ -35,13 +35,19 @@ in {
 
     outputUrlFile = lib.mkOption {
       type = lib.types.str;
-      description = "Runtime path to the complete WHIP publishing URL, loaded as a systemd credential. RTMPS/SRT remain supported for rollback.";
+      description = "Runtime path to the complete RTMPS, SRT or WHIP publishing URL, loaded as a systemd credential.";
     };
 
     videoEncoder = lib.mkOption {
-      type = lib.types.enum ["libx264" "h264_nvenc"];
+      type = lib.types.enum ["libx264" "h264_nvenc" "h264_vaapi"];
       default = "libx264";
       description = "The FFmpeg video encoder.";
+    };
+
+    videoDevice = lib.mkOption {
+      type = lib.types.str;
+      default = "/dev/dri/renderD128";
+      description = "DRM render device for VA-API decoding and encoding.";
     };
 
     maxVideoBitrateKbps = lib.mkOption {
@@ -74,6 +80,7 @@ in {
           BUNNY_OUTPUT_URL_CREDENTIAL = "output-url";
           BUNNY_VIDEO_MAX_KBPS = toString cfg.maxVideoBitrateKbps;
           BUNNY_VIDEO_ENCODER = cfg.videoEncoder;
+          BUNNY_VIDEO_DEVICE = cfg.videoDevice;
         }
         // lib.optionalAttrs (cfg.jellyfinHttpOrigin != null) {
           BUNNY_JELLYFIN_HTTP_ORIGIN = cfg.jellyfinHttpOrigin;

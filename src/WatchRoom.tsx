@@ -48,7 +48,7 @@ export default function WatchRoom({ currentUser }: { currentUser: User }) {
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
   const {
-    peerRef,
+    hlsRef,
     idleVideoRef,
     idleVideoEvents,
     idleReady,
@@ -89,7 +89,7 @@ export default function WatchRoom({ currentUser }: { currentUser: User }) {
     react,
     sendChat,
   } = useRoomConnection(videoRef, currentUser, ticketPlaybackRef);
-  const stats = usePlaybackStats(showIdle ? idleVideoRef : videoRef, peerRef, showStats);
+  const stats = usePlaybackStats(showIdle ? idleVideoRef : videoRef, hlsRef, showStats);
   usePlayerAutoHide(playerRef, {
     playerStatus: showIdle && idleReady ? "ready" : playerStatus,
     isBuffering: !showIdle && isBuffering,

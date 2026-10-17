@@ -17,7 +17,7 @@ const env: Env = {
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://controller.test",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-  STREAM_URL: "https://stream.test/webRTC/play",
+  STREAM_URL: "https://stream.test/manifest/video.m3u8",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -248,7 +248,7 @@ test("stream info coalesces concurrent upstream probes", async (context) => {
   const isolatedEnv = {
     ...env,
     RELAY_CONTROLLER_URL: "http://coalesced-controller.test",
-    STREAM_URL: "https://coalesced-stream.test/webRTC/play",
+    STREAM_URL: "https://coalesced-stream.test/manifest/video.m3u8",
   };
   let requests = 0;
   context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
@@ -283,7 +283,7 @@ test("stream info reports signing failures without exposing keys or probing unsi
   const signingEnv = {
     ...env,
     RELAY_CONTROLLER_URL: "http://invalid-signing-controller.test",
-    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/webRTC/play`,
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
     CLOUDFLARE_STREAM_SIGNING_KEY_ID: "invalid-signing-key",
     CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "invalid-private-jwk-secret",
   };

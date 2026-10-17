@@ -23,7 +23,7 @@ function setup(context: TestContext) {
     DISCORD_GUILD_ID: "guild",
     DISCORD_ROLE_PERMISSIONS: JSON.stringify({ staff: ["admin"] }),
     SESSION_SECRET: "private-session-secret-with-32-bytes",
-    STREAM_URL: "https://stream.test/webRTC/play",
+    STREAM_URL: "https://stream.test/manifest/video.m3u8",
     TORBOX_API_KEY: "private-torbox-token",
   };
   return { store, env };
