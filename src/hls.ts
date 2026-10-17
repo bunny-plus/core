@@ -2,13 +2,14 @@ import type { HlsConfig } from "hls.js";
 import type { StreamPlayback } from "../shared/stream";
 
 export const playbackConfig: Partial<HlsConfig> = {
-  lowLatencyMode: true,
-  liveSyncDuration: 5,
+  lowLatencyMode: false,
+  liveSyncDuration: 6,
   liveMaxLatencyDuration: 15,
+  liveSyncMode: "buffered",
   maxLiveSyncPlaybackRate: 1,
-  liveSyncOnStallIncrease: 0,
-  maxBufferLength: 5,
-  maxMaxBufferLength: 10,
+  liveSyncOnStallIncrease: 1,
+  maxBufferLength: 12,
+  maxMaxBufferLength: 20,
   backBufferLength: 10,
 };
 
