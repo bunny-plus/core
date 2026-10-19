@@ -41,6 +41,7 @@ class WhipTests(unittest.TestCase):
         self.deletes = 0
         self.reject_first = False
         self.disconnect_first = False
+        self.answer_delay = 0
         self.peers = set()
         self.tasks = set()
         self.loop = asyncio.new_event_loop()
@@ -100,6 +101,7 @@ class WhipTests(unittest.TestCase):
 
             await peer.setRemoteDescription(RTCSessionDescription(sdp=await request.text(), type="offer"))
             await peer.setLocalDescription(await peer.createAnswer())
+            await asyncio.sleep(self.answer_delay)
             return web.Response(status=201, text=peer.localDescription.sdp,
                                 content_type="application/sdp", headers={"Location": "/session"})
 
@@ -130,8 +132,10 @@ class WhipTests(unittest.TestCase):
         self.thread.join(5)
         self.loop.close()
 
-    def publish(self):
+    def publish(self, queue_size=None):
         command = self.controller.relay_command(self.source, None, None, 1, False)
+        if queue_size is not None:
+            command[command.index("-queue_size") + 1] = str(queue_size)
         result = subprocess.run(command, capture_output=True, text=True, timeout=25)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(self.frames["video"], 15, result.stderr)
@@ -141,6 +145,23 @@ class WhipTests(unittest.TestCase):
     def test_whip_decodes_audio_video_and_closes_the_resource(self):
         self.publish()
         self.assertEqual(self.requests, 1)
+
+    def test_slow_connection_preserves_the_beginning_and_continuous_media(self):
+        self.answer_delay = 5
+        self.make_source("eac3", "24000/1001")
+        self.publish()
+        self.assertGreaterEqual(self.frames["video"], 189)
+        self.assertGreaterEqual(self.frames["audio"], 395)
+        for previous, current in zip(self.video_timing, self.video_timing[1:]):
+            self.assertAlmostEqual(float(current - previous), 1001 / 24000, delta=0.001)
+        for (pts, samples), (next_pts, _) in zip(self.audio_timing, self.audio_timing[1:]):
+            self.assertEqual(next_pts - pts, samples)
+
+    def test_full_queue_waits_for_connection_without_discarding_media(self):
+        self.answer_delay = 2
+        self.publish(queue_size=16)
+        self.assertGreaterEqual(self.frames["video"], 238)
+        self.assertGreaterEqual(self.frames["audio"], 395)
 
     def test_dts_in_matroska_has_a_continuous_opus_sample_clock(self):
         self.make_source("dca")

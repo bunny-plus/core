@@ -22,7 +22,7 @@ function cinemaEnv(id: string, diary?: CinemaDiary): Env {
     RELAY_CONTROLLER_SECRET: "controller-secret",
     RELAY_CONTROLLER_URL: `http://${id}-controller.test`,
     SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-    STREAM_URL: `https://${id}-stream.test/manifest/video.m3u8`,
+    STREAM_URL: `https://${id}-stream.test/webRTC/play`,
     TORBOX_API_KEY: "torbox-secret",
   };
 }
@@ -201,7 +201,7 @@ test("controller status adopts an existing stream but failed polls do not split 
     context.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
       if (String(input) === env.RELAY_CONTROLLER_URL)
         return Response.json({ running: true, title: "Already playing" });
-      return new Response("#EXTM3U");
+      return new Response("v=0");
     });
     const response = await handleRequest(request(env, "/api/stream-info", cookie), env);
     const current = await diary.current();
@@ -215,7 +215,7 @@ test("controller status adopts an existing stream but failed polls do not split 
     const failureEnv = {
       ...env,
       RELAY_CONTROLLER_URL: "http://failed-controller.test",
-      STREAM_URL: "https://failed-stream.test/manifest/video.m3u8",
+      STREAM_URL: "https://failed-stream.test/webRTC/play",
     };
     context.mock.method(globalThis, "fetch", async () => {
       throw new Error("Temporary outage");
@@ -366,9 +366,7 @@ test("idle and failed controller status cannot count idle-video playback", async
       await diary.watching("viewer", "tab", screening.id, true, 0);
       await diary.watching("viewer", "tab", screening.id, true, 10000);
       context.mock.method(globalThis, "fetch", async (input: string | URL | Request) =>
-        String(input) === env.RELAY_CONTROLLER_URL
-          ? Response.json(status)
-          : new Response("#EXTM3U"),
+        String(input) === env.RELAY_CONTROLLER_URL ? Response.json(status) : new Response("v=0"),
       );
       assert.equal(
         (await handleRequest(request(env, "/api/stream-info", cookie), env)).status,
@@ -395,7 +393,7 @@ test("screening ticket creation requires management permission, same-origin JSON
     context.mock.method(globalThis, "fetch", async (input: string | URL | Request) =>
       String(input) === env.RELAY_CONTROLLER_URL
         ? Response.json({ running: false })
-        : new Response("#EXTM3U"),
+        : new Response("v=0"),
     );
     for (const path of ["/api/cinema/screening", "/api/cinema/screening/ticket"]) {
       const response = await handleRequest(

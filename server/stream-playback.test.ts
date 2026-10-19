@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { streamPlayback, validateStreamSigning } from "./stream-playback";
 const inputId = "a".repeat(32);
-const streamUrl = `https://customer-test.cloudflarestream.com/${inputId}/manifest/video.m3u8?protocol=llhlsbeta`;
+const streamUrl = `https://customer-test.cloudflarestream.com/${inputId}/webRTC/play`;
 
-test("private HLS requires a complete local signing key and never falls back to API tokens or unsigned playback", async () => {
+test("private WebRTC requires a complete local signing key and never falls back to API tokens or unsigned playback", async () => {
   assert.throws(
     () => validateStreamSigning({ STREAM_URL: streamUrl }),
     /both signing key ID and private JWK/,
@@ -16,18 +16,18 @@ test("private HLS requires a complete local signing key and never falls back to 
   assert.throws(
     () =>
       validateStreamSigning({
-        STREAM_URL: streamUrl.replace("manifest/video.m3u8", "webRTC/play"),
+        STREAM_URL: streamUrl.replace("webRTC/play", "manifest/video.m3u8"),
       }),
-    /private HLS URL/,
+    /private WHEP URL/,
   );
   assert.throws(
-    () => validateStreamSigning({ STREAM_URL: streamUrl + "&private=secret" }),
-    /private HLS URL/,
+    () => validateStreamSigning({ STREAM_URL: streamUrl + "?private=secret" }),
+    /private WHEP URL/,
   );
-  assert.deepEqual(await streamPlayback({ STREAM_URL: "http://localhost:8888/stream.m3u8" }), {
-    url: "http://localhost:8888/stream.m3u8",
-    expiresAt: null,
-  });
+  assert.equal(
+    await streamPlayback({ STREAM_URL: "http://localhost:8888/whep" }),
+    "http://localhost:8888/whep",
+  );
   await assert.rejects(
     streamPlayback({
       STREAM_URL: streamUrl,
@@ -60,9 +60,9 @@ test("local signing produces a verifiable RSA token from raw and base64 JWKs wit
       CLOUDFLARE_STREAM_SIGNING_KEY_ID: "registered-key",
       CLOUDFLARE_STREAM_SIGNING_KEY_JWK: encoded,
     });
-    const url = new URL(playback.url);
-    assert.equal(url.search, "?protocol=llhlsbeta");
-    assert.ok(url.pathname.endsWith("/manifest/video.m3u8"));
+    const url = new URL(playback);
+    assert.equal(url.search, "");
+    assert.ok(url.pathname.endsWith("/webRTC/play"));
     const [header, claims, signature] = url.pathname.split("/")[1].split(".");
     assert.deepEqual(JSON.parse(Buffer.from(header, "base64url").toString()), {
       alg: "RS256",
@@ -71,7 +71,6 @@ test("local signing produces a verifiable RSA token from raw and base64 JWKs wit
     const payload = JSON.parse(Buffer.from(claims, "base64url").toString());
     assert.equal(payload.sub, inputId);
     assert.equal(payload.kid, "registered-key");
-    assert.equal(playback.expiresAt, payload.exp * 1000);
     assert.ok(payload.nbf >= before - 30 && payload.nbf <= Math.floor(Date.now() / 1000));
     assert.ok(payload.exp >= before + 3600 && payload.exp <= Math.floor(Date.now() / 1000) + 3600);
     assert.equal(

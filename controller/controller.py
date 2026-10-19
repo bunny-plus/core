@@ -63,8 +63,8 @@ if os.environ.get("BUNNY_OUTPUT_PASSWORD_CREDENTIAL") == "1":
 OUTPUT_FORMAT = {"srt": "mpegts", "https": "whip"}.get(urlparse(OUTPUT_URL).scheme, "flv")
 VIDEO_ENCODER = os.environ.get("BUNNY_VIDEO_ENCODER", "libx264")
 VIDEO_DEVICE = os.environ.get("BUNNY_VIDEO_DEVICE", "/dev/dri/renderD128")
-if OUTPUT_FORMAT == "whip" and VIDEO_ENCODER != "libx264":
-    raise ValueError("WHIP publishing requires the libx264 encoder")
+if OUTPUT_FORMAT == "whip" and VIDEO_ENCODER not in ("libx264", "h264_nvenc"):
+    raise ValueError("WHIP publishing requires the libx264 or h264_nvenc encoder")
 PROBE_TIMEOUT_SECONDS = int(os.environ.get("BUNNY_PROBE_TIMEOUT_SECONDS", "20"))
 RESOLUTION_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
 VIDEO_MAX_KBPS = [250, 500, 1000, 1800, 3500, 6000, 12000, 20000]
@@ -244,13 +244,12 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             VIDEO_ENCODER,
         ]
     )
-    if OUTPUT_FORMAT == "whip":
-        command.extend(["-preset", "veryfast", "-tune", "zerolatency", "-crf", "20", "-profile:v", "baseline", "-fps_mode:v", "passthrough", "-g", "30", "-x264-params", "repeat-headers=1"])
-        command.extend(["-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
-    elif VIDEO_ENCODER == "h264_nvenc":
-        command.extend(["-gpu", "0", "-preset", "p4", "-tune", "hq", "-rc", "cbr", "-forced-idr", "1", "-profile:v", "high"])
+    if VIDEO_ENCODER == "h264_nvenc":
+        command.extend(["-gpu", "0", "-preset", "p4", "-tune", "ull" if OUTPUT_FORMAT == "whip" else "hq", "-rc", "cbr", "-forced-idr", "1", "-profile:v", "baseline" if OUTPUT_FORMAT == "whip" else "high"])
     elif VIDEO_ENCODER == "libx264":
-        command.extend(["-preset", "veryfast", "-crf", "20", "-profile:v", "high"])
+        command.extend(["-preset", "veryfast", "-crf", "20", "-profile:v", "baseline" if OUTPUT_FORMAT == "whip" else "high"])
+        if OUTPUT_FORMAT == "whip":
+            command.extend(["-tune", "zerolatency", "-g", "30", "-x264-params", "repeat-headers=1"])
 
     max_kbps = min(VIDEO_MAX_KBPS[resolution_index if resolution_index is not None else -1], VIDEO_BITRATE_LIMIT_KBPS)
     if VIDEO_ENCODER == "h264_vaapi":
@@ -258,8 +257,7 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     elif VIDEO_ENCODER == "h264_nvenc":
         command.extend(["-b:v", f"{max_kbps}k"])
     command.extend(["-maxrate:v", f"{max_kbps}k", "-bufsize:v", f"{max_kbps * 2}k"])
-    if OUTPUT_FORMAT != "whip":
-        command.extend(["-fps_mode:v", "passthrough", "-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
+    command.extend(["-fps_mode:v", "passthrough", "-af", "aresample=48000:async=1,asetpts=N/SR/TB+STARTPTS"])
 
     command.extend(["-bf", "0", "-flags:v", "+global_header"])
 
@@ -319,9 +317,9 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
                 "flv": "flvflags=no_duration_filesize:fflags=-autobsf:avoid_negative_ts=make_non_negative:rw_timeout=15000000",
             }[OUTPUT_FORMAT],
             "-queue_size",
-            "256" if OUTPUT_FORMAT == "whip" else "120",
+            "1024" if OUTPUT_FORMAT == "whip" else "120",
             "-drop_pkts_on_overflow",
-            "1",
+            "0" if OUTPUT_FORMAT == "whip" else "1",
             "-attempt_recovery",
             "1",
             "-recover_any_error",

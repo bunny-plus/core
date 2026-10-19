@@ -1,15 +1,5 @@
 import type { StreamInfo } from "../shared/stream";
 
-export function bufferedSeconds(video: Pick<HTMLVideoElement, "buffered" | "currentTime">) {
-  for (let index = 0; index < video.buffered.length; index++)
-    if (
-      video.currentTime >= video.buffered.start(index) &&
-      video.currentTime <= video.buffered.end(index)
-    )
-      return video.buffered.end(index) - video.currentTime;
-  return 0;
-}
-
 export function playbackPresentation(
   status: StreamInfo | null,
   liveReady: boolean,

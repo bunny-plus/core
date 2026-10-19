@@ -4,7 +4,7 @@ import { apiError, jsonObject } from "./http";
 import { controller, mutateController, streamInfo } from "./stream-controller";
 import { torBox, temporaryDownload, type TorBoxTorrent } from "./torbox";
 import { parseRestreamRequest, RestreamValidationError } from "./restream";
-import { streamPlayback } from "../server/stream-playback";
+import { startPlayback, stopPlayback } from "../server/webrtc";
 import { jellyfinLibrary, jellyfinOptions, jellyfinId, jellyfinRelay } from "../server/jellyfin";
 import { isInteger, isString } from "../shared/json";
 
@@ -202,12 +202,23 @@ export async function streamRoutes(
       return apiError(error instanceof Error ? error : null);
     }
   }
-  if (url.pathname === "/api/stream-playback" && request.method === "POST") {
+  if (
+    ["/api/stream-playback", "/api/stream-playback/stop"].includes(url.pathname) &&
+    request.method === "POST"
+  ) {
     const authorization = await authorizeCostly(request, env, metadata, "stream-playback", 60);
     if (authorization instanceof Response) return authorization;
     try {
-      await jsonObject(request);
-      return Response.json(await streamPlayback(env), {
+      const input = await jsonObject(request);
+      if (url.pathname.endsWith("/stop")) {
+        if (!isString(input.session))
+          return Response.json({ error: "A playback session is required" }, { status: 400 });
+        await stopPlayback(env, authorization.id, input.session);
+        return new Response(null, { status: 204 });
+      }
+      if (!isString(input.sdp))
+        return Response.json({ error: "A playback offer is required" }, { status: 400 });
+      return Response.json(await startPlayback(env, authorization.id, input.sdp), {
         headers: { "Cache-Control": "private, no-store" },
       });
     } catch (error) {

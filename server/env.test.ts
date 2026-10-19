@@ -18,7 +18,7 @@ const validEnvironment: NodeJS.ProcessEnv = {
   RELAY_CONTROLLER_SECRET: "controller-secret",
   RELAY_CONTROLLER_URL: "http://192.168.1.240:10000",
   SESSION_SECRET: "a-secure-session-key-with-32-bytes",
-  STREAM_URL: "https://stream.test/manifest/video.m3u8",
+  STREAM_URL: "https://stream.test/webRTC/play",
   TORBOX_API_KEY: "torbox-secret",
 };
 
@@ -58,14 +58,14 @@ test("development environment can run without a relay controller", () => {
     NODE_ENV: "development",
     RELAY_CONTROLLER_SECRET: undefined,
     RELAY_CONTROLLER_URL: undefined,
-    STREAM_URL: "http://localhost:8888/manifest/video.m3u8",
+    STREAM_URL: "http://localhost:8888/webRTC/play",
   });
   assert.equal(env.RELAY_CONTROLLER_URL, undefined);
 });
 
 test("environment loads private Cloudflare playback credentials only as complete pairs", () => {
   const signing = {
-    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/manifest/video.m3u8`,
+    STREAM_URL: `https://customer-test.cloudflarestream.com/${"a".repeat(32)}/webRTC/play`,
     CLOUDFLARE_STREAM_SIGNING_KEY_ID: "test-key",
     CLOUDFLARE_STREAM_SIGNING_KEY_JWK: "validated-when-used",
   };

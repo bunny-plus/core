@@ -1,69 +1,72 @@
 import type { PlayerStats } from "./usePlaybackStats";
 import { formatTime } from "./playback";
 
-function bitrate(value: number | null) {
-  return value === null ? "--" : `${(value / 1_000_000).toFixed(2)} Mbps`;
+function milliseconds(value: number | null) {
+  return value === null ? "--" : `${Math.round(value)} ms`;
 }
 
 export default function PlaybackStats({ stats }: { stats: PlayerStats }) {
-  const range = Math.max(15, stats.targetLatency ?? 0);
-  const position = (seconds: number) => (1 - Math.min(range, Math.max(0, seconds)) / range) * 100;
-  const playhead = position(stats.latency ?? 0);
-  const bufferedEnd = position((stats.latency ?? 0) - stats.buffer);
+  const range = Math.max(
+    250,
+    Math.ceil(Math.max(stats.buffer ?? 0, stats.targetBuffer ?? 0) / 250) * 250,
+  );
+  const position = (value: number) => (Math.min(range, Math.max(0, value)) / range) * 100;
   const values = [
-    { label: "Buffered ahead", value: `${stats.buffer.toFixed(1)}s` },
+    { label: "Decoded FPS", value: stats.fps?.toFixed(1) ?? "--" },
     { label: "Playtime", value: formatTime(stats.playtime) },
     { label: "Resolution", value: stats.resolution },
     {
-      label: "Media bitrate",
-      value: bitrate(stats.bitrate),
-      hint: "Bitrate of the selected video quality",
+      label: "Video bitrate",
+      value: stats.bitrate === null ? "--" : `${(stats.bitrate / 1_000_000).toFixed(2)} Mbps`,
     },
-    { label: "Dropped frames", value: stats.droppedFrames },
+    { label: "Dropped frames", value: stats.droppedFrames ?? "--" },
+    { label: "Video jitter", value: milliseconds(stats.jitter) },
+    { label: "Packets lost", value: stats.packetsLost ?? "--" },
+    { label: "Freezes", value: stats.freezes ?? "--" },
   ];
   return (
     <div className="player-stats" role="group" aria-label="Playback statistics">
-      {stats.latency !== null && (
+      {stats.buffer !== null && (
         <div className="player-live-position">
           <div className="player-live-heading">
-            <span>Behind live</span>
-            <strong>{stats.latency.toFixed(1)}s</strong>
+            <span>Playback buffer</span>
+            <strong>{milliseconds(stats.buffer)}</strong>
           </div>
           <div
             className="player-live-track"
             role="meter"
-            aria-label="Playback position behind live"
-            aria-valuemin={-range}
-            aria-valuemax={0}
-            aria-valuenow={-Math.min(range, stats.latency)}
-            aria-valuetext={`${stats.latency.toFixed(1)} seconds behind live; ${stats.buffer.toFixed(1)} seconds buffered ahead`}
+            aria-label="Video receiver buffer delay"
+            aria-valuemin={0}
+            aria-valuemax={range}
+            aria-valuenow={Math.max(0, stats.buffer)}
+            aria-valuetext={`${Math.round(stats.buffer)} milliseconds of receiver buffering`}
           >
             <div
               className="player-live-buffer"
-              style={{ left: `${playhead}%`, width: `${bufferedEnd - playhead}%` }}
+              style={{ left: 0, width: `${position(stats.buffer)}%` }}
             />
-            {stats.targetLatency !== null && (
+            {stats.targetBuffer !== null && (
               <div
                 className="player-live-target"
-                style={{ left: `${position(stats.targetLatency)}%` }}
-                title={`Target: ${stats.targetLatency.toFixed(1)}s behind live`}
+                style={{ left: `${position(stats.targetBuffer)}%` }}
+                title={`Browser target: ${milliseconds(stats.targetBuffer)}`}
               />
             )}
-            <div className="player-live-thumb" style={{ left: `${playhead}%` }} />
+            <div className="player-live-thumb" style={{ left: `${position(stats.buffer)}%` }} />
           </div>
           <div className="player-live-scale" aria-hidden="true">
-            <span>{range}s+</span>
-            <span>Live edge</span>
+            <span>0 ms</span>
+            <span>{range} ms</span>
           </div>
           <p>
-            Dot: you · Pink: buffered ahead
-            {stats.targetLatency !== null && " · Mark: target"}
+            Receiver buffering{stats.targetBuffer !== null && " · Mark: browser target"}. Total live
+            delay is unavailable.
           </p>
         </div>
       )}
-      {values.map(({ label, value, hint }) => (
+      {values.map(({ label, value }) => (
         <div key={label}>
-          <span title={hint}>{label}</span>
+          <span>{label}</span>
           <strong>{value}</strong>
         </div>
       ))}

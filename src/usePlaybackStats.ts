@@ -1,46 +1,72 @@
-import type Hls from "hls.js";
 import { useEffect, useState, type RefObject } from "react";
-import { bufferedSeconds } from "./playback";
+import { videoMetrics, type VideoSample } from "./webrtc-stats";
 
-export type PlayerStats = {
-  bitrate: number | null;
-  latency: number | null;
-  targetLatency: number | null;
-  buffer: number;
-  droppedFrames: number;
+export type PlayerStats = ReturnType<typeof videoMetrics> & {
   playtime: number;
   resolution: string;
 };
 
 export function usePlaybackStats(
   videoRef: RefObject<HTMLVideoElement | null>,
-  hlsRef: RefObject<Hls | null>,
+  peerRef: RefObject<RTCPeerConnection | null>,
   showStats: boolean,
 ) {
   const [stats, setStats] = useState<PlayerStats | null>(null);
   useEffect(() => {
     if (!showStats) return;
-    function update() {
-      const video = videoRef.current;
-      if (!video) return;
-      const hls = !video.loop ? hlsRef.current : null;
-      const details = hls?.latestLevelDetails;
-      let latency = details?.live ? details.edge + details.age - video.currentTime : null;
-      if (!hls && !video.loop && video.seekable.length)
-        latency = video.seekable.end(video.seekable.length - 1) - video.currentTime;
-      setStats({
-        bitrate: hls?.levels[hls.currentLevel]?.bitrate ?? null,
-        latency: latency !== null && Number.isFinite(latency) ? Math.max(0, latency) : null,
-        targetLatency: details?.live ? (hls?.targetLatency ?? null) : null,
-        buffer: bufferedSeconds(video),
-        playtime: video.currentTime,
-        resolution: video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : "--",
-        droppedFrames: video.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0,
-      });
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastPeer: RTCPeerConnection | null = null;
+    let samples: VideoSample[] = [];
+    async function update() {
+      try {
+        const video = videoRef.current;
+        if (!video) return;
+        const peer = !video.loop ? peerRef.current : null;
+        if (peer !== lastPeer) samples = [];
+        lastPeer = peer;
+        let sample: VideoSample | undefined;
+        if (peer && peer.connectionState !== "closed") {
+          const report = await peer.getStats();
+          if (disposed || peer !== peerRef.current || video !== videoRef.current) return;
+          report.forEach((entry) => {
+            if (entry.type === "inbound-rtp" && (entry.kind ?? entry.mediaType) === "video")
+              sample = entry as VideoSample;
+          });
+        }
+        const previous = samples.at(-1);
+        if (
+          sample &&
+          (sample.id !== previous?.id ||
+            sample.timestamp <= previous.timestamp ||
+            (sample.framesDecoded ?? 0) < (previous.framesDecoded ?? 0) ||
+            (sample.bytesReceived ?? 0) < (previous.bytesReceived ?? 0))
+        )
+          samples = [];
+        const metrics = videoMetrics(sample ?? { id: "idle", timestamp: 0 }, samples[0]);
+        if (sample) {
+          samples.push(sample);
+          while (samples.length > 1 && samples[1].timestamp <= sample.timestamp - 2000)
+            samples.shift();
+        }
+        setStats({
+          ...metrics,
+          droppedFrames:
+            metrics.droppedFrames ?? video.getVideoPlaybackQuality?.().droppedVideoFrames ?? null,
+          playtime: video.currentTime,
+          resolution: video.videoWidth ? `${video.videoWidth} × ${video.videoHeight}` : "--",
+        });
+      } catch {
+        samples = [];
+      } finally {
+        if (!disposed) timer = setTimeout(update, 500);
+      }
     }
-    update();
-    const timer = setInterval(update, 250);
-    return () => clearInterval(timer);
-  }, [showStats, videoRef, hlsRef]);
+    void update();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [showStats, videoRef, peerRef]);
   return stats;
 }

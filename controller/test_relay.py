@@ -118,13 +118,20 @@ class RelayOutputTests(unittest.TestCase):
     def test_whip_uses_baseline_opus_and_reconnects_with_no_credentials_in_status(self):
         output = "https://customer-test.cloudflarestream.com/private-secret/webRTC/publish"
         self.credentials.joinpath("output-url").write_text(output)
-        controller = self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url")
-        command = controller.relay_command("pipe:0", None, None, 2, False)
-        for option, expected in (("-fifo_format", "whip"), ("-c:a", "libopus"), ("-profile:v", "baseline"), ("-tune", "zerolatency"), ("-bf", "0"), ("-attempt_recovery", "1")):
-            self.assertEqual(command[command.index(option)+1], expected)
-        self.assertNotIn("private-secret", json.dumps(controller.relay_status()))
+        for encoder, tune in (("libx264", "zerolatency"), ("h264_nvenc", "ull")):
+            with self.subTest(encoder=encoder):
+                controller = self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url", BUNNY_VIDEO_ENCODER=encoder)
+                command = controller.relay_command("pipe:0", None, None, 2, False)
+                for option, expected in (("-fifo_format", "whip"), ("-c:a", "libopus"), ("-profile:v", "baseline"), ("-tune", tune), ("-bf", "0"), ("-attempt_recovery", "1"), ("-fps_mode:v", "passthrough"), ("-force_key_frames", "expr:gte(t,n_forced)")):
+                    self.assertEqual(command[command.index(option)+1], expected)
+                if encoder == "h264_nvenc":
+                    self.assertEqual(command[command.index("-forced-idr") + 1], "1")
+                    self.assertEqual(command[command.index("-rc") + 1], "cbr")
+                    self.assertNotIn("-x264-params", command)
+                    self.assertNotIn("-crf", command)
+                self.assertNotIn("private-secret", json.dumps(controller.relay_status()))
         with self.assertRaisesRegex(ValueError, "libx264"):
-            self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url", BUNNY_VIDEO_ENCODER="h264_nvenc")
+            self.load_controller(BUNNY_OUTPUT_URL_CREDENTIAL="output-url", BUNNY_VIDEO_ENCODER="h264_vaapi")
         for path in ("/private-secret/webRTC/play", "/webRTC/publish", "/private-secret/webRTC/publish?key=secret"):
             self.credentials.joinpath("output-url").write_text("https://customer-test.cloudflarestream.com" + path)
             with self.assertRaisesRegex(ValueError, "complete WHIP"):

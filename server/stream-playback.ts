@@ -1,5 +1,4 @@
 import type { Env } from "../worker/env";
-import type { StreamPlayback } from "../shared/stream";
 import { TtlCache } from "./cache";
 import { isJsonObject, isString, type JsonValue } from "../shared/json";
 
@@ -10,19 +9,18 @@ type StreamEnvironment = Pick<
 
 const playbackCache = new TtlCache(50);
 
-export function streamInputId(source: string) {
-  const url = new URL(source);
-  const match = /^\/([a-f\d]{32})\/manifest\/video\.m3u8$/.exec(url.pathname);
+function liveInput(url: URL) {
+  const match = /^\/([a-f\d]{32})\/webRTC\/play$/.exec(url.pathname);
   if (
     url.protocol !== "https:" ||
     !url.hostname.endsWith(".cloudflarestream.com") ||
     url.username ||
     url.password ||
-    [...url.searchParams].some(([key, value]) => key !== "protocol" || value !== "llhlsbeta") ||
+    url.search ||
     url.hash ||
     !match
   ) {
-    throw new Error("Signed playback requires a private HLS URL with a live input ID");
+    throw new Error("Signed playback requires a private WHEP URL with a live input ID");
   }
   return match[1];
 }
@@ -31,12 +29,12 @@ export function validateStreamSigning(env: StreamEnvironment) {
   const url = new URL(env.STREAM_URL);
   if (!url.hostname.endsWith(".cloudflarestream.com")) {
     if (env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
-      throw new Error("Signing requires a private HLS URL");
+      throw new Error("Signing requires a private WHEP URL");
     return;
   }
-  streamInputId(env.STREAM_URL);
+  liveInput(url);
   if (!env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
-    throw new Error("HLS playback requires both signing key ID and private JWK");
+    throw new Error("WebRTC playback requires both signing key ID and private JWK");
   if (!/^[a-z\d_-]{1,128}$/i.test(env.CLOUDFLARE_STREAM_SIGNING_KEY_ID))
     throw new Error("CLOUDFLARE_STREAM_SIGNING_KEY_ID is invalid");
 }
@@ -98,18 +96,22 @@ async function signLocally(inputId: string, keyId: string, encodedKey: string, e
   }
 }
 
-export async function streamPlayback(env: StreamEnvironment): Promise<StreamPlayback> {
+export async function streamPlayback(env: StreamEnvironment): Promise<string> {
   validateStreamSigning(env);
   if (!env.CLOUDFLARE_STREAM_SIGNING_KEY_ID || !env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK)
-    return { url: env.STREAM_URL, expiresAt: null };
+    return env.STREAM_URL;
   const keyId = env.CLOUDFLARE_STREAM_SIGNING_KEY_ID;
   const jwk = env.CLOUDFLARE_STREAM_SIGNING_KEY_JWK;
   const cacheKey = JSON.stringify([env.STREAM_URL, keyId, jwk]);
   return playbackCache.getOrLoad(cacheKey, 45 * 60, async () => {
     const url = new URL(env.STREAM_URL);
-    const expires = Math.floor(Date.now() / 1000) + 3600;
-    const token = await signLocally(streamInputId(env.STREAM_URL), keyId, jwk, expires);
-    url.pathname = `/${token}/manifest/video.m3u8`;
-    return { url: url.toString(), expiresAt: expires * 1000 };
+    const token = await signLocally(
+      liveInput(url),
+      keyId,
+      jwk,
+      Math.floor(Date.now() / 1000) + 3600,
+    );
+    url.pathname = `/${token}/webRTC/play`;
+    return url.toString();
   });
 }

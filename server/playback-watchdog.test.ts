@@ -99,7 +99,7 @@ test("stopping playback monitoring cancels its callbacks and resume attempts", (
   assert.equal(player.stalled.mock.callCount(), 0);
 });
 
-test("a finished HLS screening is not restarted by the pause watchdog", (context) => {
+test("a finished screening is not restarted by the pause watchdog", (context) => {
   const player = playback(context);
   player.video.paused = true;
   Object.defineProperty(player.video, "ended", { value: true });

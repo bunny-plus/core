@@ -34,6 +34,7 @@ export async function jsonObject(request: Request) {
 
 const jsonRoutes = new Set([
   "/api/stream-playback",
+  "/api/stream-playback/stop",
   "/api/login/discord",
   "/api/cinema/screening/ticket",
   "/api/cinema/screening/counting",

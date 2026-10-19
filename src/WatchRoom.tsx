@@ -48,7 +48,7 @@ export default function WatchRoom({ currentUser }: { currentUser: User }) {
   const [chatMessage, setChatMessage] = useState("");
   const [showChatHistory, setShowChatHistory] = useState(false);
   const {
-    hlsRef,
+    peerRef,
     idleVideoRef,
     idleVideoEvents,
     idleReady,
@@ -89,7 +89,7 @@ export default function WatchRoom({ currentUser }: { currentUser: User }) {
     react,
     sendChat,
   } = useRoomConnection(videoRef, currentUser, ticketPlaybackRef);
-  const stats = usePlaybackStats(showIdle ? idleVideoRef : videoRef, hlsRef, showStats);
+  const stats = usePlaybackStats(showIdle ? idleVideoRef : videoRef, peerRef, showStats);
   usePlayerAutoHide(playerRef, {
     playerStatus: showIdle && idleReady ? "ready" : playerStatus,
     isBuffering: !showIdle && isBuffering,
@@ -204,13 +204,7 @@ export default function WatchRoom({ currentUser }: { currentUser: User }) {
             tabIndex={-1}
           >
             <div className="screen-frame">
-              <video
-                ref={videoRef}
-                autoPlay
-                muted={volume === 0 || showIdle}
-                playsInline
-                {...videoEvents}
-              />
+              <video ref={videoRef} muted={volume === 0 || showIdle} playsInline {...videoEvents} />
               <video
                 className={`idle-clip${showIdle ? "" : " idle-clip--hidden"}`}
                 ref={idleVideoRef}
