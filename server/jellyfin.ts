@@ -5,6 +5,7 @@ import type {
   JellyfinOptions,
   JellyfinSource,
   JellyfinPlayback,
+  JellyfinSubtitle,
 } from "../shared/jellyfin";
 import { fetchJson, UpstreamError } from "./upstream";
 import { isJsonObject, isString, type JsonObject, type JsonValue } from "../shared/json";
@@ -230,16 +231,25 @@ function sourceFromJson(source: JsonValue): JellyfinSource | null {
     audio[0];
   const subtitles = streams
     .filter((stream) => stream.Type === "Subtitle" && isIndex(stream.Index))
-    .map((stream) => ({
-      index: stream.Index as number,
-      label: isString(stream.DisplayTitle) ? stream.DisplayTitle : `Subtitle ${stream.Index}`,
-      language: isString(stream.Language) ? stream.Language : null,
-      supported:
-        isString(stream.Codec) &&
-        ["ass", "ssa", "srt", "subrip", "webvtt", "vtt", "mov_text", "text", "ttml"].includes(
-          stream.Codec.toLowerCase(),
-        ),
-    }));
+    .map((stream) => {
+      const codec = isString(stream.Codec) ? stream.Codec.toLowerCase() : "";
+      const format: JellyfinSubtitle["format"] = ["pgssub", "hdmv_pgs_subtitle"].includes(codec)
+        ? stream.IsExternal === true
+          ? null
+          : "pgs"
+        : ["ass", "ssa", "srt", "subrip", "webvtt", "vtt", "mov_text", "text", "ttml"].includes(
+              codec,
+            )
+          ? "text"
+          : null;
+      return {
+        index: stream.Index as number,
+        label: isString(stream.DisplayTitle) ? stream.DisplayTitle : `Subtitle ${stream.Index}`,
+        language: isString(stream.Language) ? stream.Language : null,
+        format,
+        supported: format !== null,
+      };
+    });
   const preferredSubtitle =
     subtitles.find(
       (track) => track.supported && track.index === source.DefaultSubtitleStreamIndex,
@@ -357,10 +367,8 @@ export async function jellyfinRelay(env: Env, input: JsonObject) {
     throw new JellyfinError("The selected audio track is no longer available", 400);
   const subtitleIndex =
     input.subtitleIndex === undefined ? source.defaultSubtitleIndex : input.subtitleIndex;
-  if (
-    subtitleIndex !== null &&
-    !source.subtitles.some((track) => track.index === subtitleIndex && track.supported)
-  )
+  const subtitle = source.subtitles.find((track) => track.index === subtitleIndex);
+  if (subtitleIndex !== null && !subtitle?.supported)
     throw new JellyfinError("The selected subtitle track is unavailable or unsupported", 400);
   const config = configuration(env);
   const params = new URLSearchParams({ Static: "true", MediaSourceId: source.id });
@@ -370,7 +378,8 @@ export async function jellyfinRelay(env: Env, input: JsonObject) {
     apiKey: config.token,
     audioIndex: audioIndex ?? source.defaultAudioIndex,
     subtitleIndex,
-    subtitleFonts: subtitleIndex === null ? [] : source.fonts,
+    subtitleFormat: subtitle?.format ?? null,
+    subtitleFonts: subtitle?.format === "text" ? source.fonts : [],
     resolutionIndex,
     hdrTransfer: source.hdrTransfer,
     dolbyVision: source.dolbyVision,

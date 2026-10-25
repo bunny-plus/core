@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import queue
 import socket
+import struct
 import subprocess
 import tempfile
 import threading
@@ -333,6 +334,60 @@ class RelayRecoveryTests(unittest.TestCase):
             self.assertEqual(max(frame) > 180, 10 <= index < 20, f"frame {index}")
             if font and 10 <= index < 20:
                 self.assertGreater(max(frame[120 * 320:]), 180)
+
+    def test_pgs_subtitles_scale_to_the_video_and_clear_at_their_end(self):
+        directory = Path(self.directory.name)
+
+        def segment(pts, kind, data=b""):
+            return b"PG" + struct.pack(">IIBH", round(pts * 90_000), 0, kind, len(data)) + data
+
+        def presentation(pts, count):
+            data = struct.pack(">HHBHBBBB", 320, 180, 0x10, round(pts * 100), 0x80, 0, 0, count)
+            if count:
+                data += struct.pack(">HBBHH", 0, 0, 0, 20, 20)
+            return segment(pts, 0x16, data)
+
+        pixels = bytes([0, 0x80 | 50, 1, 0, 0]) * 20
+        objects = struct.pack(">HBB", 0, 0, 0xc0) + (len(pixels) + 4).to_bytes(3, "big")
+        objects += struct.pack(">HH", 50, 20) + pixels
+        track = directory / "track.sup"
+        track.write_bytes(
+            presentation(1.05, 1)
+            + segment(1.05, 0x17, struct.pack(">BBHHHH", 1, 0, 20, 20, 50, 20))
+            + segment(1.05, 0x14, bytes([0, 0, 1, 235, 128, 128, 255]))
+            + segment(1.05, 0x15, objects)
+            + segment(1.05, 0x80)
+            + presentation(2.05, 0)
+            + segment(2.05, 0x80)
+        )
+        source = directory / "pgs.mkv"
+        subprocess.run([
+            self.ffmpeg, "-hide_banner", "-loglevel", "error",
+            "-copyts",
+            "-f", "lavfi", "-i", "color=c=black:size=640x360:rate=10:duration=3",
+            "-i", str(track), "-map", "0:v", "-map", "1:s",
+            "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", str(source),
+        ], check=True, capture_output=True, timeout=10)
+        self.controller.OUTPUT_URL = str(directory / "pgs.flv")
+        command = self.controller.relay_command(
+            str(source), None, None, 0, False, bitmap_subtitle_index=1,
+        )
+        command.remove("-re")
+        encoded = subprocess.run(command, capture_output=True, text=True, timeout=10)
+        self.assertEqual(encoded.returncode, 0, encoded.stderr)
+        decoded = subprocess.run([
+            self.ffmpeg, "-hide_banner", "-loglevel", "error", "-i", self.controller.OUTPUT_URL,
+            "-pix_fmt", "gray", "-f", "rawvideo", "-",
+        ], check=True, capture_output=True, timeout=10)
+        width, height = 256, 144
+        frame_size = width * height
+        self.assertEqual(len(decoded.stdout), 30 * frame_size)
+        for index in range(30):
+            frame = decoded.stdout[index * frame_size:(index + 1) * frame_size]
+            self.assertEqual(max(frame) > 180, 11 <= index < 21, f"frame {index}")
+            if 11 <= index < 21:
+                self.assertGreater(frame[20 * width + 30], 180)
+                self.assertLess(frame[40 * width + 30], 30)
 
     def test_hdr_sources_produce_sdr_video_with_correct_colour_tags(self):
         probe = str(Path(self.ffmpeg).with_name("ffprobe"))

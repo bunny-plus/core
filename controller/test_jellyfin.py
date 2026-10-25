@@ -248,6 +248,35 @@ class ControllerTests(unittest.TestCase):
                 self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, None, subtitle_index=3)
             stop.assert_not_called()
 
+    def test_pgs_uses_the_authenticated_video_without_downloading_text_and_resets_for_next_stream(self):
+        process = MagicMock()
+        process.poll.return_value = None
+        with patch.object(self.controller, "prepare_jellyfin_input", return_value=f"X-Emby-Token: {TOKEN}\r\n"), patch.object(self.controller, "prepare_jellyfin_subtitles", return_value=None) as prepare, patch.object(self.controller.subprocess, "Popen", return_value=process) as spawn, patch.object(self.controller.time, "sleep"):
+            self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, 1, subtitle_index=3, subtitle_format="pgs")
+            prepare.assert_not_called()
+            command = spawn.call_args.args[0]
+            self.assertEqual(command.count("-i"), 1)
+            self.assertIn(f"X-Emby-Token: {TOKEN}\r\n", command)
+            self.assertIn("[0:3]", command[command.index("-filter_complex") + 1])
+            status = self.controller.relay_status()["jellyfin"]
+            self.assertEqual(status["subtitleIndex"], 3)
+            self.assertTrue(status["subtitlesBurnedIn"])
+            self.controller.start_jellyfin(SOURCE, TOKEN, "Next movie", None, None)
+            command = spawn.call_args.args[0]
+            self.assertNotIn("-filter_complex", command)
+            self.assertFalse(self.controller.relay_status()["jellyfin"]["subtitlesBurnedIn"])
+            self.controller.stop_relay()
+
+    def test_invalid_subtitle_format_does_not_replace_playback(self):
+        with patch.object(self.controller, "prepare_jellyfin_input") as prepare, patch.object(self.controller, "stop_relay") as stop:
+            for value in ["dvdsub", "invalid", True, 1, []]:
+                with self.subTest(value=value), self.assertRaisesRegex(ValueError, "subtitle format"):
+                    self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, None, subtitle_index=3, subtitle_format=value)
+            with self.assertRaisesRegex(ValueError, "subtitleIndex"):
+                self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, None, subtitle_format="pgs")
+        prepare.assert_not_called()
+        stop.assert_not_called()
+
     def test_invalid_font_indexes_do_not_replace_playback(self):
         with patch.object(self.controller, "prepare_jellyfin_input") as prepare, patch.object(self.controller, "stop_relay") as stop:
             for value in ([True], [-1], [1, 1], ["2"], list(range(17)), "fonts"):

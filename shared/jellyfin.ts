@@ -37,6 +37,7 @@ export type JellyfinSubtitle = {
   index: number;
   label: string;
   language: string | null;
+  format: "text" | "pgs" | null;
   supported: boolean;
 };
 

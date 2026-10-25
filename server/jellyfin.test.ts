@@ -258,6 +258,7 @@ test("Jellyfin relay resolves title and URL on the server and forwards the selec
     apiKey: env.JELLYFIN_API_KEY,
     audioIndex: 3,
     subtitleIndex: 2,
+    subtitleFormat: "text",
     subtitleFonts: [],
     resolutionIndex: 5,
     hdrTransfer: null,
@@ -308,6 +309,7 @@ test("subtitle defaults follow the selected media version and reject unavailable
       ...movie.MediaSources[0].MediaStreams,
       { Index: 4, Type: "Subtitle", DisplayTitle: "Japanese", Codec: "ass" },
       { Index: 5, Type: "Subtitle", DisplayTitle: "PGS", Codec: "hdmv_pgs_subtitle" },
+      { Index: 6, Type: "Subtitle", DisplayTitle: "Unknown", Codec: "unknown" },
     ],
   };
   context.mock.method(globalThis, "fetch", async () =>
@@ -315,16 +317,56 @@ test("subtitle defaults follow the selected media version and reject unavailable
   );
   assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, 4);
   assert.equal((await jellyfinRelay(env, { itemId, mediaSourceId: sourceId })).subtitleIndex, 4);
-  for (const subtitleIndex of [0, 1, 5, 99])
+  for (const subtitleIndex of [0, 1, 6, 99])
     await assert.rejects(
       jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex }),
       /subtitle track is unavailable or unsupported/,
     );
   version.DefaultSubtitleStreamIndex = 5;
-  assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, 2);
+  assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, 5);
   version.MediaStreams = version.MediaStreams.filter((stream) => stream.Type !== "Subtitle");
   assert.equal((await jellyfinOptions(env, itemId)).sources[0].defaultSubtitleIndex, null);
   assert.equal((await jellyfinRelay(env, { itemId, mediaSourceId: sourceId })).subtitleIndex, null);
+});
+
+test("embedded PGS subtitles are selected from server metadata without text extraction or fonts", async (context) => {
+  for (const codec of ["pgssub", "hdmv_pgs_subtitle", "PGSSUB"]) {
+    const source = {
+      ...movie.MediaSources[0],
+      MediaAttachments: [{ Index: 9, FileName: "Dialogue.ttf" }],
+      MediaStreams: [
+        { Index: 0, Type: "Video", Height: 2160 },
+        { Index: 3, Type: "Subtitle", DisplayTitle: "English (SDH)", Codec: codec },
+        { Index: 4, Type: "Subtitle", Codec: codec, IsExternal: true },
+      ],
+    };
+    context.mock.method(globalThis, "fetch", async () =>
+      Response.json({ Items: [{ ...movie, MediaSources: [source] }] }),
+    );
+    const options = await jellyfinOptions(env, itemId);
+    assert.equal(options.sources[0].defaultSubtitleIndex, 3);
+    assert.equal(options.sources[0].subtitles[0].supported, true);
+    assert.equal(options.sources[0].subtitles[1].supported, false);
+    const relay = await jellyfinRelay(env, {
+      itemId,
+      mediaSourceId: sourceId,
+      subtitleFormat: "text",
+    });
+    assert.equal(relay.subtitleIndex, 3);
+    assert.equal(relay.subtitleFormat, "pgs");
+    assert.deepEqual(relay.subtitleFonts, []);
+    const disabled = await jellyfinRelay(env, {
+      itemId,
+      mediaSourceId: sourceId,
+      subtitleIndex: null,
+      subtitleFormat: "pgs",
+    });
+    assert.equal(disabled.subtitleFormat, null);
+    await assert.rejects(
+      jellyfinRelay(env, { itemId, mediaSourceId: sourceId, subtitleIndex: 4 }),
+      /subtitle track is unavailable or unsupported/,
+    );
+  }
 });
 
 test("playback metadata accepts an admin subtitle index or no selection, including older sessions", () => {

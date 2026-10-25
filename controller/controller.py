@@ -179,16 +179,19 @@ def stop_relay():
     relay_subtitles = None
 
 
-def relay_command(source, audio_index, subtitle_index, resolution_index, network_source, input_headers=None, hdr_transfer=None, subtitle_files=None, dolby_vision=False):
+def relay_command(source, audio_index, subtitle_index, resolution_index, network_source, input_headers=None, hdr_transfer=None, subtitle_files=None, dolby_vision=False, bitmap_subtitle_index=None):
     if hdr_transfer not in (None, "smpte2084", "arib-std-b67"):
         raise ValueError("Unsupported HDR transfer function")
     if not isinstance(dolby_vision, bool):
         raise ValueError("dolbyVision must be a boolean")
     audio_index = optional_index(audio_index, "audioIndex")
     subtitle_index = optional_index(subtitle_index, "subtitleIndex")
+    bitmap_subtitle_index = optional_index(bitmap_subtitle_index, "bitmapSubtitleIndex")
     resolution_index = optional_index(resolution_index, "resolutionIndex")
     if subtitle_index is not None:
         raise ValueError("Remote embedded subtitles are not supported")
+    if bitmap_subtitle_index is not None and subtitle_files is not None:
+        raise ValueError("Choose one subtitle track")
     if resolution_index is not None and resolution_index >= len(RESOLUTION_HEIGHTS):
         raise ValueError("resolutionIndex is out of range")
 
@@ -237,7 +240,7 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
             "-i",
             source,
             "-map",
-            "0:v:0",
+            "[bunny_video]" if bitmap_subtitle_index is not None else "0:v:0",
             "-map",
             f"0:{audio_index}" if audio_index is not None else "0:a:0?",
             "-c:v",
@@ -282,14 +285,20 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
         command.extend(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"])
     if subtitle_files is not None:
         video_filter += f",{subtitle_files.video_filter()}"
+    if bitmap_subtitle_index is not None:
+        video_filter += (
+            "[bunny_main];[bunny_main]split[bunny_base][bunny_reference];"
+            f"[0:{bitmap_subtitle_index}][bunny_reference]scale=rw:rh[bunny_subtitles];"
+            "[bunny_base][bunny_subtitles]overlay=eof_action=pass"
+        )
     if VIDEO_ENCODER in ("h264_vaapi", "h264_nvenc"):
         video_filter += ",pad=w=max(iw\\,128):h=max(ih\\,128):x=(ow-iw)/2:y=(oh-ih)/2,format=nv12"
         if VIDEO_ENCODER == "h264_vaapi":
             video_filter += ",hwupload"
     command.extend(
         [
-            "-vf",
-            video_filter,
+            "-filter_complex" if bitmap_subtitle_index is not None else "-vf",
+            f"[0:v:0]{video_filter}[bunny_video]" if bitmap_subtitle_index is not None else video_filter,
             "-pix_fmt",
             {"h264_vaapi": "vaapi", "h264_nvenc": "nv12"}.get(VIDEO_ENCODER, "yuv420p"),
             "-force_key_frames",
@@ -336,11 +345,11 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     return command
 
 
-def start_relay(source, title, audio_index, subtitle_index, resolution_index, *, input_headers=None, source_type="direct", hdr_transfer=None, dolby_vision=False, jellyfin_subtitle_index=None, subtitle_files=None):
+def start_relay(source, title, audio_index, subtitle_index, resolution_index, *, input_headers=None, source_type="direct", hdr_transfer=None, dolby_vision=False, jellyfin_subtitle_index=None, subtitle_files=None, bitmap_subtitle_index=None):
     global relay, relay_kind, relay_title, relay_clock, relay_subtitles
     if source_type != "jellyfin":
         source = validate_source(source)
-    command = relay_command(source, audio_index, subtitle_index, resolution_index, True, input_headers, hdr_transfer, subtitle_files, dolby_vision)
+    command = relay_command(source, audio_index, subtitle_index, resolution_index, True, input_headers, hdr_transfer, subtitle_files, dolby_vision, bitmap_subtitle_index)
     if source_type == "jellyfin":
         command[1:1] = ["-progress", "pipe:1", "-stats_period", "0.1"]
     stop_relay()
@@ -349,7 +358,7 @@ def start_relay(source, title, audio_index, subtitle_index, resolution_index, *,
         last_code = None
         for attempt in range(2):
             if source_type == "jellyfin":
-                relay_clock = JellyfinClock(source, jellyfin_subtitle_index, subtitle_files is not None)
+                relay_clock = JellyfinClock(source, jellyfin_subtitle_index, subtitle_files is not None or bitmap_subtitle_index is not None)
                 relay = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
                 relay_clock.follow(relay)
             else:
@@ -374,13 +383,18 @@ def start_relay(source, title, audio_index, subtitle_index, resolution_index, *,
         raise
 
 
-def start_jellyfin(source, api_key, title, audio_index, resolution_index, hdr_transfer=None, subtitle_index=None, subtitle_fonts=None, dolby_vision=False):
+def start_jellyfin(source, api_key, title, audio_index, resolution_index, hdr_transfer=None, subtitle_index=None, subtitle_fonts=None, dolby_vision=False, subtitle_format=None):
     subtitle_index = optional_index(subtitle_index, "subtitleIndex")
     subtitle_fonts = validate_subtitle_fonts(subtitle_fonts)
+    if subtitle_format not in (None, "text", "pgs"):
+        raise ValueError("Unsupported subtitle format")
+    if subtitle_format == "pgs" and subtitle_index is None:
+        raise ValueError("PGS subtitles require a subtitleIndex")
+    bitmap_subtitle_index = subtitle_index if subtitle_format == "pgs" else None
     headers = prepare_jellyfin_input(source, api_key)
-    files = prepare_jellyfin_subtitles(source, api_key, subtitle_index, subtitle_fonts)
+    files = None if subtitle_format == "pgs" else prepare_jellyfin_subtitles(source, api_key, subtitle_index, subtitle_fonts)
     try:
-        start_relay(source, title, audio_index, None, resolution_index, input_headers=headers, source_type="jellyfin", hdr_transfer=hdr_transfer, dolby_vision=dolby_vision, jellyfin_subtitle_index=subtitle_index, subtitle_files=files)
+        start_relay(source, title, audio_index, None, resolution_index, input_headers=headers, source_type="jellyfin", hdr_transfer=hdr_transfer, dolby_vision=dolby_vision, jellyfin_subtitle_index=subtitle_index, subtitle_files=files, bitmap_subtitle_index=bitmap_subtitle_index)
     except Exception:
         if files is not None:
             files.stop()
@@ -477,6 +491,7 @@ class Handler(BaseHTTPRequestHandler):
                         body.get("subtitleIndex"),
                         body.get("subtitleFonts"),
                         body.get("dolbyVision", False),
+                        body.get("subtitleFormat"),
                     )
                     return self.respond(200, {"detail": "Jellyfin relay started", **relay_status()})
                 if action == "start":
