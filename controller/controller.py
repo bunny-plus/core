@@ -288,7 +288,8 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
     if bitmap_subtitle_index is not None:
         video_filter += (
             "[bunny_main];[bunny_main]split[bunny_base][bunny_reference];"
-            f"[0:{bitmap_subtitle_index}][bunny_reference]scale=rw:rh[bunny_subtitles];"
+            f"[0:{bitmap_subtitle_index}]fps=60:round=up[bunny_captions];"
+            "[bunny_captions][bunny_reference]scale=rw:rh[bunny_subtitles];"
             "[bunny_base][bunny_subtitles]overlay=eof_action=pass"
         )
     if VIDEO_ENCODER in ("h264_vaapi", "h264_nvenc"):

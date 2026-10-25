@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import socket
 import struct
 import subprocess
@@ -365,7 +366,10 @@ class RelayRecoveryTests(unittest.TestCase):
             self.ffmpeg, "-hide_banner", "-loglevel", "error",
             "-copyts",
             "-f", "lavfi", "-i", "color=c=black:size=640x360:rate=10:duration=3",
-            "-i", str(track), "-map", "0:v", "-map", "1:s",
+            "-i", str(track),
+            "-f", "lavfi", "-i", "sine=sample_rate=48000:duration=3",
+            "-map", "0:v", "-map", "1:s", "-map", "2:a",
+            "-af", "asetnsamples=n=40", "-c:a", "pcm_s16le",
             "-c:v", "libx264", "-preset", "ultrafast", "-c:s", "copy", str(source),
         ], check=True, capture_output=True, timeout=10)
         self.controller.OUTPUT_URL = str(directory / "pgs.flv")
@@ -373,8 +377,19 @@ class RelayRecoveryTests(unittest.TestCase):
             str(source), None, None, 0, False, bitmap_subtitle_index=1,
         )
         command.remove("-re")
+        command[1:1] = ["-filter_buffered_frames", "128"]
+        command[command.index("-loglevel") + 1] = "info"
+        index = command.index("-filter_complex") + 1
+        command[index] = command[index].replace(
+            "scale=rw:rh[bunny_subtitles]",
+            "scale=rw:rh,showinfo@bunny_subtitles[bunny_subtitles]",
+        )
         encoded = subprocess.run(command, capture_output=True, text=True, timeout=10)
         self.assertEqual(encoded.returncode, 0, encoded.stderr)
+        self.assertNotIn("buffers queued", encoded.stderr)
+        caption_frames = re.findall(r"\bn:\s*\d+\s+pts:", encoded.stderr)
+        self.assertTrue(caption_frames)
+        self.assertLessEqual(len(caption_frames), 181)
         decoded = subprocess.run([
             self.ffmpeg, "-hide_banner", "-loglevel", "error", "-i", self.controller.OUTPUT_URL,
             "-pix_fmt", "gray", "-f", "rawvideo", "-",
