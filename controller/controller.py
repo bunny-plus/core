@@ -79,6 +79,7 @@ relay_kind = None
 relay_title = None
 relay_clock = None
 relay_subtitles = None
+relay_last_exit = None
 
 
 def validate_source(source):
@@ -347,13 +348,14 @@ def relay_command(source, audio_index, subtitle_index, resolution_index, network
 
 
 def start_relay(source, title, audio_index, subtitle_index, resolution_index, *, input_headers=None, source_type="direct", hdr_transfer=None, dolby_vision=False, jellyfin_subtitle_index=None, subtitle_files=None, bitmap_subtitle_index=None):
-    global relay, relay_kind, relay_title, relay_clock, relay_subtitles
+    global relay, relay_kind, relay_title, relay_clock, relay_subtitles, relay_last_exit
     if source_type != "jellyfin":
         source = validate_source(source)
     command = relay_command(source, audio_index, subtitle_index, resolution_index, True, input_headers, hdr_transfer, subtitle_files, dolby_vision, bitmap_subtitle_index)
     if source_type == "jellyfin":
         command[1:1] = ["-progress", "pipe:1", "-stats_period", "0.1"]
     stop_relay()
+    relay_last_exit = None
     relay_subtitles = subtitle_files
     try:
         last_code = None
@@ -403,8 +405,9 @@ def start_jellyfin(source, api_key, title, audio_index, resolution_index, hdr_tr
 
 
 def start_restream(source, title, quality):
-    global relay, relay_input, relay_kind, relay_title
+    global relay, relay_input, relay_kind, relay_title, relay_last_exit
     stop_relay()
+    relay_last_exit = None
     title = resolve_restream_title(STREAMLINK, FFMPEG, source, quality)
     stream_input = StreamlinkInput(STREAMLINK, FFMPEG, source, quality)
     command = relay_command("pipe:0", None, None, None, False)
@@ -430,13 +433,28 @@ def start_restream(source, title, quality):
 
 
 def relay_status():
-    if relay is not None and (
-        relay.poll() is not None or (relay_input is not None and relay_input.poll() is not None)
-    ):
+    global relay_last_exit
+    exit_code = relay.poll() if relay is not None else None
+    input_exit_code = relay_input.poll() if relay_input is not None else None
+    if relay is not None and (exit_code is not None or input_exit_code is not None):
+        relay_last_exit = {
+            "exitCode": exit_code,
+            "inputExitCode": input_exit_code,
+            "pid": relay.pid,
+            "sourceType": relay_kind,
+            "observedAt": round(time.time() * 1000),
+        }
+        if relay_clock is not None:
+            playback = relay_clock.status()
+            relay_last_exit["positionSeconds"] = playback.get("positionSeconds")
+            relay_last_exit["positionUpdatedAt"] = playback.get("updatedAt")
         stop_relay()
+        print(json.dumps({"event": "relay-exited", **relay_last_exit}), flush=True)
     status = {"running": relay is not None, "sourceType": relay_kind, "title": relay_title}
     if relay_clock is not None:
         status["jellyfin"] = relay_clock.status()
+    if relay_last_exit is not None:
+        status["lastExit"] = dict(relay_last_exit)
     return status
 
 

@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -247,6 +248,62 @@ class ControllerTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, None, subtitle_index=3)
             stop.assert_not_called()
+
+    def test_runtime_exit_retains_the_exit_code_and_last_position_without_credentials(self):
+        for exit_code in (0, 1, -11):
+            with self.subTest(exit_code=exit_code):
+                process = MagicMock()
+                process.pid = 1234
+                process.poll.return_value = exit_code
+                clock = JellyfinClock(SOURCE)
+                clock.position = (2712.5, 1800000000000)
+                files = JellyfinSubtitleFiles()
+                self.addCleanup(files.stop)
+                with patch.object(self.controller, "relay", process), patch.object(self.controller, "relay_input", None), patch.object(self.controller, "relay_kind", "jellyfin"), patch.object(self.controller, "relay_clock", clock), patch.object(self.controller, "relay_subtitles", files), patch.object(self.controller, "relay_last_exit", None), patch.object(self.controller.time, "time", return_value=1800000001.25), patch("builtins.print") as logged:
+                    status = self.controller.relay_status()
+                    self.assertFalse(status["running"])
+                    self.assertIsNone(self.controller.relay_clock)
+                    self.assertFalse(files.track.parent.exists())
+                    expected = {
+                        "exitCode": exit_code, "inputExitCode": None, "pid": 1234,
+                        "sourceType": "jellyfin", "observedAt": 1800000001250,
+                        "positionSeconds": 2712.5, "positionUpdatedAt": 1800000000000,
+                    }
+                    self.assertEqual(status["lastExit"], expected)
+                    self.assertEqual(self.controller.relay_status(), status)
+                    logged.assert_called_once_with(json.dumps({"event": "relay-exited", **expected}), flush=True)
+                    for secret in (SOURCE, TOKEN, self.controller.OUTPUT_URL, self.controller.CONTROL_SECRET):
+                        self.assertNotIn(secret, json.dumps(status))
+                        self.assertNotIn(secret, logged.call_args.args[0])
+                    process.terminate.assert_not_called()
+
+    def test_restream_input_exit_is_reported_before_terminating_the_publisher(self):
+        process = MagicMock()
+        process.pid = 5678
+        process.poll.return_value = None
+        stream_input = MagicMock()
+        stream_input.poll.return_value = 2
+        with patch.object(self.controller, "relay", process), patch.object(self.controller, "relay_input", stream_input), patch.object(self.controller, "relay_kind", "restream"), patch.object(self.controller, "relay_clock", None), patch.object(self.controller, "relay_last_exit", None), patch("builtins.print") as logged:
+            status = self.controller.relay_status()
+            self.assertFalse(status["running"])
+            self.assertIsNone(status["lastExit"]["exitCode"])
+            self.assertEqual(status["lastExit"]["inputExitCode"], 2)
+            self.assertEqual(status["lastExit"]["sourceType"], "restream")
+            self.assertNotIn("positionSeconds", status["lastExit"])
+            process.terminate.assert_called_once()
+            stream_input.stop.assert_called_once()
+            self.controller.relay_status()
+            logged.assert_called_once()
+
+    def test_new_playback_clears_previous_exit_and_manual_stop_does_not_report_failure(self):
+        process = MagicMock()
+        process.poll.return_value = None
+        with patch.object(self.controller, "relay_last_exit", {"exitCode": 1}), patch.object(self.controller, "prepare_jellyfin_input", return_value=f"X-Emby-Token: {TOKEN}\r\n"), patch.object(self.controller.subprocess, "Popen", return_value=process), patch.object(self.controller.time, "sleep"), patch("builtins.print") as logged:
+            self.controller.start_jellyfin(SOURCE, TOKEN, "Movie", None, None)
+            self.assertNotIn("lastExit", self.controller.relay_status())
+            self.controller.stop_relay()
+            self.assertNotIn("lastExit", self.controller.relay_status())
+            logged.assert_not_called()
 
     def test_pgs_uses_the_authenticated_video_without_downloading_text_and_resets_for_next_stream(self):
         process = MagicMock()
